@@ -1,4 +1,4 @@
-using System.Drawing;
+using System.Numerics;
 
 namespace AsteroidsEngine.Engine.Input;
 
@@ -22,8 +22,8 @@ public sealed class InputSystem
     private readonly HashSet<KeyCode> _releasedThisFrame = new();
     private readonly object _lock = new();
 
-    private Point _mouseScreenPending;
-    private Point _mouseScreenCommitted;
+    private Vector2 _mouseScreenPending;
+    private Vector2 _mouseScreenCommitted;
 
     private bool _mouseLeftPending, _mouseLeftCommitted;
     private bool _mouseRightPending, _mouseRightCommitted;
@@ -35,7 +35,7 @@ public sealed class InputSystem
     public void OnKeyDown(KeyCode key) { lock (_lock) _pending.Add(key); }
     public void OnKeyUp(KeyCode key) { lock (_lock) _pending.Remove(key); }
 
-    public void OnMouseMove(Point screenPosition)
+    public void OnMouseMove(Vector2 screenPosition)
     {
         lock (_lock) _mouseScreenPending = screenPosition;
     }
@@ -90,7 +90,7 @@ public sealed class InputSystem
     public bool IsPressedThisFrame(params KeyCode[] keys) => keys.Any(IsPressed);
 
     /// <summary>Mouse position in screen (pixel) coordinates.</summary>
-    public Point MouseScreen => _mouseScreenCommitted;
+    public Vector2 MouseScreen => _mouseScreenCommitted;
 
     public bool IsMouseLeft => _mouseLeftCommitted;
     public bool IsMouseRight => _mouseRightCommitted;

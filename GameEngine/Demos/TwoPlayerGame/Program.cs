@@ -26,7 +26,7 @@ using var window = new TwoPlayerGame.SdlGameWindow("Two Player Game", W, H);
 var input = new InputSystem();
 window.KeyDown += k => input.OnKeyDown(k);
 window.KeyUp += k => input.OnKeyUp(k);
-window.MouseMoved += p => input.OnMouseMove(p);
+window.MouseMoved += p => input.OnMouseMove(new Vector2(p.X, p.Y));
 window.MouseButtonChanged += (btn, pr) => input.OnMouseButton(btn, pr);
 
 var bitmap = new SKBitmap(W, H);

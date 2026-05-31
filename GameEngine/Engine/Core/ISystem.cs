@@ -1,3 +1,5 @@
+using AsteroidsEngine.Engine.Rendering;
+
 namespace AsteroidsEngine.Engine.Core;
 
 public interface ISystem
@@ -7,9 +9,9 @@ public interface ISystem
 
 /// <summary>
 /// Systems that need to draw implement this in addition to ISystem.
-/// Called after all ISystem.Update calls complete.
+/// Called after all ISystem.Update calls complete, with the active renderer.
 /// </summary>
 public interface IDrawSystem
 {
-    void Draw(World world, System.Drawing.Graphics g);
+    void Draw(World world, IRenderer renderer);
 }

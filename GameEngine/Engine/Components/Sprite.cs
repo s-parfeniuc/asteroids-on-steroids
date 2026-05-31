@@ -1,5 +1,5 @@
-using System.Drawing;
 using System.Numerics;
+using AsteroidsEngine.Engine.Rendering;
 
 namespace AsteroidsEngine.Engine.Components;
 

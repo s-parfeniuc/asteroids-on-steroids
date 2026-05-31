@@ -1,5 +1,5 @@
-using System.Drawing;
 using AsteroidsEngine.Engine.Input;
+using AsteroidsEngine.Engine.Rendering;
 
 namespace AsteroidsEngine.Engine.State;
 
@@ -70,10 +70,10 @@ public sealed class StateStack
         }
     }
 
-    public void Draw(Graphics g)
+    public void Draw(IRenderer renderer)
     {
         // Draw bottom-to-top: lower layers appear behind upper layers.
         foreach (var state in _stack)
-            state.Draw(g);
+            state.Draw(renderer);
     }
 }

@@ -1,5 +1,5 @@
-using System.Drawing;
 using AsteroidsEngine.Engine.Input;
+using AsteroidsEngine.Engine.Rendering;
 
 namespace AsteroidsEngine.Engine.State;
 
@@ -24,9 +24,10 @@ public interface IGameState
 
     /// <summary>
     /// Called each frame in bottom-to-top order so overlay states draw on top.
-    /// g is in screen space (no camera transform applied — apply your own if needed).
+    /// The renderer is in screen space (no camera transform applied — push the
+    /// camera's view matrix yourself if you draw world-space content).
     /// </summary>
-    void Draw(Graphics g);
+    void Draw(IRenderer renderer);
 
     /// <summary>
     /// If true, the state below this one in the stack also receives Update
