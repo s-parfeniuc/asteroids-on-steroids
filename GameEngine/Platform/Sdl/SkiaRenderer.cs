@@ -2,14 +2,12 @@ using System.Numerics;
 using SkiaSharp;
 using AsteroidsEngine.Engine.Rendering;
 
-namespace AsteroidDemo;
+namespace AsteroidsEngine.Platform.Sdl;
 
 /// <summary>
-/// SkiaSharp implementation of the engine's IRenderer — the rendering backend of
-/// the Platform Abstraction Layer. Draws into the SKCanvas supplied at
-/// construction; the host presents the backing bitmap's pixels via
-/// IGameWindow.PresentFrame. This is the ONLY place in the demo that knows Skia
-/// (apart from the composition root that creates the bitmap/canvas).
+/// SkiaSharp implementation of the engine's IRenderer. Draws into the SKCanvas
+/// owned by <see cref="SdlGameWindow"/>; the window uploads and presents the
+/// backing bitmap. This and SdlGameWindow are the only types that know Skia.
 /// </summary>
 public sealed class SkiaRenderer : IRenderer, IDisposable
 {
@@ -115,7 +113,7 @@ public sealed class SkiaRenderer : IRenderer, IDisposable
 
     private static SKColor ToSk(Color c) => new(c.R, c.G, c.B, c.A);
 
-    // Matrix3x2 (row-vector, M3x = translation) → SKMatrix (scaleX,skewX,transX / skewY,scaleY,transY).
+    // Matrix3x2 (row-vector, M3x = translation) → SKMatrix.
     private static SKMatrix ToSk(in Matrix3x2 m) => new(
         m.M11, m.M21, m.M31,
         m.M12, m.M22, m.M32,

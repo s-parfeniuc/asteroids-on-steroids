@@ -1,41 +1,56 @@
+using System.Numerics;
 using System.Runtime.InteropServices;
+using SkiaSharp;
 using Silk.NET.SDL;
 using AsteroidsEngine.Engine.Rendering;
-using DrawPoint   = System.Drawing.Point;
 using EngineKey   = AsteroidsEngine.Engine.Input.KeyCode;
 using EngineMouse = AsteroidsEngine.Engine.Input.MouseButton;
+using SdlRenderer = Silk.NET.SDL.Renderer;   // distinct from the engine's IRenderer
+using SdlApi      = Silk.NET.SDL.Sdl;        // namespace ends in 'Sdl', so alias the API type
 
-namespace AsteroidDemo;
+namespace AsteroidsEngine.Platform.Sdl;
 
+/// <summary>
+/// SDL2 window + SkiaSharp renderer — the SDL/Skia backend of the Platform
+/// Abstraction Layer. Owns the OS window, the input event pump, and the Skia
+/// drawing surface. Games draw through <see cref="Renderer"/> and call
+/// <see cref="Present"/> once per frame; no game code touches Skia or SDL.
+/// </summary>
 public sealed unsafe class SdlGameWindow : IGameWindow
 {
-    private readonly Sdl      _sdl;
-    private Window*   _window;
-    private Renderer* _renderer;
-    private Texture*  _texture;
-    private bool      _shouldClose;
-    private bool      _disposed;
+    private readonly SdlApi _sdl;
+    private Window*      _window;
+    private SdlRenderer* _renderer;
+    private Texture*     _texture;
+    private bool         _shouldClose;
+    private bool         _disposed;
+
+    private readonly SKBitmap     _bitmap;
+    private readonly SKCanvas     _canvas;
+    private readonly SkiaRenderer _skiaRenderer;
 
     public int  Width       { get; }
     public int  Height      { get; }
     public bool ShouldClose => _shouldClose;
 
+    /// <summary>Engine-facing immediate-mode renderer backed by this window's Skia surface.</summary>
+    public IRenderer Renderer => _skiaRenderer;
+
     public event Action<EngineKey>?         KeyDown;
     public event Action<EngineKey>?         KeyUp;
-    public event Action<DrawPoint>?         MouseMoved;
+    public event Action<Vector2>?           MouseMoved;
     public event Action<EngineMouse, bool>? MouseButtonChanged;
 
     public SdlGameWindow(string title, int width, int height)
     {
         Width  = width;
         Height = height;
-        _sdl   = Sdl.GetApi();
+        _sdl   = SdlApi.GetApi();
 
-        if (_sdl.Init(Sdl.InitVideo | Sdl.InitEvents) < 0)
-            Throw("SDL_Init");
+        if (_sdl.Init(SdlApi.InitVideo | SdlApi.InitEvents) < 0) Throw("SDL_Init");
 
         _window = _sdl.CreateWindow(title,
-            Sdl.WindowposCentered, Sdl.WindowposCentered,
+            SdlApi.WindowposCentered, SdlApi.WindowposCentered,
             width, height, (uint)WindowFlags.Shown);
         if (_window == null) Throw("SDL_CreateWindow");
 
@@ -43,10 +58,12 @@ public sealed unsafe class SdlGameWindow : IGameWindow
         if (_renderer == null) Throw("SDL_CreateRenderer");
 
         _texture = _sdl.CreateTexture(_renderer,
-            Sdl.PixelformatArgb8888,
-            (int)TextureAccess.Streaming,
-            width, height);
+            SdlApi.PixelformatArgb8888, (int)TextureAccess.Streaming, width, height);
         if (_texture == null) Throw("SDL_CreateTexture");
+
+        _bitmap       = new SKBitmap(width, height);
+        _canvas       = new SKCanvas(_bitmap);
+        _skiaRenderer = new SkiaRenderer(_canvas);
     }
 
     public void PollEvents()
@@ -71,7 +88,7 @@ public sealed unsafe class SdlGameWindow : IGameWindow
                     if (upKey.HasValue) KeyUp?.Invoke(upKey.Value);
                     break;
                 case EventType.Mousemotion:
-                    MouseMoved?.Invoke(new DrawPoint(ev.Motion.X, ev.Motion.Y));
+                    MouseMoved?.Invoke(new Vector2(ev.Motion.X, ev.Motion.Y));
                     break;
                 case EventType.Mousebuttondown:
                     if (ev.Button.Button == 1) MouseButtonChanged?.Invoke(EngineMouse.Left,  true);
@@ -84,6 +101,9 @@ public sealed unsafe class SdlGameWindow : IGameWindow
             }
         }
     }
+
+    /// <summary>Upload the current Skia frame to the window and present it.</summary>
+    public void Present() => PresentFrame(_bitmap.GetPixels(), _bitmap.RowBytes);
 
     public void PresentFrame(IntPtr pixels, int stride)
     {
@@ -119,6 +139,10 @@ public sealed unsafe class SdlGameWindow : IGameWindow
     {
         if (_disposed) return;
         _disposed = true;
+
+        _skiaRenderer.Dispose();
+        _canvas.Dispose();
+        _bitmap.Dispose();
 
         if (_texture  != null) { _sdl.DestroyTexture(_texture);   _texture  = null; }
         if (_renderer != null) { _sdl.DestroyRenderer(_renderer); _renderer = null; }

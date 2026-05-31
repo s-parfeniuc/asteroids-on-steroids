@@ -15,6 +15,9 @@
     <!-- Exclude the standalone Mono/WinForms demo (TwoPlayerDemo.cs); it uses
          GDI+ directly and does not compile under a UI-free net8.0 library. -->
     <Compile Remove="Demos/**" />
+    <!-- Platform backend assemblies live under GameEngine/Platform but are their
+         own projects (they reference SDL/Skia); keep them out of the engine. -->
+    <Compile Remove="Platform/**" />
     <!-- Dormant future WinForms backend; compiled only under the WINDOWS symbol. -->
     <Compile Remove="Engine/Rendering/GameWindow.cs" />
   </ItemGroup>

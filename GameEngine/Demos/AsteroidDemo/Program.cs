@@ -10,8 +10,8 @@
 
 using System.Diagnostics;
 using System.Numerics;
-using SkiaSharp;
 using AsteroidDemo;
+using AsteroidsEngine.Platform.Sdl;
 using AsteroidsEngine.Engine.Collision;
 using AsteroidsEngine.Engine.Components;
 using AsteroidsEngine.Engine.Core;
@@ -24,16 +24,15 @@ var cfg = GameConfig.Load();
 int W = cfg.Window.Width;
 int H = cfg.Window.Height;
 
-using var window = new AsteroidDemo.SdlGameWindow(cfg.Window.Title, W, H);
+using var window = new SdlGameWindow(cfg.Window.Title, W, H);
 var input = new InputSystem();
 window.KeyDown += k => input.OnKeyDown(k);
 window.KeyUp += k => input.OnKeyUp(k);
 
-var bitmap = new SKBitmap(W, H);
-var canvas = new SKCanvas(bitmap);
-var renderer = new SkiaRenderer(canvas);
-
 var session = new DemoSession(W, H, input, cfg);
+
+const double FixedDt = 1.0 / 120.0;
+var fixedStep = new FixedTimestep(FixedDt);
 
 var sw = Stopwatch.StartNew();
 long lastTicks = sw.ElapsedTicks;
@@ -43,27 +42,26 @@ while (!window.ShouldClose)
     window.PollEvents();
 
     long now = sw.ElapsedTicks;
-    double dt = Math.Min((double)(now - lastTicks) / Stopwatch.Frequency, 0.05);
+    double frameTime = (double)(now - lastTicks) / Stopwatch.Frequency;
     lastTicks = now;
 
     input.BeginFrame();
-
     if (input.IsPressed(KeyCode.Escape)) break;
 
-    session.Update(dt);
-    session.Draw(renderer);
+    // Fixed-step simulation; the render interpolates between sim states via Alpha.
+    int steps = fixedStep.Advance(frameTime);
+    for (int i = 0; i < steps; i++)
+        session.Update(FixedDt);
 
-    window.PresentFrame(bitmap.GetPixels(), bitmap.RowBytes);
+    session.Draw(window.Renderer, fixedStep.Alpha);
+    window.Present();
 
-    // ~60 FPS cap
+    // Cap render rate (~60 FPS); the simulation rate is fixed and independent.
     double elapsed = (double)(sw.ElapsedTicks - now) / Stopwatch.Frequency;
     int sleep = (int)((1.0 / 60.0 - elapsed) * 1000);
     if (sleep > 1) Thread.Sleep(sleep);
 }
 
-renderer.Dispose();
-canvas.Dispose();
-bitmap.Dispose();
 
 // =============================================================================
 // DemoSession
@@ -95,6 +93,7 @@ class DemoSession
 
         _systems =
         [
+            new PreviousStateSystem(),
             new PlayerInputSystem(input, player, cfg.Player.Thrust),
             new PhysicsSystem(),
             new MovementSystem(),
@@ -136,8 +135,8 @@ class DemoSession
         }
     }
 
-    public void Draw(IRenderer r)
-        => _renderer.Draw(_world, r, _wave, _score, _nextWaveCD);
+    public void Draw(IRenderer r, float alpha)
+        => _renderer.Draw(_world, r, _wave, _score, _nextWaveCD, alpha);
 
     // -------------------------------------------------------------------------
     // Collision event handler
@@ -811,7 +810,7 @@ class EventFlushSystem : ISystem
 struct BulletVisual { public Color Color; }
 
 // =============================================================================
-// DemoRenderer — draws everything via SkiaSharp
+// DemoRenderer — draws everything via the engine's IRenderer (backend-agnostic)
 // =============================================================================
 
 class DemoRenderer
@@ -833,9 +832,28 @@ class DemoRenderer
     private static readonly FontSpec BigFont  = new("monospace", 36f, bold: true);
     private static readonly FontSpec HintFont = new("monospace", 13f);
 
+    // Render interpolation: snap instead of lerp when the per-step delta is huge
+    // (screen wrap, fresh spawns) so entities don't streak across the screen.
+    private const float TeleportThresholdSq = 120f * 120f;
+
     public DemoRenderer(int w, int h, float playerRadius) { _w = w; _h = h; _playerRadius = playerRadius; }
 
-    public void Draw(World world, IRenderer r, int wave, int score, float nextWaveCD)
+    private static (Vector2 pos, float rot) Interp(in Transform t, float alpha)
+    {
+        Vector2 d = t.Position - t.PreviousPosition;
+        if (d.LengthSquared() > TeleportThresholdSq) return (t.Position, t.Rotation);
+        return (t.PreviousPosition + d * alpha, LerpAngle(t.PreviousRotation, t.Rotation, alpha));
+    }
+
+    private static float LerpAngle(float a, float b, float t)
+    {
+        float diff = b - a;
+        while (diff >  MathF.PI) diff -= MathF.Tau;
+        while (diff < -MathF.PI) diff += MathF.Tau;
+        return a + diff * t;
+    }
+
+    public void Draw(World world, IRenderer r, int wave, int score, float nextWaveCD, float alpha)
     {
         // Background + grid.
         r.Begin(Bg);
@@ -847,20 +865,22 @@ class DemoRenderer
         world.ForEach<Transform, Collider, AsteroidData>(
             (Entity _, ref Transform t, ref Collider c, ref AsteroidData _) =>
         {
+            var (pos, rot) = Interp(t, alpha);
             if (c.Shape is PolygonShape poly)
-                DrawAsteroid(r, poly.GetWorldVertices(t.Position, t.Rotation));
+                DrawAsteroid(r, poly.GetWorldVertices(pos, rot));
             else if (c.Shape is CompoundShape compound)
                 for (int i = 0; i < compound.PartCount; i++)
                     if (compound.GetPart(i) is PolygonShape part)
-                        DrawAsteroid(r, part.GetWorldVertices(t.Position, t.Rotation));
+                        DrawAsteroid(r, part.GetWorldVertices(pos, rot));
         });
 
         // Bullets — glow + bright dot.
         world.ForEach<Transform, BulletTag, BulletVisual>(
             (Entity _, ref Transform t, ref BulletTag _, ref BulletVisual bv) =>
         {
-            r.FillCircle(t.Position, 10f, bv.Color.WithAlpha(60));
-            r.FillCircle(t.Position, 5f, bv.Color);
+            var (pos, _) = Interp(t, alpha);
+            r.FillCircle(pos, 10f, bv.Color.WithAlpha(60));
+            r.FillCircle(pos, 5f, bv.Color);
         });
 
         // Debris fragments and blast particles — fading polygons.
@@ -877,10 +897,11 @@ class DemoRenderer
             }
             else
             {
-                byte alpha = (byte)(int)MathF.Max(0f, 220f * (1f - progress));
-                col = new Color(120, 110, 100, alpha);
+                byte a = (byte)(int)MathF.Max(0f, 220f * (1f - progress));
+                col = new Color(120, 110, 100, a);
             }
-            DrawDebrisPoly(r, dv.LocalVerts, t.Position, t.Rotation, col);
+            var (pos, rot) = Interp(t, alpha);
+            DrawDebrisPoly(r, dv.LocalVerts, pos, rot, col);
         });
 
         // Impact effects — expanding ring + inner flash.
@@ -891,7 +912,10 @@ class DemoRenderer
         // Player — circle with nose indicator.
         world.ForEach<Transform, PlayerTag, LastFacing>(
             (Entity _, ref Transform t, ref PlayerTag _, ref LastFacing lf) =>
-                DrawPlayer(r, t.Position, lf.Dir));
+        {
+            var (pos, _) = Interp(t, alpha);
+            DrawPlayer(r, pos, lf.Dir);
+        });
 
         // HUD.
         DrawHud(r, wave, score, world.Count<AsteroidData>(), nextWaveCD);

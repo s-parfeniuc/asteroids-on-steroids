@@ -5,18 +5,17 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>AsteroidDemo</RootNamespace>
-    <NoWarn>CA1416</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="../../AsteroidsEngine.csproj" />
+    <ProjectReference Include="../../Platform/Sdl/Engine.Platform.Sdl.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Silk.NET.SDL" Version="2.21.0" />
-    <PackageReference Include="SkiaSharp" Version="2.88.7" />
+    <!-- SkiaSharp + Silk come transitively from the SDL backend; this is the
+         runtime native lib that must ship next to the executable. -->
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="2.88.7" />
   </ItemGroup>
 
