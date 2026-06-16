@@ -56,7 +56,9 @@ public sealed class ParticleSystem
         }
     }
 
-    public void Draw(IRenderer r)
+    /// <param name="offset">World-to-screen offset: screenPos = worldPos + offset.
+    /// Pass Vector2.Zero when drawing directly in screen space.</param>
+    public void Draw(IRenderer r, Vector2 offset = default)
     {
         for (int i = 0; i < _count; i++)
         {
@@ -64,7 +66,7 @@ public sealed class ParticleSystem
             float t    = p.MaxLife > 0f ? 1f - p.Life / p.MaxLife : 1f;   // 0 birth → 1 death
             float size = p.Size0 + (p.Size1 - p.Size0) * t;
             if (size <= 0f) continue;
-            r.FillCircle(p.Position, size, Color.Lerp(p.Color0, p.Color1, t));
+            r.FillCircle(p.Position + offset, size, Color.Lerp(p.Color0, p.Color1, t));
         }
     }
 

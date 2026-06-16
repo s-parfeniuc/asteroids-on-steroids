@@ -120,20 +120,32 @@ public sealed class CompoundShape : CollisionShape
     /// <summary>
     /// Collects a contact for EACH of this compound's parts that overlaps
     /// <paramref name="other"/> — a contact manifold rather than a single deepest
-    /// contact. Each ContactInfo.Normal points from <paramref name="other"/> into
-    /// this compound (the standard A.Intersects(other) convention). A manifold is
-    /// what lets the solver separate multi-cell overlaps and balance torque.
+    /// contact. Each ContactInfo.Normal is oriented by the contacting CELL's geometry
+    /// to point from that cell toward <paramref name="other"/> (the direction to push
+    /// <paramref name="other"/> away). Using the cell — not the whole compound's
+    /// centroid — is what keeps concavities correct: a body sitting in a crater is
+    /// pushed out of the wall it actually touches, never "through" the body via a
+    /// far-side wall. A manifold is what lets the solver separate multi-cell overlaps.
     /// </summary>
     public void CollectContacts(Vector2 posA, float rotA, CollisionShape other,
                                 Vector2 posB, float rotB, List<ContactInfo> outList)
     {
         var (wmin, wmax) = other.GetAABB(posB, rotB);
         var (qmin, qmax) = WorldAabbToLocal(wmin, wmax, posA, rotA);
+        float cos = MathF.Cos(rotA), sin = MathF.Sin(rotA);
         for (int i = 0; i < _parts.Length; i++)
         {
             if (!Overlaps(_localAabbs[i], qmin, qmax)) continue;
             var c = _parts[i].Intersects(posA, rotA, other, posB, rotB);
-            if (c != null) outList.Add(c.Value);
+            if (c == null) continue;
+
+            var (amin, amax) = _localAabbs[i];
+            Vector2 lc = (amin + amax) * 0.5f;                       // cell centre (local)
+            Vector2 cellWorld = new(lc.X * cos - lc.Y * sin + posA.X,
+                                    lc.X * sin + lc.Y * cos + posA.Y);
+            var ci = c.Value;
+            if (Vector2.Dot(ci.Normal, posB - cellWorld) < 0f) ci = ci.Flipped();
+            outList.Add(ci);
         }
     }
 

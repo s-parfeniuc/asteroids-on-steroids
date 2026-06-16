@@ -8,8 +8,17 @@ public struct FractureTiming
 {
     public int StepsPerIteration;    // frontier-pops advanced per iteration
     public int FramesPerIteration;   // fixed-steps to wait between iterations
+    public bool DetachOnSplit;       // true = pieces fall off mid-spread; false = finalise whole body at end
 
-    public static FractureTiming Default => new() { StepsPerIteration = 2, FramesPerIteration = 1 };
+    public static FractureTiming Default => new() { StepsPerIteration = 2, FramesPerIteration = 1, DetachOnSplit = true };
+}
+
+/// <summary>One piece produced by a mid-fracture split: a fragment body and, if it is
+/// still cracking, the FractureProcess to attach to it on spawn so it keeps propagating.</summary>
+public sealed class LivePiece
+{
+    public FragmentSpec Spec;
+    public FractureProcess? Process;   // non-null → continues cracking
 }
 
 /// <summary>
@@ -39,6 +48,7 @@ public struct FractureProcess
     public int StepsPerIteration;
     public int FramesPerIteration;
     public int FrameCounter;
+    public bool DetachOnSplit;   // detach pieces as soon as they separate, vs finalise whole body at end
 
     public bool Done;            // set on finalise so the system ignores it until the entity is destroyed
 }

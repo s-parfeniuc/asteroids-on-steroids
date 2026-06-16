@@ -3,16 +3,12 @@ using System.Numerics;
 namespace AsteroidsEngine.Engine.Input;
 
 /// <summary>
-/// Captures keyboard and mouse state from WinForms events (UI thread)
+/// Captures keyboard and mouse state from platform events (UI thread)
 /// and exposes a polling API to game systems (game thread).
 ///
-/// Thread safety: WinForms events write to _pending under a short lock.
+/// Thread safety: platform events write to _pending under a short lock.
 /// BeginFrame() (called once per frame from the game thread) commits
 /// _pending into _committed, computing pressed/released deltas.
-/// Game systems read only _committed and the delta sets — never _pending.
-///
-/// GameWindow wires WinForms events like this:
-///   KeyDown += (_, e) => input.OnKeyDown((KeyCode)e.KeyCode);
 /// </summary>
 public sealed class InputSystem
 {
@@ -28,30 +24,29 @@ public sealed class InputSystem
     private bool _mouseLeftPending, _mouseLeftCommitted;
     private bool _mouseRightPending, _mouseRightCommitted;
 
-    // -------------------------------------------------------------------------
-    // Called from UI thread (wired in GameWindow)
-    // -------------------------------------------------------------------------
+    private string _textPending = "";
+    private string _textThisFrame = "";
+
+    // ── Called from platform/UI thread ────────────────────────────────────────
 
     public void OnKeyDown(KeyCode key) { lock (_lock) _pending.Add(key); }
-    public void OnKeyUp(KeyCode key) { lock (_lock) _pending.Remove(key); }
+    public void OnKeyUp(KeyCode key)   { lock (_lock) _pending.Remove(key); }
 
-    public void OnMouseMove(Vector2 screenPosition)
-    {
-        lock (_lock) _mouseScreenPending = screenPosition;
-    }
+    public void OnMouseMove(Vector2 screenPosition) { lock (_lock) _mouseScreenPending = screenPosition; }
 
     public void OnMouseButton(MouseButton button, bool pressed)
     {
         lock (_lock)
         {
-            if (button == MouseButton.Left) _mouseLeftPending = pressed;
+            if (button == MouseButton.Left)  _mouseLeftPending  = pressed;
             if (button == MouseButton.Right) _mouseRightPending = pressed;
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Called from game thread at the start of each frame
-    // -------------------------------------------------------------------------
+    /// <summary>Called by the platform with each SDL_TextInput frame (UTF-8 string).</summary>
+    public void OnTextInput(string chars) { lock (_lock) _textPending += chars; }
+
+    // ── Called from game thread — once per frame ──────────────────────────────
 
     public void BeginFrame()
     {
@@ -69,29 +64,66 @@ public sealed class InputSystem
             _committed.UnionWith(_pending);
 
             _mouseScreenCommitted = _mouseScreenPending;
-            _mouseLeftCommitted = _mouseLeftPending;
-            _mouseRightCommitted = _mouseRightPending;
+            _mouseLeftCommitted   = _mouseLeftPending;
+            _mouseRightCommitted  = _mouseRightPending;
+
+            _textThisFrame = _textPending;
+            _textPending   = "";
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Polling API — called from game thread (game systems)
-    // -------------------------------------------------------------------------
+    // ── Polling API ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Set true while a UI text-input widget is active to block WASD / hotkeys
+    /// from reaching game systems.  Back / Enter / Escape are always passed
+    /// through so the text widget itself can handle them.
+    /// </summary>
+    public bool SuppressKeyboard { get; set; }
+
+    private static bool IsEditingKey(KeyCode key) =>
+        key is KeyCode.Back or KeyCode.Enter or KeyCode.Escape;
 
     /// <summary>Key is currently held down.</summary>
-    public bool IsHeld(KeyCode key) => _committed.Contains(key);
+    public bool IsHeld(KeyCode key)    => !SuppressKeyboard && _committed.Contains(key);
 
     /// <summary>Key went down this frame (true for exactly one frame).</summary>
-    public bool IsPressed(KeyCode key) => _pressedThisFrame.Contains(key);
+    public bool IsPressed(KeyCode key) =>
+        (!SuppressKeyboard || IsEditingKey(key)) && _pressedThisFrame.Contains(key);
 
     /// <summary>Key came up this frame (true for exactly one frame).</summary>
-    public bool IsReleased(KeyCode key) => _releasedThisFrame.Contains(key);
+    public bool IsReleased(KeyCode key) =>
+        (!SuppressKeyboard || IsEditingKey(key)) && _releasedThisFrame.Contains(key);
 
     public bool IsPressedThisFrame(params KeyCode[] keys) => keys.Any(IsPressed);
 
     /// <summary>Mouse position in screen (pixel) coordinates.</summary>
     public Vector2 MouseScreen => _mouseScreenCommitted;
 
-    public bool IsMouseLeft => _mouseLeftCommitted;
+    /// <summary>
+    /// Left mouse button.  False when the UI system has consumed the click
+    /// (set <see cref="SuppressMouseLeft"/> = true before calling game systems).
+    /// </summary>
+    public bool IsMouseLeft => _mouseLeftCommitted && !SuppressMouseLeft;
+
+    /// <summary>
+    /// Raw left mouse button state, unaffected by <see cref="SuppressMouseLeft"/>.
+    /// Used by the UI layer so UI widgets still respond when game input is blocked.
+    /// </summary>
+    public bool IsMouseLeftRaw => _mouseLeftCommitted;
+
     public bool IsMouseRight => _mouseRightCommitted;
+
+    /// <summary>
+    /// Set to true before running game systems to prevent mouse-left clicks
+    /// from reaching gameplay code (e.g. when the mouse is over a UI panel).
+    /// The UI layer reads <see cref="IsMouseLeftRaw"/> instead.
+    /// </summary>
+    public bool SuppressMouseLeft { get; set; }
+
+    /// <summary>
+    /// Characters typed this frame (from SDL_TEXTINPUT events).
+    /// Suitable for populating text-input widgets.
+    /// </summary>
+    public string TextThisFrame => _textThisFrame;
 }

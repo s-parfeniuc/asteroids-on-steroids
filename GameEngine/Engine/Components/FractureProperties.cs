@@ -49,22 +49,39 @@ public struct FractureProperties
     /// bonds (centrifugal pre-stress). A material property of how spin loads it.</summary>
     public float SpinPreStress;
 
+    /// <summary>
+    /// [0 = isotropic shatter, 1 = clean cleavage]. How strongly the material's own
+    /// grain/crystal structure guides crack propagation along stress lines rather than
+    /// spreading omnidirectionally. Combined with the weapon's Directionality at impact.
+    /// Glass cleaves (high), rock shatters (medium), metal tears ductilely (low).
+    /// </summary>
+    public float CrackDirectionality;
+
     /// <summary>Crack-propagation speed for multi-frame fracture: frontier-pops per
     /// iteration (≈ terminal crack velocity). Brittle materials race (glass shatters
     /// near-instantly), ductile ones tear slowly. The game may override it live.</summary>
     public float CrackSpeed;
 
+    /// <summary>Mean scale applied to each vertex of a single isolated cell when it
+    /// detaches as its own entity. Vertices contract toward the cell centroid by this
+    /// factor (e.g. 0.90 = 10% smaller), with ±DetachCellJitter variance per vertex,
+    /// so the cell no longer perfectly fills the hole it left and avoids immediate deep
+    /// overlap with the surrounding asteroid walls.</summary>
+    public float DetachCellScale;
+    /// <summary>Per-vertex ± variance on DetachCellScale (e.g. 0.02 = ±2%).</summary>
+    public float DetachCellJitter;
+
     // ---- Presets (relative values; calibrate the absolute budget per spec §9) ----
 
     public static readonly FractureProperties Glass = new()
-    { Toughness =  6f, Brittleness = 1.00f, GrainArea =  600f, MinFragmentArea =  40f, Density = 1.0f, KineticFraction = 0.25f, SurfaceEfficiency = 0.20f, SpinPreStress = 0.15f, CrackSpeed = 6f };
+    { Toughness =  6f, Brittleness = 1.00f, GrainArea =  600f, MinFragmentArea =  40f, Density = 1.0f, KineticFraction = 0.25f, SurfaceEfficiency = 0.20f, SpinPreStress = 0.15f, CrackSpeed = 6f, CrackDirectionality = 0.75f, DetachCellScale = 0.90f, DetachCellJitter = 0.02f };
 
     public static readonly FractureProperties Ice = new()
-    { Toughness = 10f, Brittleness = 0.80f, GrainArea =  900f, MinFragmentArea =  80f, Density = 0.9f, KineticFraction = 0.30f, SurfaceEfficiency = 0.16f, SpinPreStress = 0.13f, CrackSpeed = 4f };
+    { Toughness = 10f, Brittleness = 0.80f, GrainArea =  900f, MinFragmentArea =  80f, Density = 0.9f, KineticFraction = 0.30f, SurfaceEfficiency = 0.16f, SpinPreStress = 0.13f, CrackSpeed = 4f, CrackDirectionality = 0.55f, DetachCellScale = 0.90f, DetachCellJitter = 0.02f };
 
     public static readonly FractureProperties Rock = new()
-    { Toughness = 16f, Brittleness = 0.60f, GrainArea = 1500f, MinFragmentArea = 180f, Density = 1.4f, KineticFraction = 0.35f, SurfaceEfficiency = 0.12f, SpinPreStress = 0.12f, CrackSpeed = 2f };
+    { Toughness = 16f, Brittleness = 0.60f, GrainArea = 1500f, MinFragmentArea = 180f, Density = 1.4f, KineticFraction = 0.35f, SurfaceEfficiency = 0.12f, SpinPreStress = 0.12f, CrackSpeed = 2f, CrackDirectionality = 0.35f, DetachCellScale = 0.90f, DetachCellJitter = 0.02f };
 
     public static readonly FractureProperties Metal = new()
-    { Toughness = 40f, Brittleness = 0.15f, GrainArea = 3000f, MinFragmentArea = 400f, Density = 2.0f, KineticFraction = 0.45f, SurfaceEfficiency = 0.06f, SpinPreStress = 0.08f, CrackSpeed = 1f };
+    { Toughness = 40f, Brittleness = 0.15f, GrainArea = 3000f, MinFragmentArea = 400f, Density = 2.0f, KineticFraction = 0.45f, SurfaceEfficiency = 0.06f, SpinPreStress = 0.08f, CrackSpeed = 1f, CrackDirectionality = 0.15f, DetachCellScale = 0.92f, DetachCellJitter = 0.01f };
 }

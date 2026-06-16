@@ -48,8 +48,8 @@ public interface IRenderer
     /// <summary>Measured (width, height) of <paramref name="text"/> in the given font.</summary>
     Vector2 MeasureText(string text, in FontSpec font);
 
-    /// <summary>Finish the frame. The backend flushes its draw commands; the pixels
-    /// are displayed by the window (IGameWindow.PresentFrame) or by the backend.</summary>
+    /// <summary>Finish the frame. The backend flushes its draw commands;
+    /// call IGameWindow.Present() to swap/display the result.</summary>
     void End();
 }
 

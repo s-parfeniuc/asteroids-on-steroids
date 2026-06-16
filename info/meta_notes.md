@@ -78,23 +78,76 @@ I want to design and plan thoroughly the game, analyze doability and potential p
 
 ### TODO
 
-Right neow:
-1. Visual effects for dust, obliteration of cells and bullet trajectory.
-2. Cells stuck together should be rendered as one.
-3. Bullet push is too high right now
-4. Make clarity on what parameters belong to which components and events: different types of bullets should be able to have different directionality, different bullet push, different blast, different ejection speed and impact spin etc. Some parameters belong to the material (cells) and others to the edges
-5. Would be cool to make the fragmentation be longer than one frame, making the energy do a bfs on the graph one step per frame.
-6. Test different materials (rock, glass, etc.)
+Tune the vortex. Tune the player control (implement from scratch, maybe current approach is wrong). 
+Conclusion: dampening border, vortex as before. To avoid asteroids clamping in the center might make sense to change the force values periodically to spice things up.
 
-Next step: Make the Game Design
-1. World map size: 4X normal window size (1920x1080), independent on the actual window size used
-2. Wave system (time based), some asteroids grow tougher and bigger while others faster and spinnier. 
-3. Aliens start spawning at some point, preconstructed bodies of a different color with a basic AI that follows the player and start shooting sporadically when in range.
-4. Objective: score system and local leaderboard.
-5. Damage system: the player takes damage relative to the impacts he's hit with.
-5. Add music
 
-Later:
-1. Add sounds and images.
-2. Add shockwaves and grenades.
-3. Add piercing bullets.
+Implement wave spawn function: takes a list of asteroids (procedural descriptions) and their respective size multiplier velocity and spin, spawns them outside of camera field of view.
+Implement choose asteroids function: takes a budget, a map of available asteroid types with their costs, a bias vector, current cell cap and asteroid_count_cap.
+Sync wave system to the game editor. 
+
+
+
+
+
+
+
+
+
+
+
+
+### Unrelated
+
+#### Shopping list
+
+Adapter Schuko
+Prenotare locker
+Vedere shuttle GMM
+Tappi orecchie
+Marsupi
+Preordine birra 40$
+
+#### To do before
+
+GMM system with 100$ each
+Scaricare app GMM
+
+Ognuno:
+
+Haine:
+1 prostire
+5 t-shirt
+3 pantaloni 
+1 giacca freddo
+2 scarponi + scarpe normal
+5 calzini + 2 mutande
+1 pajama
+1 borraccia
+
+Hygiene:
+Spazzolino + dentifricio
+Farmaci psico (sertra + litio)
+Farmaci extra
+
+#### To do in Brussels
+
+Comprare snacks/barrette
+See public transport tickets
+
+
+#### Transport
+
+Biglietti aereo
+Vedere shuttle GMM
+Biglietti treno airbnb-airport
+
+#### TimeLine
+
+16 -> arrival at airport
+16-17 -> airbnb
+17 12:30 -> shuttle to graspop (28$ x 2)
+17-22 -> festitent
+22 -> shuttle to brussels
+22-23 -> airbnb
+23 -> departure at airport

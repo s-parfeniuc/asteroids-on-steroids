@@ -34,6 +34,149 @@ public static class VoronoiTessellator
         return Build(bound, material, membership, rng);
     }
 
+    /// <summary>
+    /// Builds a fracturable body from an authored shape: explicit seed positions tessellate
+    /// the convex hull of <paramref name="outline"/>. Per-seed bond multipliers scale each
+    /// bond's strength by the geometric mean of the two adjacent seeds' values, letting
+    /// authored shapes declare reinforced joints (cockpit, bumper) vs. weak separation zones.
+    /// </summary>
+    /// <param name="outline">Body-local shape vertices (may be non-convex); the convex hull
+    /// is used as the Voronoi boundary.</param>
+    /// <param name="seedPositions">Explicit Voronoi seed positions (body-local).</param>
+    /// <param name="seedBondMults">Per-seed bond-strength multiplier, parallel to
+    /// <paramref name="seedPositions"/>; 1.0 = nominal, >1 = tougher joint.</param>
+    public static FracturableBody BuildFromExplicitSeeds(
+        IReadOnlyList<Vector2> outline,
+        IReadOnlyList<Vector2> seedPositions,
+        IReadOnlyList<float>   seedBondMults,
+        in FractureProperties  material,
+        Random rng)
+    {
+        if (outline.Count < 3)      throw new ArgumentException("Outline needs ≥ 3 vertices.", nameof(outline));
+        if (seedPositions.Count < 1) throw new ArgumentException("At least one seed required.", nameof(seedPositions));
+
+        // Use the outline directly as the Voronoi boundary — same as the JS shape editor.
+        // Taking the convex hull would lose the non-convex silhouette (e.g. ship wings).
+        var seeds = new Vector2[seedPositions.Count];
+        for (int i = 0; i < seeds.Length; i++) seeds[i] = seedPositions[i];
+
+        var kept    = new List<Vector2[]>(seeds.Length);
+        var keptIdx = new List<int>(seeds.Length);
+
+        for (int i = 0; i < seeds.Length; i++)
+        {
+            var poly = VoronoiCell(i, seeds, outline);
+            if (poly.Count < 3) continue;
+            if (MathF.Abs(PolygonUtils.ComputeArea(poly)) < MinCellArea) continue;
+            kept.Add(poly.ToArray());
+            keptIdx.Add(i);
+        }
+        if (kept.Count == 0) { kept.Add(outline.ToArray()); keptIdx.Add(0); }
+
+        float totalArea = 0f;
+        Vector2 bodyCentroid = Vector2.Zero;
+        foreach (var poly in kept)
+        {
+            float a = MathF.Abs(PolygonUtils.ComputeArea(poly));
+            bodyCentroid += PolygonUtils.ComputeCentroid(poly) * a;
+            totalArea    += a;
+        }
+        bodyCentroid /= totalArea;
+
+        var cells = new Cell[kept.Count];
+        for (int i = 0; i < kept.Count; i++)
+        {
+            var world = kept[i];
+            var local = new Vector2[world.Length];
+            for (int k = 0; k < world.Length; k++) local[k] = world[k] - bodyCentroid;
+            cells[i] = new Cell
+            {
+                Local    = local,
+                Centroid = PolygonUtils.ComputeCentroid(world) - bodyCentroid,
+                Area     = MathF.Abs(PolygonUtils.ComputeArea(world)),
+            };
+        }
+
+        var bonds = BuildBondsWeighted(cells, keptIdx, seedBondMults, material.Toughness);
+
+        return new FracturableBody
+        {
+            Cells    = cells,
+            Bonds    = bonds,
+            Material = material,
+            State    = new FractureState { AbsorbedEnergy = 0f, RngSeed = (uint)rng.Next() },
+        };
+    }
+
+    /// <summary>
+    /// Builds a fracturable body from explicit seed positions, with per-seed bond multipliers
+    /// and an optional membership predicate for carving concavities.
+    /// The full Voronoi is computed over ALL seeds; cells whose seed fails membership are
+    /// dropped, leaving holes. Bond strengths are the geometric mean of adjacent seed mults.
+    /// </summary>
+    public static FracturableBody BuildWithSeeds(
+        IReadOnlyList<Vector2> convexBound,
+        IReadOnlyList<Vector2> seedPositions,
+        IReadOnlyList<float>   seedBondMults,
+        Func<Vector2, bool>?   membership,
+        in FractureProperties  material,
+        Random rng)
+    {
+        if (convexBound.Count < 3)     throw new ArgumentException("Bound needs ≥ 3 vertices.", nameof(convexBound));
+        if (seedPositions.Count < 1)   throw new ArgumentException("At least one seed required.", nameof(seedPositions));
+
+        var seeds = new Vector2[seedPositions.Count];
+        for (int i = 0; i < seeds.Length; i++) seeds[i] = seedPositions[i];
+
+        var kept    = new List<Vector2[]>(seeds.Length);
+        var keptIdx = new List<int>(seeds.Length);
+
+        for (int i = 0; i < seeds.Length; i++)
+        {
+            var poly = VoronoiCell(i, seeds, convexBound);
+            if (poly.Count < 3) continue;
+            if (MathF.Abs(PolygonUtils.ComputeArea(poly)) < MinCellArea) continue;
+            if (membership != null && !membership(seeds[i])) continue;
+            kept.Add(poly.ToArray());
+            keptIdx.Add(i);
+        }
+        if (kept.Count == 0) { kept.Add(convexBound.ToArray()); keptIdx.Add(0); }
+
+        float totalArea = 0f;
+        Vector2 bodyCentroid = Vector2.Zero;
+        foreach (var poly in kept)
+        {
+            float a = MathF.Abs(PolygonUtils.ComputeArea(poly));
+            bodyCentroid += PolygonUtils.ComputeCentroid(poly) * a;
+            totalArea    += a;
+        }
+        bodyCentroid /= totalArea;
+
+        var cells = new Cell[kept.Count];
+        for (int i = 0; i < kept.Count; i++)
+        {
+            var world = kept[i];
+            var local = new Vector2[world.Length];
+            for (int k = 0; k < world.Length; k++) local[k] = world[k] - bodyCentroid;
+            cells[i] = new Cell
+            {
+                Local    = local,
+                Centroid = PolygonUtils.ComputeCentroid(world) - bodyCentroid,
+                Area     = MathF.Abs(PolygonUtils.ComputeArea(world)),
+            };
+        }
+
+        var bonds = BuildBondsWeighted(cells, keptIdx, seedBondMults, material.Toughness);
+
+        return new FracturableBody
+        {
+            Cells    = cells,
+            Bonds    = bonds,
+            Material = material,
+            State    = new FractureState { AbsorbedEnergy = 0f, RngSeed = (uint)rng.Next() },
+        };
+    }
+
     /// <summary>Builds a fracturable body from an explicit convex bound.</summary>
     public static FracturableBody Build(
         IReadOnlyList<Vector2> convexBound, in FractureProperties material,
@@ -109,18 +252,28 @@ public static class VoronoiTessellator
         return a;
     }
 
-    /// <summary>Moment of inertia of the whole body about its centre of mass
-    /// (parallel-axis sum over cells), given a total mass.</summary>
+    /// <summary>Total mass of the body accounting for per-cell DensityMult.
+    /// Use this instead of <c>Density × TotalArea</c> when cells may have non-uniform density.</summary>
+    public static float TotalMass(in FracturableBody body)
+    {
+        float weighted = 0f;
+        foreach (var c in body.Cells) weighted += c.Area * c.DensityMult;
+        return MathF.Max(1f, body.Material.Density * weighted);
+    }
+
+    /// <summary>Moment of inertia about the body's centre of mass (parallel-axis sum over
+    /// cells), using per-cell DensityMult to weight the mass distribution.</summary>
     public static float ComputeInertia(in FracturableBody body, float mass)
     {
-        float total = TotalArea(body);
-        if (total <= 0f) return 0f;
+        float totalWeighted = 0f;
+        foreach (var c in body.Cells) totalWeighted += c.Area * c.DensityMult;
+        if (totalWeighted <= 0f) return 0f;
         float inertia = 0f;
         foreach (var c in body.Cells)
         {
-            float cellMass = mass * (c.Area / total);
-            float iOwn     = PolygonUtils.ComputeInertia(c.Local, cellMass);
-            inertia += iOwn + cellMass * c.Centroid.LengthSquared();
+            float cellMass = mass * (c.Area * c.DensityMult / totalWeighted);
+            inertia += PolygonUtils.ComputeInertia(c.Local, cellMass)
+                     + cellMass * c.Centroid.LengthSquared();
         }
         return inertia;
     }
@@ -190,6 +343,30 @@ public static class VoronoiTessellator
                 float shared = SharedEdgeLength(cells[i].Local, cells[j].Local);
                 if (shared > MinSharedEdge)
                     bonds.Add(new Bond { A = i, B = j, EdgeLength = shared, Strength = shared * toughness });
+            }
+        return bonds.ToArray();
+    }
+
+    private static Bond[] BuildBondsWeighted(
+        Cell[] cells, List<int> seedIndices, IReadOnlyList<float> mults, float toughness)
+    {
+        var bonds = new List<Bond>();
+        for (int i = 0; i < cells.Length; i++)
+            for (int j = i + 1; j < cells.Length; j++)
+            {
+                float shared = SharedEdgeLength(cells[i].Local, cells[j].Local);
+                if (shared > MinSharedEdge)
+                {
+                    float mi = seedIndices[i] < mults.Count ? mults[seedIndices[i]] : 1f;
+                    float mj = seedIndices[j] < mults.Count ? mults[seedIndices[j]] : 1f;
+                    float bm = MathF.Sqrt(mi * mj);
+                    bonds.Add(new Bond
+                    {
+                        A = i, B = j,
+                        EdgeLength = shared,
+                        Strength   = shared * toughness * bm,
+                    });
+                }
             }
         return bonds.ToArray();
     }

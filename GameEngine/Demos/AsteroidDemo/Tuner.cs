@@ -71,13 +71,24 @@ sealed class Config
     // MATERIAL — per-body FractureProperties
     public readonly Param Brittleness, Toughness, SurfaceEff, SpinPreStress, KineticFraction, MinFragArea, Grain, Density;
     // PHYSICS — live, all bodies
-    public readonly Param Restitution, Friction, LinDrag, AngDrag, Thrust;
+    public readonly Param Restitution, Friction, LinDrag, AngDrag;
+    // PLAYER — direct velocity control (independent of physics drag)
+    public readonly Param Thrust, MaxSpeed, Impulse, Brake;
     // VFX — presentation; auto-modulated by impact energy / cell area / material
     public readonly Param DustCount, DustSize, DustTtl, DustSpeed, DustSpread,
                           FlashSize, FlashTtl, TracerLen, TracerWidth;
     // FRACTURE — multi-frame crack pacing. CrackSteps is material-owned (preset fills it);
     // CrackFrames is a global override. Speed = steps / (frames · fixedDt) pops/sec.
-    public readonly Param CrackSteps, CrackFrames;
+    // Detach: 1 = chunks fall off as cracks reach them, 0 = whole body splits at the end.
+    public readonly Param CrackSteps, CrackFrames, Detach, DetachScale, DetachJitter;
+    // Asteroid-on-asteroid collision fracture: scale & blast are separate from bullet params.
+    // AstDirSpin blends crack direction from the contact normal (0, head-on) to the full
+    // relative velocity incl. spin (1).
+    public readonly Param AsteroidEnergyScale, AsteroidBlast, AstDirSpin;
+    // DEBRIS — polygon chunks shed by vaporised cells (collider-less, fade over TTL).
+    public readonly Param DebrisTtl, DebrisScatter;
+    // VORTEX — live, applied every frame to all physics bodies outside the deadzone.
+    public readonly Param VortexDeadzone, VortexCentripetal, VortexTangential, VortexCapFrames;
     // SPAWN
     public readonly Param AstCount, AstRadius, AstSpeed, AstSpin;
 
@@ -91,7 +102,7 @@ sealed class Config
         Directionality   = T.Add("Directionality",   0.40f, 0f, 1f, 0.05f);
         MomentumTransfer = T.Add("Bullet push",      0.01f, 0f, 1f, 0.01f);
         EjectFraction    = T.Add("Eject speed",      0.08f, 0f, 0.5f, 0.01f);
-        ImpactSpin       = T.Add("Impact spin",      4f, 0f, 15f, 0.5f);
+        ImpactSpin       = T.Add("Impact spin",      0.5f, 0f, 10f, 0.1f);
         Blast            = T.Add("Blast (vaporise)", 0.30f, 0f, 1f, 0.05f);
 
         T.Header("-- MATERIAL --");
@@ -109,7 +120,13 @@ sealed class Config
         Friction         = T.Add("Friction",         0.20f, 0f, 1f, 0.05f);
         LinDrag          = T.Add("Linear drag",      0.05f, 0f, 2f, 0.05f);
         AngDrag          = T.Add("Angular drag",     0.05f, 0f, 2f, 0.05f);
-        Thrust           = T.Add("Thrust",           900f, 0f, 6000f, 50f);
+
+        T.Header("-- PLAYER --");
+        // Arcade movement: instant impulse on key press + sustained accel + manual brake.
+        Impulse          = T.Add("Impulse",          130f,  0f,  400f, 10f);  // px/s burst on press
+        Thrust           = T.Add("Accel rate",       2200f, 0f, 6000f, 100f); // px/s² while held
+        MaxSpeed         = T.Add("Max speed",        650f,  100f,1800f, 25f); // px/s cap
+        Brake            = T.Add("Brake (s⁻¹)",      6.0f,  0f,  20f,  0.5f);// decel when released
 
         T.Header("-- VFX --");
         DustCount        = T.Add("Dust count",       14f, 0f, 60f, 1f);
@@ -125,6 +142,22 @@ sealed class Config
         T.Header("-- FRACTURE --");
         CrackSteps       = T.Add("Crack steps/it",   2f, 1f, 30f, 1f);
         CrackFrames      = T.Add("Frames/iter",      1f, 1f, 20f, 1f);
+        Detach           = T.Add("Detach split",     1f, 0f, 1f, 1f);
+        DetachScale      = T.Add("Detach scale",     0.90f, 0.50f, 1f, 0.01f);
+        DetachJitter     = T.Add("Detach jitter",    0.02f, 0f, 0.10f, 0.01f);
+        AsteroidEnergyScale = T.Add("Ast E scale",  0.0002f, 0.00001f, 0.01f, 0.00005f);
+        AsteroidBlast    = T.Add("Ast blast",        0.08f, 0f, 0.5f, 0.01f);
+        AstDirSpin       = T.Add("Ast dir spin",     1.0f, 0f, 1f, 0.05f);
+
+        T.Header("-- DEBRIS --");
+        DebrisTtl        = T.Add("Debris ttl",       0.80f, 0.1f, 3f, 0.1f);
+        DebrisScatter    = T.Add("Debris scatter",   40f, 0f, 200f, 5f);
+
+        T.Header("-- VORTEX --");
+        VortexDeadzone    = T.Add("Deadzone",        900f,  100f, 2800f, 50f);
+        VortexCentripetal = T.Add("Centripetal k",   0.10f, 0f,   0.50f, 0.01f);
+        VortexTangential  = T.Add("Tangential k",    0.06f, 0f,   0.30f, 0.01f);
+        VortexCapFrames   = T.Add("Cap frames",      100f,  10f,  500f,  10f);
 
         T.Header("-- SPAWN [R] --");
         AstCount         = T.Add("Asteroids",        6f, 1f, 40f, 1f);
@@ -159,5 +192,7 @@ sealed class Config
         Grain.Value           = m.GrainArea;
         Density.Value         = m.Density;
         CrackSteps.Value      = m.CrackSpeed;
+        DetachScale.Value     = m.DetachCellScale;
+        DetachJitter.Value    = m.DetachCellJitter;
     }
 }

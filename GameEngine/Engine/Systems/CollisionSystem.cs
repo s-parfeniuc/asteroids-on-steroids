@@ -2,6 +2,7 @@ using System.Numerics;
 using AsteroidsEngine.Engine.Collision;
 using AsteroidsEngine.Engine.Components;
 using AsteroidsEngine.Engine.Core;
+using AsteroidsEngine.Engine.Diagnostics;
 using AsteroidsEngine.Engine.Events;
 
 namespace AsteroidsEngine.Engine.Systems;
@@ -45,6 +46,10 @@ public sealed class CollisionSystem : ISystem
     private const float RestitutionVelThreshold = 30f; // below this approach speed, no bounce
     private const float PenetrationSlop   = 0.5f;      // allowed overlap (px) before correcting
     private const float CorrectionPercent = 0.4f;      // fraction of penetration fixed per frame
+    private const float MaxCorrection     = 8f;        // cap on positional push per frame (px): deep
+                                                       // overlaps separate over several frames, never teleport
+    private const float DeepNoBounce      = 6f;        // overlap (px) past which we skip restitution — a body
+                                                       // that appears already-embedded should ooze out, not bounce
 
     public CollisionSystem(ISpatialIndex spatial, EventBus bus)
     {
@@ -96,13 +101,10 @@ public sealed class CollisionSystem : ISystem
                                     cB.Shape, tB.Position, tB.Rotation, _hitBuf);
                 if (_hitBuf.Count == 0) continue;
 
-                // Force every normal to point from B toward A (the direction A moves to
-                // separate). The polygon SAT path returns the opposite sign, so without
-                // this the solver pushes bodies together. Orient by relative position.
-                Vector2 ab = tA.Position - tB.Position;
-                for (int k = 0; k < _hitBuf.Count; k++)
-                    if (Vector2.Dot(_hitBuf[k].Normal, ab) < 0f)
-                        _hitBuf[k] = _hitBuf[k].Flipped();
+                // Normals are already oriented B→A per-contact — for compounds by the
+                // contacting cell's geometry (CollectPairContacts), which is what makes
+                // concave craters correct. No whole-body re-orientation here (that flipped
+                // crater-wall normals inward and shoved bodies through the asteroid).
 
                 // Deepest contact drives positional correction + the gameplay event.
                 ContactInfo deepest = _hitBuf[0];
@@ -129,6 +131,18 @@ public sealed class CollisionSystem : ISystem
                 _contacts[i] = c;
             }
 
+        // --- Net contact impulse (after convergence): one line per contact, not per iteration ---
+        if (ForceLog.Enabled && (ForceLog.Categories & ForceCat.Contact) != 0)
+            foreach (var c in _contacts)
+            {
+                if (!ForceLog.On(ForceCat.Contact, c.A.Id) && !ForceLog.On(ForceCat.Contact, c.B.Id)) continue;
+                Vector2 p = c.AccumN * c.Normal + c.AccumT * c.Tangent;   // total impulse on A
+                ForceLog.Write(ForceCat.Contact, c.A.Id,
+                    $"vs e{c.B.Id}: Jn{c.AccumN:0.#}·n{ForceLog.V(c.Normal)} + Jt{c.AccumT:0.#}·t = P{ForceLog.V(p)}  " +
+                    $"→ ΔvA {ForceLog.V(p * c.InvMassA)} ΔωA {c.InvIA * Cross(c.rA, p):0.###} ; " +
+                    $"ΔvB {ForceLog.V(-p * c.InvMassB)} ΔωB {-c.InvIB * Cross(c.rB, p):0.###}");
+            }
+
         // --- Phase 5: sleeping ---
         if (EnableSleeping) UpdateSleep(world, (float)dt);
     }
@@ -145,6 +159,13 @@ public sealed class CollisionSystem : ISystem
     {
         if (!world.HasComponent<RigidBody>(eA) || !world.HasComponent<RigidBody>(eB)) return;
 
+        // Fracture siblings (just detached from the same body) share a FractureGroup id.
+        // Suppressing positional correction between them prevents a freshly-detached piece
+        // from pushing its former parent in the wrong direction. Velocity solving is unchanged.
+        if (world.HasComponent<FractureGroup>(eA) && world.HasComponent<FractureGroup>(eB) &&
+            world.GetComponent<FractureGroup>(eA).Id == world.GetComponent<FractureGroup>(eB).Id)
+            return;
+
         float massA  = world.GetComponent<RigidBody>(eA).Mass;
         float massB  = world.GetComponent<RigidBody>(eB).Mass;
         float total  = massA + massB;
@@ -155,7 +176,12 @@ public sealed class CollisionSystem : ISystem
         // instead of teleporting (which flings bodies and spins them up).
         float corr = MathF.Max(0f, contact.Depth - PenetrationSlop) * CorrectionPercent;
         if (corr <= 0f) return;
+        corr = MathF.Min(corr, MaxCorrection);   // deep overlaps ooze apart over frames, never teleport
         var correction = contact.Normal * corr;
+        if (ForceLog.On(ForceCat.Separation, eA.Id) || ForceLog.On(ForceCat.Separation, eB.Id))
+            ForceLog.Write(ForceCat.Separation, eA.Id,
+                $"vs e{eB.Id}: depth{contact.Depth:0.##} → push min((depth-slop{PenetrationSlop})·{CorrectionPercent}, max{MaxCorrection}) = {corr:0.##}px " +
+                $"along n{ForceLog.V(contact.Normal)} ; shareA {shareA:0.##}");
         tA.Position += correction *  shareA;
         tB.Position -= correction * (1f - shareA);
     }
@@ -169,20 +195,50 @@ public sealed class CollisionSystem : ISystem
         CollisionShape sa, Vector2 pa, float ra,
         CollisionShape sb, Vector2 pb, float rb, List<ContactInfo> outList)
     {
-        if (sa is CompoundShape ca)
+        // CollectContacts iterates one body's cells and orients each contact normal so
+        // it points from that cell outward toward the other body. Convention here: B→A.
+        //
+        // When both shapes are compounds (the common case: all asteroid bodies, all
+        // fragment bodies) we MUST use B's cells as the reference — B's cell normals
+        // point toward A, giving correct push direction for A. Using A's cells and
+        // then flipping (the old approach) produces the exact opposite for bodies
+        // sitting inside concave craters because the fragment's own cell centroid
+        // is on the wrong side relative to the asteroid's crater walls.
+        if (sa is CompoundShape ca && sb is CompoundShape cb)
         {
-            ca.CollectContacts(pa, ra, sb, pb, rb, outList);            // normals B→A
+            // Compound vs compound: collect from whichever has more cells — that body
+            // is most likely the concave one whose cell-outward normals are authoritative.
+            // For equal counts (fragment vs fragment) it doesn't matter which we use.
+            if (ca.PartCount >= cb.PartCount)
+            {
+                int start = outList.Count;
+                ca.CollectContacts(pa, ra, sb, pb, rb, outList);       // A-cell → B
+                for (int i = start; i < outList.Count; i++) outList[i] = outList[i].Flipped();  // → B→A
+            }
+            else
+            {
+                cb.CollectContacts(pb, rb, sa, pa, ra, outList);       // B-cell → A
+            }
         }
-        else if (sb is CompoundShape cb)
+        else if (sa is CompoundShape ca2)
         {
             int start = outList.Count;
-            cb.CollectContacts(pb, rb, sa, pa, ra, outList);            // normals A→B
-            for (int i = start; i < outList.Count; i++) outList[i] = outList[i].Flipped();
+            ca2.CollectContacts(pa, ra, sb, pb, rb, outList);          // A-cell → B
+            for (int i = start; i < outList.Count; i++) outList[i] = outList[i].Flipped();  // → B→A
+        }
+        else if (sb is CompoundShape cb2)
+        {
+            cb2.CollectContacts(pb, rb, sa, pa, ra, outList);          // B-cell → A
         }
         else
         {
             var c = sa.Intersects(pa, ra, sb, pb, rb);
-            if (c != null) outList.Add(c.Value);
+            if (c != null)
+            {
+                var ci = c.Value;
+                if (Vector2.Dot(ci.Normal, pa - pb) < 0f) ci = ci.Flipped();
+                outList.Add(ci);
+            }
         }
     }
 
@@ -225,7 +281,9 @@ public sealed class CollisionSystem : ISystem
         Vector2 vRel = VelAt(vA, rA) - VelAt(vB, rB);
         float   vn0  = Vector2.Dot(vRel, n);
         float   e    = MathF.Min(rbA.Restitution, rbB.Restitution);
-        float   bias = vn0 < -RestitutionVelThreshold ? -e * vn0 : 0f;
+        // No bounce for already-deep overlaps (spawned-inside fragments, warp/respawn): let
+        // them separate gently instead of launching apart.
+        float   bias = (vn0 < -RestitutionVelThreshold && info.Depth < DeepNoBounce) ? -e * vn0 : 0f;
 
         _contacts.Add(new Contact
         {

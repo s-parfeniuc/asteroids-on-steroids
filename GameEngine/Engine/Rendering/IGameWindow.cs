@@ -1,3 +1,4 @@
+using System.Numerics;
 using AsteroidsEngine.Engine.Input;
 
 namespace AsteroidsEngine.Engine.Rendering;
@@ -6,17 +7,12 @@ namespace AsteroidsEngine.Engine.Rendering;
 /// Platform-agnostic game window contract.
 ///
 /// The game loop drives rendering by:
-///   1. Calling PollEvents() each frame — drains OS events → fires KeyDown/KeyUp
-///   2. Drawing to any pixel buffer (SkiaSharp SKBitmap, GDI+ Bitmap, etc.)
-///   3. Calling PresentFrame(pixels, stride) to upload and display the frame
-///
-/// PresentFrame takes a raw BGRA8888 pixel pointer (platform-agnostic):
-///   SDL2:     uploads to a streaming texture and calls RenderPresent
-///   WinForms: wraps in a GDI Bitmap and blits via Graphics.DrawImage
+///   1. PollEvents() — drains OS events, fires key/mouse callbacks.
+///   2. Draw to Renderer (IRenderer) — platform backend executes draw calls.
+///   3. Present() — swap/flush the completed frame to the display.
 ///
 /// Current implementations:
-///   SdlGameWindow  — Linux/Mac/Windows via SDL2  (TwoPlayerGame project)
-///   GameWindow     — Windows via WinForms         (to be added in Windows phase)
+///   SdlGameWindow — Linux/Mac/Windows via SDL2 + SkiaSharp GPU (OpenGL).
 /// </summary>
 public interface IGameWindow : IDisposable
 {
@@ -24,23 +20,19 @@ public interface IGameWindow : IDisposable
     int  Height      { get; }
     bool ShouldClose { get; }
 
-    /// <summary>Fired when a key is pressed (no repeat events).</summary>
-    event Action<KeyCode>? KeyDown;
+    /// <summary>Immediate-mode renderer backed by this window's drawing surface.</summary>
+    IRenderer Renderer { get; }
 
-    /// <summary>Fired when a key is released.</summary>
-    event Action<KeyCode>? KeyUp;
+    event Action<KeyCode>?           KeyDown;
+    event Action<KeyCode>?           KeyUp;
+    event Action<Vector2>?           MouseMoved;
+    event Action<MouseButton, bool>? MouseButtonChanged;
+    /// <summary>Fired for each SDL_TEXTINPUT event (UTF-8 characters typed).</summary>
+    event Action<string>?            TextInput;
 
-    /// <summary>
-    /// Drain pending OS events and fire KeyDown/KeyUp callbacks.
-    /// SDL2:     polls the SDL event queue.
-    /// WinForms: no-op — the message pump runs on the main thread.
-    /// </summary>
+    /// <summary>Drain pending OS events and fire input callbacks.</summary>
     void PollEvents();
 
-    /// <summary>
-    /// Display the rendered frame. <paramref name="pixels"/> must point to a
-    /// contiguous BGRA8888 pixel buffer of size Height * <paramref name="stride"/>
-    /// bytes. The buffer must remain valid for the duration of this call.
-    /// </summary>
-    void PresentFrame(IntPtr pixels, int stride);
+    /// <summary>Flush GPU commands and swap the front/back buffers.</summary>
+    void Present();
 }

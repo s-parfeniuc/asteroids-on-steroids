@@ -1,6 +1,7 @@
 using System.Numerics;
 using AsteroidsEngine.Engine.Components;
 using AsteroidsEngine.Engine.Core;
+using AsteroidsEngine.Engine.Diagnostics;
 
 namespace AsteroidsEngine.Engine.Destruction;
 
@@ -12,19 +13,23 @@ namespace AsteroidsEngine.Engine.Destruction;
 /// </summary>
 public struct WeaponProfile
 {
-    public float Directionality;       // 0 = isotropic splash … 1 = forward channel
+    public float Directionality;       // 0 = omnidirectional blast … 1 = tight forward channel; combined with material's CrackDirectionality at impact
     public float MomentumTransfer;     // forward push along the shot, as a fraction of bullet speed
     public float EjectFraction;        // radial scatter, as a fraction of bullet speed
     public float ImpactSpin;           // rad/s scale for impact-induced shear spin on fragments
     public float BlastFraction;        // vaporisation crater: 0 = none (pure fragmentation) … 1 = total
+    public float EnergyScale;          // multiplier on the raw kinetic impact energy (1 = physical;
+                                       // <1 = only a fraction couples into fracture, e.g. for
+                                       // asteroid-on-asteroid where raw KE dwarfs the crack budget)
 
     public static WeaponProfile Default => new()
     {
         Directionality   = 0.4f,
         MomentumTransfer = 0.01f,
         EjectFraction    = 0.08f,
-        ImpactSpin       = 4f,
+        ImpactSpin       = 0.5f,
         BlastFraction    = 0.3f,
+        EnergyScale      = 1f,
     };
 }
 
@@ -99,7 +104,7 @@ public static class FractureService
             EnergyTotal = eImpact,
             ImpactPointWorld = impactPoint,
             ImpactDir = dir,
-            Directionality = weapon.Directionality,
+            Directionality = EffectiveDirectionality(weapon.Directionality, fb.Material.CrackDirectionality),
             SpinOmega = bodyAngular,
             MomentumKick = kick,
             EjectSpeed = ejectSpeed,
@@ -163,9 +168,21 @@ public static class FractureService
         float mBody = rb.Mass;
         float vRelN = MathF.Abs(Vector2.Dot(impactorVelocity - bodyLinear, dir));
         float mRed = (impactorMass + mBody) > 0f ? impactorMass * mBody / (impactorMass + mBody) : impactorMass;
-        float eImpact = 0.5f * mRed * vRelN * vRelN;
+        float escale = weapon.EnergyScale > 0f ? weapon.EnergyScale : 1f;
+        float eImpact = 0.5f * mRed * vRelN * vRelN * escale;
+
+        ForceLog.CurrentBody = body.Id;   // engine fragment code logs against the source body
+        if (ForceLog.On(ForceCat.Energy, body.Id))
+            ForceLog.Write(ForceCat.Energy, body.Id,
+                $"eImpact = ½·mRed{mRed:0.#}·vRelN{vRelN:0.#}²·scale{escale:0.#####} = {eImpact:0.#}  " +
+                $"(mRed = mImp{impactorMass:0.##}·mBody{mBody:0.#}/(sum))");
 
         var budget = FractureSimulator.ComputeBudget(fb, cell, mBody, eImpact);
+        if (ForceLog.On(ForceCat.Energy, body.Id))
+            ForceLog.Write(ForceCat.Energy, body.Id,
+                budget.Fractured
+                    ? $"budget: surface {budget.Surface:0.#} + kinetic {budget.Kinetic:0.#} (threshold passed)"
+                    : $"budget: SUB-THRESHOLD, absorbed {budget.Absorbed:0.#} (no fracture)");
         if (!budget.Fractured)
         {
             fb.State.AbsorbedEnergy = budget.Absorbed;   // sub-threshold: accumulate, no front
@@ -176,6 +193,18 @@ public static class FractureService
         Vector2 kick = dir * (bulletSpeed * weapon.MomentumTransfer);
         float ejectSpeed = bulletSpeed * weapon.EjectFraction;
 
+        // Recoil now, at the moment of impact — the body reacts immediately instead of
+        // waiting for the fracture to finish. Fragments inherit this via BodyLinear.
+        if (world.HasComponent<Velocity>(body))
+        {
+            ref var vKick = ref world.GetComponent<Velocity>(body);
+            if (ForceLog.On(ForceCat.Recoil, body.Id))
+                ForceLog.Write(ForceCat.Recoil, body.Id,
+                    $"kick = dir{ForceLog.V(dir)}·(speed{bulletSpeed:0.#}·MT{weapon.MomentumTransfer:0.###}) = {ForceLog.V(kick)}  " +
+                    $"v.Linear {ForceLog.V(vKick.Linear)}→{ForceLog.V(vKick.Linear + kick)}");
+            vKick.Linear += kick;
+        }
+
         // Crack front for this hit: struck cell holds the full impact energy, spends the
         // surface budget; blast threshold matches the atomic path (1-blast)·E.
         float rc = MathF.Cos(t.Rotation), rs = MathF.Sin(t.Rotation);
@@ -183,10 +212,11 @@ public static class FractureService
         float blast = Math.Clamp(weapon.BlastFraction, 0f, 1f);
         float blastThresh = blast > 0f ? (1f - blast) * eImpact : float.PositiveInfinity;
         float transmission = FractureSimulator.TransmissionFor(fb.Material.Brittleness);
+        float effectiveDir = EffectiveDirectionality(weapon.Directionality, fb.Material.CrackDirectionality);
 
         var energy = new float[fb.Cells.Length];
         var front = CrackFront.Seed(energy, cell, eImpact, budget.Surface,
-                                    dirLocal, weapon.Directionality, transmission, blastThresh);
+                                    dirLocal, effectiveDir, transmission, blastThresh);
 
         if (world.HasComponent<FractureProcess>(body))
         {
@@ -198,7 +228,7 @@ public static class FractureService
             fp.MomentumKick = kick;
             fp.EjectSpeed = ejectSpeed;
             fp.ImpactSpin = weapon.ImpactSpin;
-            fp.Directionality = weapon.Directionality;
+            fp.Directionality = effectiveDir;
             return;
         }
 
@@ -215,13 +245,22 @@ public static class FractureService
             MomentumKick = kick,
             EjectSpeed = ejectSpeed,
             ImpactSpin = weapon.ImpactSpin,
-            Directionality = weapon.Directionality,
+            Directionality = effectiveDir,
             StepsPerIteration = timing.StepsPerIteration < 1 ? 1 : timing.StepsPerIteration,
             FramesPerIteration = timing.FramesPerIteration < 1 ? 1 : timing.FramesPerIteration,
             FrameCounter = 0,
+            DetachOnSplit = timing.DetachOnSplit,
             Done = false,
         });
     }
+
+    /// <summary>
+    /// Combines the weapon's impact-cone focus with the material's grain/cleavage bias.
+    /// Arithmetic mean: neither factor alone dominates — a focused shot through isotropic
+    /// metal is moderated, an omnidirectional grenade in brittle glass still cleaves somewhat.
+    /// </summary>
+    private static float EffectiveDirectionality(float weaponDir, float materialCleavage)
+        => (weaponDir + materialCleavage) * 0.5f;
 
     private static int NearestCell(in FracturableBody fb, Vector2 pos, float rot, Vector2 worldPoint)
     {

@@ -1,0 +1,632 @@
+{
+  "materials": {
+    "rock": {
+      "brittleness": 0.6,
+      "toughness": 16,
+      "crackDirectionality": 0.35,
+      "grainArea": 1500,
+      "minFragmentArea": 180,
+      "density": 1.4,
+      "kineticFraction": 0.35,
+      "surfaceEfficiency": 0.12,
+      "spinPreStress": 0.12,
+      "crackSpeed": 2,
+      "detachCellScale": 0.9,
+      "detachCellJitter": 0.02
+    },
+    "ice": {
+      "brittleness": 0.8,
+      "toughness": 10,
+      "crackDirectionality": 0.55,
+      "grainArea": 900,
+      "minFragmentArea": 80,
+      "density": 0.9,
+      "kineticFraction": 0.3,
+      "surfaceEfficiency": 0.16,
+      "spinPreStress": 0.13,
+      "crackSpeed": 4,
+      "detachCellScale": 0.9,
+      "detachCellJitter": 0.02
+    },
+    "metal": {
+      "brittleness": 0.15,
+      "toughness": 40,
+      "crackDirectionality": 0.15,
+      "grainArea": 3000,
+      "minFragmentArea": 400,
+      "density": 2,
+      "kineticFraction": 0.45,
+      "surfaceEfficiency": 0.06,
+      "spinPreStress": 0.08,
+      "crackSpeed": 1,
+      "detachCellScale": 0.92,
+      "detachCellJitter": 0.01
+    },
+    "glass": {
+      "brittleness": 1,
+      "toughness": 6,
+      "crackDirectionality": 0.75,
+      "grainArea": 600,
+      "minFragmentArea": 40,
+      "density": 1,
+      "kineticFraction": 0.25,
+      "surfaceEfficiency": 0.2,
+      "spinPreStress": 0.15,
+      "crackSpeed": 6,
+      "detachCellScale": 0.9,
+      "detachCellJitter": 0.02
+    }
+  },
+  "weapons": {
+    "cannon": {
+      "fireRate": 15,
+      "projectileSpeed": 1500,
+      "timeToLive": 2.5,
+      "directionality": 0.55,
+      "momentumTransfer": 0.01,
+      "ejectFraction": 0.08,
+      "impactSpin": 0.5,
+      "blastFraction": 0.3548387,
+      "energy": 1200
+    },
+    "shotgun": {
+      "fireRate": 1.5,
+      "projectileSpeed": 750,
+      "timeToLive": 1.2,
+      "directionality": 0.3,
+      "momentumTransfer": 0.005,
+      "ejectFraction": 0.06,
+      "impactSpin": 0.3,
+      "blastFraction": 0.15,
+      "energy": 0,
+      "rays": 7,
+      "energyPerRay": 400,
+      "coneAngle": 18
+    },
+    "piercing": {
+      "fireRate": 1,
+      "projectileSpeed": 1100,
+      "timeToLive": 3,
+      "directionality": 0.85,
+      "momentumTransfer": 0.04,
+      "ejectFraction": 0.05,
+      "impactSpin": 0.2,
+      "blastFraction": 0.05,
+      "energy": 2800,
+      "mass": 3,
+      "lateralImpulseClamp": 0.4
+    },
+    "grenade": {
+      "fireRate": 0.8,
+      "projectileSpeed": 320,
+      "timeToLive": 4,
+      "directionality": 0.05,
+      "momentumTransfer": 0.02,
+      "ejectFraction": 0.15,
+      "impactSpin": 0.8,
+      "blastFraction": 0.75,
+      "energy": 3500,
+      "fuseTime": 1.8,
+      "shrapnelCount": 12,
+      "shrapnelSpread": 360
+    }
+  },
+  "skills": {
+    "dash": {
+      "cooldown": 3,
+      "duration": 0,
+      "velocitySpike": 1400,
+      "invincibilityTime": 0.35
+    },
+    "turbo": {
+      "cooldown": 8,
+      "duration": 2,
+      "thrustMult": 3
+    },
+    "slowmo": {
+      "cooldown": 12,
+      "duration": 3,
+      "timeScale": 0.3,
+      "playerSpeedBoost": 2.5
+    }
+  },
+  "player": {
+    "shape": "player_ship",
+    "shapeScale": 0.3451613,
+    "material": "metal",
+    "thrust": 258.0645,
+    "rotSpeed": 6.064516,
+    "maxSpeed": 549.67737,
+    "brakeDrag": 1.9354838,
+    "impulse": 38.709675,
+    "lateralDrag": 1.6774194,
+    "startingWeapon": "cannon",
+    "skills": [
+      "dash",
+      "turbo",
+      "slowmo"
+    ]
+  },
+  "entities": {
+    "drone": {
+      "shape": "drone",
+      "material": "metal",
+      "speed": 220,
+      "detectionRadius": 800,
+      "steeringWeights": {
+        "separation": 1.2,
+        "pursuit": 0.8,
+        "avoidance": 1
+      }
+    },
+    "bruiser": {
+      "shape": "bruiser",
+      "material": "metal",
+      "speed": 130,
+      "detectionRadius": 1100,
+      "steeringWeights": {
+        "separation": 0.6,
+        "pursuit": 1.4,
+        "avoidance": 0.5
+      }
+    },
+    "mothership": {
+      "shape": "mothership",
+      "material": "metal",
+      "speed": 55,
+      "detectionRadius": 2200,
+      "steeringWeights": {
+        "separation": 0.3,
+        "pursuit": 0.6,
+        "avoidance": 0.4
+      }
+    }
+  },
+  "asteroids": {
+    "gravel": {
+      "procedural": {
+        "baseRadius": 40,
+        "vertexCount": [
+          7,
+          11
+        ],
+        "roughness": 0.3,
+        "noiseFrequency": 4,
+        "concavityBias": 0.1,
+        "seedCount": [
+          70,
+          100
+        ],
+        "seedClusterCenter": 0.0
+      },
+      "material": "rock",
+      "sizeRange": [
+        0.5,
+        3
+      ],
+      "spinRange": [
+        0.5,
+        3
+      ],
+      "densityMult": 1,
+      "baseCost": 1,
+      "baseCells": 7,
+      "speedRange": [
+        60,
+        150
+      ],
+      "unlockWave": 1
+    },
+    "standard": {
+      "procedural": {
+        "baseRadius": 80,
+        "vertexCount": [
+          10,
+          16
+        ],
+        "roughness": 0.22,
+        "noiseFrequency": 3,
+        "concavityBias": 0.7,
+        "seedCount": [
+          170,
+          250
+        ],
+        "seedClusterCenter": 0.25
+      },
+      "material": "rock",
+      "sizeRange": [
+        0.8,
+        2
+      ],
+      "spinRange": [
+        0,
+        1.5
+      ],
+      "densityMult": 1,
+      "baseCost": 3,
+      "baseCells": 12,
+      "speedRange": [
+        30,
+        90
+      ],
+      "unlockWave": 1
+    },
+    "spinner": {
+      "procedural": {
+        "baseRadius": 70,
+        "vertexCount": [
+          8,
+          12
+        ],
+        "roughness": 0.18,
+        "noiseFrequency": 2,
+        "concavityBias": 0.02,
+        "seedCount": [
+          50,
+          80
+        ],
+        "seedClusterCenter": 0.2,
+        "bondMultDistribution": {
+          "type": "radialGradient",
+          "value": 1,
+          "centerValue": 0.6,
+          "surfaceValue": 1.4,
+          "exponent": 2
+        }
+      },
+      "material": "rock",
+      "sizeRange": [
+        0.8,
+        2
+      ],
+      "spinRange": [
+        2.5,
+        5
+      ],
+      "densityMult": 1,
+      "baseCost": 4,
+      "baseCells": 12,
+      "speedRange": [
+        25,
+        75
+      ],
+      "unlockWave": 2
+    },
+    "boulder": {
+      "procedural": {
+        "baseRadius": 110,
+        "vertexCount": [
+          8,
+          12
+        ],
+        "roughness": 0.12,
+        "noiseFrequency": 2,
+        "concavityBias": 0.02,
+        "seedCount": [
+          80,
+          140
+        ],
+        "seedClusterCenter": 0.5,
+        "bondMultDistribution": {
+          "type": "radialGradient",
+          "value": 1,
+          "centerValue": 3,
+          "surfaceValue": 0.7,
+          "exponent": 1.5
+        },
+        "densityMultDistribution": {
+          "type": "radialGradient",
+          "value": 1,
+          "centerValue": 2,
+          "surfaceValue": 0.9,
+          "exponent": 1.2
+        }
+      },
+      "material": "rock",
+      "sizeRange": [
+        1,
+        1.5
+      ],
+      "spinRange": [
+        0,
+        0.8
+      ],
+      "densityMult": 2.5,
+      "baseCost": 8,
+      "baseCells": 25,
+      "speedRange": [
+        20,
+        55
+      ],
+      "unlockWave": 3
+    },
+    "armored": {
+      "procedural": {
+        "baseRadius": 90,
+        "vertexCount": [
+          10,
+          14
+        ],
+        "roughness": 0.14,
+        "noiseFrequency": 3,
+        "concavityBias": 0.03,
+        "seedCount": [
+          70,
+          110
+        ],
+        "seedClusterCenter": 0.4,
+        "bondMultDistribution": {
+          "type": "radialGradient",
+          "value": 1,
+          "centerValue": 0.7,
+          "surfaceValue": 3.5,
+          "exponent": 3
+        },
+        "blastResistDistribution": {
+          "type": "radialGradient",
+          "value": 1,
+          "centerValue": 0,
+          "surfaceValue": 0.8,
+          "exponent": 4
+        }
+      },
+      "material": "metal",
+      "sizeRange": [
+        0.8,
+        1.5
+      ],
+      "spinRange": [
+        0.2,
+        1.2
+      ],
+      "densityMult": 1,
+      "baseCost": 10,
+      "baseCells": 15,
+      "speedRange": [
+        25,
+        60
+      ],
+      "unlockWave": 5
+    },
+    "unstable": {
+      "procedural": {
+        "baseRadius": 85,
+        "vertexCount": [
+          12,
+          18
+        ],
+        "roughness": 0.35,
+        "noiseFrequency": 5,
+        "concavityBias": 0.15,
+        "seedCount": [
+          60,
+          100
+        ],
+        "seedClusterCenter": 0.1,
+        "bondMultDistribution": {
+          "type": "noiseClusters",
+          "value": 1,
+          "baseValue": 1,
+          "amplitude": 1.2,
+          "frequency": 2.5
+        },
+        "blastResistDistribution": {
+          "type": "noiseClusters",
+          "value": 1,
+          "baseValue": 0.1,
+          "amplitude": 0.35,
+          "frequency": 2
+        }
+      },
+      "material": "glass",
+      "sizeRange": [
+        0.8,
+        2
+      ],
+      "spinRange": [
+        1,
+        2.5
+      ],
+      "densityMult": 1,
+      "baseCost": 5,
+      "baseCells": 12,
+      "speedRange": [
+        40,
+        110
+      ],
+      "unlockWave": 6
+    }
+  },
+  "maxLiveCells": 2000,
+  "waves": [
+    {
+      "wave": 1,
+      "type": "budget",
+      "asteroidCount": 0,
+      "budget": 25,
+      "spawns": {
+        "gravel": 0.55,
+        "standard": 0.45
+      },
+      "sizeBias": 0,
+      "spawnPattern": "burst",
+      "rapidInterval": 0.4,
+      "modifiers": [],
+      "boss": false
+    },
+    {
+      "wave": 2,
+      "type": "budget",
+      "asteroidCount": 0,
+      "budget": 30,
+      "spawns": {
+        "gravel": 0.4,
+        "standard": 0.35,
+        "spinner": 0.25
+      },
+      "sizeBias": 0,
+      "spawnPattern": "burst",
+      "rapidInterval": 0.4,
+      "modifiers": [],
+      "boss": false
+    },
+    {
+      "wave": 3,
+      "type": "budget",
+      "asteroidCount": 0,
+      "budget": 35,
+      "spawns": {
+        "gravel": 0.2,
+        "standard": 0.1,
+        "spinner": 0.05,
+        "boulder": 0.65
+      },
+      "sizeBias": 0.5,
+      "spawnPattern": "burst",
+      "rapidInterval": 0.4,
+      "modifiers": [],
+      "boss": false
+    },
+    {
+      "wave": 4,
+      "type": "budget",
+      "asteroidCount": 0,
+      "budget": 40,
+      "spawns": {
+        "gravel": 0.3,
+        "standard": 0.3,
+        "spinner": 0.3,
+        "unstable": 0.05,
+        "boulder": 0.05
+      },
+      "sizeBias": -0.2,
+      "spawnPattern": "burst",
+      "rapidInterval": 0.4,
+      "modifiers": [],
+      "boss": false
+    },
+    {
+      "wave": 5,
+      "type": "budget",
+      "asteroidCount": 0,
+      "budget": 45,
+      "spawns": {
+        "gravel": 0.85,
+        "standard": 0.1,
+        "spinner": 0.05
+      },
+      "sizeBias": -0.8,
+      "spawnPattern": "burst",
+      "rapidInterval": 0.4,
+      "modifiers": [],
+      "boss": false
+    },
+    {
+      "wave": 6,
+      "type": "budget",
+      "asteroidCount": 0,
+      "budget": 50,
+      "spawns": {
+        "gravel": 0.2,
+        "standard": 0.15,
+        "spinner": 0.25,
+        "unstable": 0.3,
+        "boulder": 0.05,
+        "armored": 0.05
+      },
+      "sizeBias": 0,
+      "spawnPattern": "burst",
+      "rapidInterval": 0.4,
+      "modifiers": [],
+      "boss": false
+    },
+    {
+      "wave": 7,
+      "type": "budget",
+      "asteroidCount": 0,
+      "budget": 55,
+      "spawns": {
+        "gravel": 0.05,
+        "standard": 0.1,
+        "spinner": 0.05,
+        "unstable": 0.05,
+        "boulder": 0.05,
+        "armored": 0.7
+      },
+      "sizeBias": 0.3,
+      "spawnPattern": "burst",
+      "rapidInterval": 0.4,
+      "modifiers": [],
+      "boss": false
+    },
+    {
+      "wave": 8,
+      "type": "budget",
+      "asteroidCount": 0,
+      "budget": 60,
+      "spawns": {
+        "gravel": 0.1,
+        "standard": 0.2,
+        "spinner": 0.2,
+        "unstable": 0.2,
+        "boulder": 0.15,
+        "armored": 0.15
+      },
+      "sizeBias": 0.1,
+      "spawnPattern": "burst",
+      "rapidInterval": 0.4,
+      "modifiers": [],
+      "boss": false
+    },
+    {
+      "wave": 9,
+      "type": "budget",
+      "asteroidCount": 0,
+      "budget": 65,
+      "spawns": {
+        "gravel": 0.05,
+        "standard": 0.05,
+        "spinner": 0.3,
+        "unstable": 0.4,
+        "boulder": 0.15,
+        "armored": 0.05
+      },
+      "sizeBias": 0.2,
+      "spawnPattern": "burst",
+      "rapidInterval": 0.4,
+      "modifiers": [],
+      "boss": false
+    },
+    {
+      "wave": 10,
+      "type": "budget",
+      "asteroidCount": 0,
+      "budget": 70,
+      "spawns": {
+        "gravel": 0.05,
+        "standard": 0.1,
+        "spinner": 0.15,
+        "unstable": 0.2,
+        "boulder": 0.3,
+        "armored": 0.2
+      },
+      "sizeBias": 0.3,
+      "spawnPattern": "burst",
+      "rapidInterval": 0.4,
+      "modifiers": [],
+      "boss": false
+    }
+  ],
+  "scoring": {
+    "cellScoreAreaWeight": 0.001,
+    "killChainSteps": [
+      1,
+      1.5,
+      2,
+      4
+    ],
+    "killChainDecay": 3,
+    "waveSurvivalBonus": 500,
+    "leaderboardSize": 10
+  }
+}

@@ -18,6 +18,12 @@
     <!-- Platform backend assemblies live under GameEngine/Platform but are their
          own projects (they reference SDL/Skia); keep them out of the engine. -->
     <Compile Remove="Platform/**" />
+    <!-- GameConfig is its own project (shared by demo and game). -->
+    <Compile Remove="GameConfig/**" />
+    <!-- Game project files (future AsteroidsGame.csproj). -->
+    <Compile Remove="Game/**" />
+    <!-- Assets are data files, not source. -->
+    <Compile Remove="Assets/**" />
     <!-- Dormant future WinForms backend; compiled only under the WINDOWS symbol. -->
     <Compile Remove="Engine/Rendering/GameWindow.cs" />
   </ItemGroup>

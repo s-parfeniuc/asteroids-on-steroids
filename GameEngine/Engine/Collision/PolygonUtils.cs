@@ -256,6 +256,54 @@ public static class PolygonUtils
     }
 
     // -------------------------------------------------------------------------
+    // Convex hull
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Computes the convex hull of <paramref name="points"/> using Andrew's monotone chain
+    /// (O(n log n)). Returns vertices in clockwise winding order (engine convention —
+    /// <see cref="ComputeArea"/> returns a negative value for this result).
+    /// </summary>
+    public static Vector2[] ConvexHull(IReadOnlyList<Vector2> points)
+    {
+        int n = points.Count;
+        if (n < 3) return [.. points];
+
+        var sorted = new Vector2[n];
+        for (int i = 0; i < n; i++) sorted[i] = points[i];
+        Array.Sort(sorted, (a, b) => a.X != b.X ? a.X.CompareTo(b.X) : a.Y.CompareTo(b.Y));
+
+        // Lower hull (left → right) then upper hull (right → left).
+        var lower = new List<Vector2>(n);
+        foreach (var p in sorted)
+        {
+            while (lower.Count >= 2 && Cross2D(lower[^2], lower[^1], p) <= 0f)
+                lower.RemoveAt(lower.Count - 1);
+            lower.Add(p);
+        }
+        var upper = new List<Vector2>(n);
+        for (int i = n - 1; i >= 0; i--)
+        {
+            var p = sorted[i];
+            while (upper.Count >= 2 && Cross2D(upper[^2], upper[^1], p) <= 0f)
+                upper.RemoveAt(upper.Count - 1);
+            upper.Add(p);
+        }
+
+        lower.RemoveAt(lower.Count - 1);
+        upper.RemoveAt(upper.Count - 1);
+        lower.AddRange(upper);
+
+        var hull = lower.ToArray();
+        // Monotone chain gives CCW in Y-up math (ComputeArea > 0); reverse to CW.
+        if (ComputeArea(hull) > 0f) Array.Reverse(hull);
+        return hull;
+    }
+
+    private static float Cross2D(Vector2 o, Vector2 a, Vector2 b) =>
+        (a.X - o.X) * (b.Y - o.Y) - (a.Y - o.Y) * (b.X - o.X);
+
+    // -------------------------------------------------------------------------
     // Surface projection
     // -------------------------------------------------------------------------
 

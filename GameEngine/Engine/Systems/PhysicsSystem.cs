@@ -1,6 +1,7 @@
 using System.Numerics;
 using AsteroidsEngine.Engine.Components;
 using AsteroidsEngine.Engine.Core;
+using AsteroidsEngine.Engine.Diagnostics;
 
 namespace AsteroidsEngine.Engine.Systems;
 
@@ -22,7 +23,7 @@ public sealed class PhysicsSystem : ISystem
     {
         float fdt = (float)dt;
 
-        world.ForEach<Velocity, RigidBody>((Entity _, ref Velocity v, ref RigidBody rb) =>
+        world.ForEach<Velocity, RigidBody>((Entity e, ref Velocity v, ref RigidBody rb) =>
         {
             if (rb.Mass <= 0f) return;
             if (rb.Asleep) return;   // resting body — skip integration until woken
@@ -31,15 +32,23 @@ public sealed class PhysicsSystem : ISystem
             rb.AccumulatedForce += Gravity * rb.Mass;
 
             // Symplectic Euler: update velocity first.
-            v.Linear  += (rb.AccumulatedForce / rb.Mass) * fdt;
-            if (rb.Inertia > 0f)
-                v.Angular += (rb.AccumulatedTorque / rb.Inertia) * fdt;
+            Vector2 dvLin = (rb.AccumulatedForce / rb.Mass) * fdt;
+            float dvAng = rb.Inertia > 0f ? (rb.AccumulatedTorque / rb.Inertia) * fdt : 0f;
+            if (ForceLog.On(ForceCat.Integration, e.Id) &&
+                (rb.AccumulatedForce != Vector2.Zero || rb.AccumulatedTorque != 0f))
+                ForceLog.Write(ForceCat.Integration, e.Id,
+                    $"v += (F{ForceLog.V(rb.AccumulatedForce)}/m{rb.Mass:0.#})·dt{fdt:0.####} = {ForceLog.V(dvLin)} ; " +
+                    $"ω += (τ{rb.AccumulatedTorque:0.#}/I{rb.Inertia:0.#})·dt = {dvAng:0.####}");
+            v.Linear  += dvLin;
+            v.Angular += dvAng;
 
-            // Apply drag: velocity *= e^(-drag * dt)
-            // LinearDrag/AngularDrag are decay rates (any positive value).
-            // Higher = stops faster. 0 = no drag.
+            // Apply drag: velocity *= e^(-drag * dt). Decay rate (s⁻¹); 0 = none.
             float linearRetain  = MathF.Exp(-rb.LinearDrag  * fdt);
             float angularRetain = MathF.Exp(-rb.AngularDrag * fdt);
+            if (ForceLog.On(ForceCat.Drag, e.Id) && (rb.LinearDrag > 0f || rb.AngularDrag > 0f))
+                ForceLog.Write(ForceCat.Drag, e.Id,
+                    $"v {ForceLog.V(v.Linear)} *= e^(-drag{rb.LinearDrag:0.##}·dt) {linearRetain:0.####} ; " +
+                    $"ω {v.Angular:0.##} *= {angularRetain:0.####}");
             v.Linear  *= linearRetain;
             v.Angular *= angularRetain;
 
@@ -59,6 +68,9 @@ public sealed class PhysicsSystem : ISystem
         ref var rb = ref world.GetComponent<RigidBody>(entity);
         rb.Asleep = false; rb.SleepTimer = 0f;   // applying force wakes the body
         rb.AccumulatedForce += force;
+        if (ForceLog.On(ForceCat.Thrust, entity.Id))
+            ForceLog.Write(ForceCat.Thrust, entity.Id,
+                $"applied force {ForceLog.V(force)} → Δv this step ≈ {ForceLog.V(force / rb.Mass * (1f / 120f))} (F/m·dt)");
     }
 
     /// <summary>
