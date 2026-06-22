@@ -1,0 +1,48 @@
+# Wave spawn log — started 2026-06-16 21:26:33
+
+[Wave 1] T=0.0s   budget=25   sizeBias=0.00   maxCells=300
+  8 asteroids   ~116 cells total
+  standard   x4   sizes: 1.18 1.21 1.77 1.94   cells: ~14 ~14 ~21 ~23   subtotal≈72
+  gravel     x4   sizes: 2.11 1.54 2.37 0.61   cells: ~14 ~10 ~16 ~4   subtotal≈44
+
+[Wave 2] T=31.5s   budget=30   sizeBias=0.00   maxCells=330
+  0 asteroids   ~0 cells total
+
+[Wave 3] T=63.0s   budget=35   sizeBias=+0.50   maxCells=360
+  4 asteroids   ~105 cells total
+  boulder    x3   sizes: 1.27 1.35 1.26   cells: ~31 ~33 ~31   subtotal≈95
+  spinner    x1   sizes: 0.91   cells: ~10   subtotal≈10
+
+[Wave 4] T=92.3s   budget=40   sizeBias=-0.20   maxCells=390
+  12 asteroids   ~138 cells total
+  standard   x3   sizes: 0.96 1.39 1.02   cells: ~11 ~16 ~12   subtotal≈39
+  gravel     x4   sizes: 1.49 0.81 0.61 0.50   cells: ~10 ~5 ~4 ~3   subtotal≈22
+  spinner    x5   sizes: 1.77 1.97 1.11 0.80 0.96   cells: ~21 ~23 ~13 ~9 ~11   subtotal≈77
+
+[Wave 5] T=123.9s   budget=45   sizeBias=-0.80   maxCells=420
+  22 asteroids   ~258 cells total
+  gravel     x18   sizes: 1.41 2.36 1.76 1.35 2.93 0.68 2.89 0.88 1.32 2.98 1.92 1.12 2.60 1.01 2.46 0.66 0.50 0.76   cells: ~9 ~16 ~12 ~9 ~20 ~4 ~20 ~6 ~9 ~20 ~13 ~7 ~18 ~7 ~17 ~4 ~3 ~5   subtotal≈199
+  standard   x4   sizes: 1.94 0.98 1.26 0.92   cells: ~23 ~11 ~15 ~10   subtotal≈59
+
+[Wave 6] T=155.4s   budget=50   sizeBias=0.00   maxCells=450
+  7 asteroids   ~131 cells total
+  boulder    x1   sizes: 1.47   cells: ~36   subtotal≈36
+  unstable   x4   sizes: 1.66 1.46 1.60 1.56   cells: ~19 ~17 ~19 ~18   subtotal≈73
+  standard   x1   sizes: 1.12   cells: ~13   subtotal≈13
+  spinner    x1   sizes: 0.82   cells: ~9   subtotal≈9
+
+[Wave 7] T=186.9s   budget=55   sizeBias=+0.30   maxCells=480
+  7 asteroids   ~109 cells total
+  armored    x3   sizes: 1.49 1.49 0.91   cells: ~22 ~22 ~13   subtotal≈57
+  standard   x1   sizes: 1.87   cells: ~22   subtotal≈22
+  unstable   x1   sizes: 1.81   cells: ~21   subtotal≈21
+  gravel     x2   sizes: 0.73 0.58   cells: ~5 ~4   subtotal≈9
+
+[Wave 8] T=207.8s   budget=60   sizeBias=+0.10   maxCells=510
+  12 asteroids   ~174 cells total
+  boulder    x1   sizes: 1.29   cells: ~32   subtotal≈32
+  spinner    x1   sizes: 1.21   cells: ~14   subtotal≈14
+  unstable   x3   sizes: 1.85 1.18 1.44   cells: ~22 ~14 ~17   subtotal≈53
+  standard   x2   sizes: 1.01 1.53   cells: ~12 ~18   subtotal≈30
+  armored    x1   sizes: 1.02   cells: ~15   subtotal≈15
+  gravel     x4   sizes: 1.75 1.06 1.25 0.55   cells: ~12 ~7 ~8 ~3   subtotal≈30

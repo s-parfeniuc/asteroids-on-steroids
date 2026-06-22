@@ -1,0 +1,182 @@
+{
+  "name": "Bruiser",
+  "material": "metal",
+  "outline": [
+    [
+      0,
+      62.59
+    ],
+    [
+      10,
+      52.59
+    ],
+    [
+      30,
+      92.59
+    ],
+    [
+      40,
+      32.59
+    ],
+    [
+      70,
+      62.59
+    ],
+    [
+      40,
+      -7.41
+    ],
+    [
+      30,
+      -87.41
+    ],
+    [
+      20,
+      -47.41
+    ],
+    [
+      0,
+      -117.41
+    ],
+    [
+      -20,
+      -47.41
+    ],
+    [
+      -30,
+      -87.41
+    ],
+    [
+      -40,
+      -7.41
+    ],
+    [
+      -70,
+      62.59
+    ],
+    [
+      -40,
+      32.59
+    ],
+    [
+      -30,
+      92.59
+    ],
+    [
+      -10,
+      52.59
+    ]
+  ],
+  "seeds": [
+    {
+      "x": 0,
+      "y": 12.59,
+      "role": "cockpit",
+      "bondMult": 5,
+      "blastResist": 0.49
+    },
+    {
+      "x": -30,
+      "y": -67.41,
+      "role": "bumper",
+      "bondMult": 3.65,
+      "blastResist": 0.47
+    },
+    {
+      "x": 30,
+      "y": -67.41,
+      "role": "bumper",
+      "bondMult": 3.6,
+      "blastResist": 0.47
+    },
+    {
+      "x": -10,
+      "y": -77.41,
+      "role": "bumper",
+      "bondMult": 3.5,
+      "blastResist": 0.51
+    },
+    {
+      "x": 10,
+      "y": -77.41,
+      "role": "bumper",
+      "bondMult": 3.55,
+      "blastResist": 0.49
+    },
+    {
+      "x": 0,
+      "y": -107.41,
+      "role": "bumper",
+      "bondMult": 3.6,
+      "blastResist": 0.44
+    },
+    {
+      "x": -40,
+      "y": -17.41,
+      "role": "bumper",
+      "bondMult": 3.65,
+      "blastResist": 0.52
+    },
+    {
+      "x": 40,
+      "y": -17.41,
+      "role": "bumper",
+      "bondMult": 3.5,
+      "blastResist": 0.49
+    },
+    {
+      "x": -30,
+      "y": 22.59,
+      "role": "generic"
+    },
+    {
+      "x": 30,
+      "y": 22.59,
+      "role": "generic"
+    },
+    {
+      "x": -10,
+      "y": -27.41,
+      "role": "generic"
+    },
+    {
+      "x": 10,
+      "y": -27.41,
+      "role": "generic"
+    },
+    {
+      "x": 0,
+      "y": -37.41,
+      "role": "generic"
+    },
+    {
+      "x": 0,
+      "y": 42.59,
+      "role": "generic"
+    },
+    {
+      "x": -20,
+      "y": 62.59,
+      "role": "propeller"
+    },
+    {
+      "x": 20,
+      "y": 62.59,
+      "role": "propeller"
+    },
+    {
+      "x": -50,
+      "y": 22.59,
+      "role": "bumper",
+      "bondMult": 3.65,
+      "blastResist": 0.5
+    },
+    {
+      "x": 50,
+      "y": 22.59,
+      "role": "bumper",
+      "bondMult": 3.6,
+      "blastResist": 0.41
+    }
+  ]
+}

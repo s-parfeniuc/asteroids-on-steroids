@@ -1,0 +1,144 @@
+{
+  "name": "PlayerShip",
+  "material": "metal",
+  "outline": [
+    [
+      -40,
+      24.24
+    ],
+    [
+      -80,
+      64.24
+    ],
+    [
+      -10,
+      64.24
+    ],
+    [
+      -10,
+      44.24
+    ],
+    [
+      10,
+      44.24
+    ],
+    [
+      10,
+      64.24
+    ],
+    [
+      80,
+      64.24
+    ],
+    [
+      40,
+      24.24
+    ],
+    [
+      70,
+      4.24
+    ],
+    [
+      80,
+      -75.76
+    ],
+    [
+      50,
+      -65.76
+    ],
+    [
+      40,
+      -45.76
+    ],
+    [
+      20,
+      -45.76
+    ],
+    [
+      0,
+      -25.76
+    ],
+    [
+      -20,
+      -45.76
+    ],
+    [
+      -40,
+      -45.76
+    ],
+    [
+      -50,
+      -65.76
+    ],
+    [
+      -80,
+      -75.76
+    ],
+    [
+      -70,
+      4.24
+    ]
+  ],
+  "seeds": [
+    {
+      "x": 0,
+      "y": 0,
+      "role": "cockpit",
+      "bondMult": 5,
+      "blastResist": 0.33,
+      "densityMult": 2
+    },
+    {
+      "x": 20,
+      "y": -30,
+      "role": "cannon",
+      "bondMult": 2
+    },
+    {
+      "x": 60,
+      "y": -30,
+      "role": "bumper",
+      "bondMult": 2,
+      "blastResist": 0.3,
+      "densityMult": 1.8
+    },
+    {
+      "x": 30,
+      "y": 50,
+      "role": "propeller",
+      "bondMult": 1.9,
+      "blastResist": 0.15
+    },
+    {
+      "x": 40,
+      "y": 10,
+      "role": "generic"
+    },
+    {
+      "x": -20,
+      "y": -30,
+      "role": "cannon",
+      "bondMult": 2
+    },
+    {
+      "x": -60,
+      "y": -30,
+      "role": "bumper",
+      "bondMult": 2,
+      "blastResist": 0.3,
+      "densityMult": 1.8
+    },
+    {
+      "x": -30,
+      "y": 50,
+      "role": "propeller",
+      "bondMult": 1.9,
+      "blastResist": 0.15
+    },
+    {
+      "x": -40,
+      "y": 10,
+      "role": "generic"
+    }
+  ]
+}
