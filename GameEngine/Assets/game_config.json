@@ -598,5 +598,44 @@
     "killChainDecay": 3,
     "waveSurvivalBonus": 500,
     "leaderboardSize": 10
+  },
+  "world": {
+    "width": 5760,
+    "height": 3240,
+    "cameraFollowSpeed": 4.0
+  },
+  "vortex": {
+    "centripetal": 0.05,
+    "tangential": 0.02,
+    "deadzone": 800,
+    "capFrames": 8,
+    "variationCentripetal": 0.3,
+    "variationTangential": 0.3
+  },
+  "waveSystem": {
+    "baseCellCap": 300,
+    "maxCellCap": 2000,
+    "cellCapGrowthAmount": 30,
+    "growthIntervalSeconds": 30,
+    "baseBudget": 20,
+    "budgetGrowthPerInterval": 5,
+    "triggerThreshold": 0.30,
+    "gracePeriodSeconds": 8.0,
+    "hardTriggerIntervalSeconds": 30.0,
+    "spawnDelaySeconds": 1.5,
+    "sizeBiasStart": -0.2,
+    "sizeBiasEnd": 0.6,
+    "sizeBiasRampEnd": 600.0,
+    "mothershpSpawnTime": 600.0,
+    "spawnBias": {
+      "gravel":   { "w0": 0.15, "w1": 0.02, "t0": 0,   "t1": 300 },
+      "standard": { "w0": 0.12, "w1": 0.12, "t0": 0,   "t1": 600 },
+      "spinner":  { "w0": 0.05, "w1": 0.20, "t0": 60,  "t1": 300 },
+      "boulder":  { "w0": 0.05, "w1": 0.25, "t0": 60,  "t1": 300 },
+      "armored":  { "w0": 0.00, "w1": 0.25, "t0": 180, "t1": 420 },
+      "unstable": { "w0": 0.05, "w1": 0.20, "t0": 30,  "t1": 330 },
+      "drone":    { "w0": 0.00, "w1": 0.15, "t0": 180, "t1": 300 },
+      "bruiser":  { "w0": 0.00, "w1": 0.10, "t0": 420, "t1": 540 }
+    }
   }
 }

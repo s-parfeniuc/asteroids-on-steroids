@@ -11,6 +11,9 @@ public class GameConfig
     public int                                 MaxLiveCells { get; set; } = 600;
     public List<WaveDefinition>                Waves      { get; set; } = new();
     public ScoringConfig                       Scoring    { get; set; } = new();
+    public WorldConfig                         World      { get; set; } = new();
+    public VortexConfig                        Vortex     { get; set; } = new();
+    public WaveSystemConfig                    WaveSystem { get; set; } = new();
 }
 
 public class ScoringConfig
