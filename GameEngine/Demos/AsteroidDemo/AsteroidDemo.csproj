@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AsteroidDemo</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../AsteroidsEngine.csproj" />
+    <ProjectReference Include="../../Platform/Sdl/Engine.Platform.Sdl.csproj" />
+    <ProjectReference Include="../../GameConfig/GameConfig.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Runtime native Skia lib (managed Skia/Silk come transitively from the backend). -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="2.88.7" />
+  </ItemGroup>
+
+</Project>

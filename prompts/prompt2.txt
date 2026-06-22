@@ -1,0 +1,3 @@
+I would start by building a sort of encyclopaedia of the technical knowledge i need to build this project. Let's take a step back and start from the beginning: i want to understand how a 2d game engine works, what it does and what are its responsibilities, what feature it should offer to the user, how it draws objects, how it handles states and memory, the input of the user, etc.
+Then we'll dive into the more technical details of how Winforms in particular works and what features and level of control we want to offer to the user.
+I created an "info" directory in which i want you to write every time i ask for explanations and study material. Include also some sources at the end of each file to allow me to fact-check the information.
