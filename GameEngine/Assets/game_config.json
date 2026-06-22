@@ -202,7 +202,26 @@
       "alienImpactCoeff": 0.5,
       "shapeScale": 1.0,
       "baseCost": 100,
-      "cellCount": 20
+      "cellCount": 20,
+      "boss": {
+        "shockwaveCooldown": 8.0,
+        "shockwaveRadius": 1200.0,
+        "shockwaveStrength": 80000.0,
+        "blackHoleCooldown": 15.0,
+        "blackHoleRadius": 500.0,
+        "blackHoleStrength": 50000.0,
+        "blackHoleCrushRadius": 40.0,
+        "blackHoleDuration": 6.0,
+        "blackHoleSpeed": 200.0,
+        "ramChargeCooldown": 12.0,
+        "ramChargeMinDist": 600.0,
+        "ramChargeDuration": 2.5,
+        "ramChargeThrust": 6000.0,
+        "spawnInterval": 8.0,
+        "spawnType": "drone",
+        "spawnSafetyMargin": 80.0,
+        "driftThrust": 150.0
+      }
     }
   },
   "asteroids": {

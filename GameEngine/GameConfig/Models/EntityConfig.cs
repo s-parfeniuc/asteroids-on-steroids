@@ -15,6 +15,28 @@ public class EntityConfig
     public float            ShapeScale               { get; set; } = 1.0f;
     public float            BaseCost                 { get; set; } = 20f;
     public int              CellCount                { get; set; } = 8;
+    public BossConfig?      Boss                     { get; set; }
+}
+
+public class BossConfig
+{
+    public float  ShockwaveCooldown  { get; set; } = 8f;
+    public float  ShockwaveRadius    { get; set; } = 1200f;
+    public float  ShockwaveStrength  { get; set; } = 80000f;
+    public float  BlackHoleCooldown  { get; set; } = 15f;
+    public float  BlackHoleRadius    { get; set; } = 500f;
+    public float  BlackHoleStrength  { get; set; } = 50000f;
+    public float  BlackHoleCrushRadius { get; set; } = 40f;
+    public float  BlackHoleDuration  { get; set; } = 6f;
+    public float  BlackHoleSpeed     { get; set; } = 200f;
+    public float  RamChargeCooldown  { get; set; } = 12f;
+    public float  RamChargeMinDist   { get; set; } = 600f;
+    public float  RamChargeDuration  { get; set; } = 2.5f;
+    public float  RamChargeThrust    { get; set; } = 6000f;
+    public float  SpawnInterval      { get; set; } = 8f;
+    public string SpawnType          { get; set; } = "drone";
+    public float  SpawnSafetyMargin  { get; set; } = 80f;
+    public float  DriftThrust        { get; set; } = 150f;
 }
 
 public class SteeringWeights

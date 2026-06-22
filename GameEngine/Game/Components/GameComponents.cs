@@ -57,3 +57,12 @@ public struct BulletVisual { public Color Color; }
 
 /// <summary>Weapon key and impact energy carried by this bullet entity.</summary>
 public struct BulletData { public string WeaponKey; public float Energy; }
+
+/// <summary>Tags all active mothership fragment entities for shared tracking and win condition.</summary>
+public struct MothershpId { public int Id; public int InitialCockpitCount; }
+
+/// <summary>Accumulates time on a cockpit-bearing mothership fragment to trigger alien spawns.</summary>
+public struct SpawnerAccumulator { public float Value; }
+
+/// <summary>Marker on black hole projectile entities. Carries attraction parameters set at spawn.</summary>
+public struct BlackHoleTag { public float Radius; public float Strength; public float CrushRadius; }

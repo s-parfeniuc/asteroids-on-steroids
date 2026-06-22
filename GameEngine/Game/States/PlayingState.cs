@@ -33,8 +33,16 @@ public sealed class PlayingState : IGameState
     private float _waveTimer    = 0f;   // seconds since last wave spawn
     private bool  _pendingWave  = false;
     private float _waveCountdown = 0f;
-    private bool  _mothershpSpawned = false;
-    private bool  _pendingGameOver  = false;
+    private bool  _mothershpSpawned          = false;
+    private bool  _mothershpKilled            = false;
+    private int   _mothershpGroupId           = 0;
+    private int   _mothershpInitialCockpits   = 3;
+    private bool  _pendingGameOver            = false;
+    private float _bossShockwaveCd            = 0f;
+    private float _bossBlackHoleCd            = 0f;
+    private float _bossRamChargeCd            = 0f;
+    private float _bossRamChargeActive        = 0f;
+    private bool  _bossOverdriveTriggered     = false;
 
     private readonly HashSet<(int, int)> _activeCollisions = new();
 
@@ -72,6 +80,7 @@ public sealed class PlayingState : IGameState
             new BorderDampSystem(wc.Width, wc.Height),
             new RaycastBulletSystem(_bus, _fx, _rng),
             new GrenadeSystem(_bus),
+            new BlackHoleSystem(),
             new GhostSystem(),
             new CollisionSystem(new SpatialGrid(160f), _bus) { ResolveOverlap = true, EnableSleeping = false },
             new FractureCrackSystem(_bus, _rng),
@@ -94,11 +103,19 @@ public sealed class PlayingState : IGameState
 
         _ctx.CellBudget.Reset();
         _ctx.Score.Reset();
-        _gameTime         = 0f;
-        _waveTimer        = 0f;
-        _pendingWave      = false;
-        _mothershpSpawned = false;
-        _pendingGameOver  = false;
+        _gameTime                 = 0f;
+        _waveTimer                = 0f;
+        _pendingWave              = false;
+        _mothershpSpawned         = false;
+        _mothershpKilled          = false;
+        _mothershpGroupId         = 0;
+        _mothershpInitialCockpits = 3;
+        _pendingGameOver          = false;
+        _bossShockwaveCd          = 0f;
+        _bossBlackHoleCd          = 0f;
+        _bossRamChargeCd          = 0f;
+        _bossRamChargeActive      = 0f;
+        _bossOverdriveTriggered   = false;
 
         SpawnPlayer();
         SpawnNextWave();
@@ -172,8 +189,18 @@ public sealed class PlayingState : IGameState
             }
         }
 
+        // Mothership spawn (one-shot time gate)
+        if (!_mothershpSpawned && _gameTime >= ws.MothershpSpawnTime)
+        {
+            SpawnMothership();
+            _mothershpSpawned = true;
+        }
+        // Boss skills + win condition
+        if (_mothershpSpawned && !_mothershpKilled)
+            UpdateBossSkills((float)gameDt);
+
         if (!_world.IsAlive(_player)) _pendingGameOver = true;
-        if (_pendingGameOver) return new GameOverState(_ctx, won: false);
+        if (_pendingGameOver) return new GameOverState(_ctx, won: _mothershpKilled);
         return null;
     }
 
@@ -186,6 +213,7 @@ public sealed class PlayingState : IGameState
         DrawDebris(r, alpha);
         _fx.Draw(r);
         DrawBullets(r, alpha);
+        DrawBlackHoles(r, alpha);
         DrawPlayerAim(r, alpha);
         r.PopTransform();
 
@@ -429,6 +457,60 @@ public sealed class PlayingState : IGameState
             col.Mask  = GameLayers.Asteroid | GameLayers.Player | GameLayers.Alien;
         }
         _ctx.CellBudget.Add(body.Cells.Length);
+    }
+
+    private void SpawnMothership()
+    {
+        if (!_ctx.Config.Entities.TryGetValue("mothership", out var ec)) return;
+        if (!_ctx.Shapes.TryGetValue(ec.Shape, out var sd)) return;
+        if (!_ctx.Config.Materials.TryGetValue(ec.Material, out var mc))
+            mc = _ctx.Config.Materials.Values.First();
+        var mat = mc.ToFractureProperties();
+
+        float sc    = ec.ShapeScale;
+        var outline = sd.Outline.Select(xy => new Vector2(xy[0] * sc, xy[1] * sc)).ToList();
+        var seedPos = sd.Seeds.Select(s => new Vector2(s.X * sc, s.Y * sc)).ToList();
+        var seedMlt = sd.Seeds.Select(s => s.BondMult).ToList();
+        var body    = VoronoiTessellator.BuildFromExplicitSeeds(outline, seedPos, seedMlt, mat, _rng);
+        ApplyShapeSeeds(body, sd.Seeds, sc);
+
+        _mothershpInitialCockpits = Math.Max(1, sd.Seeds.Count(s => s.Role == "cockpit"));
+
+        var wc = _ctx.Config.World;
+        Vector2 playerPos = _world.IsAlive(_player) && _world.HasComponent<Transform>(_player)
+            ? _world.GetComponent<Transform>(_player).Position
+            : new Vector2(wc.Width / 2f, wc.Height / 2f);
+        Vector2 pos     = FindSpawnPosition(220f, new List<(Vector2, float)>(), playerPos);
+        Vector2 center  = new(wc.Width / 2f, wc.Height / 2f);
+        Vector2 dir     = center - pos;
+        float   len     = dir.Length();
+        Vector2 vel     = len > 1f ? dir / len * ec.Speed : Vector2.Zero;
+
+        var color = new BodyColor { Fill = new Color(90, 30, 130), Outline = new Color(180, 60, 240) };
+        var e = SpawnFracturableBody(body, pos, (float)(_rng.NextDouble() * MathF.Tau), vel, 0f, color);
+
+        _mothershpGroupId = _nextGroupId++;
+        _world.AddComponent(e, new AlienTag());
+        _world.AddComponent(e, new AlienVariant { Key = "mothership" });
+        _world.AddComponent(e, new ShootCooldown { Remaining = 999f });
+        _world.AddComponent(e, new MothershpId  { Id = _mothershpGroupId, InitialCockpitCount = _mothershpInitialCockpits });
+        _world.AddComponent(e, new SpawnerAccumulator { Value = 0f });
+        if (_world.HasComponent<Collider>(e))
+        {
+            ref var col = ref _world.GetComponent<Collider>(e);
+            col.Layer = GameLayers.Alien;
+            col.Mask  = GameLayers.Asteroid | GameLayers.Player | GameLayers.Alien;
+        }
+        _ctx.CellBudget.Add(body.Cells.Length);
+
+        if (ec.Boss is { } bc)
+        {
+            _bossShockwaveCd        = bc.ShockwaveCooldown;
+            _bossBlackHoleCd        = bc.BlackHoleCooldown * 0.4f;
+            _bossRamChargeCd        = bc.RamChargeCooldown * 0.7f;
+            _bossRamChargeActive    = 0f;
+            _bossOverdriveTriggered = false;
+        }
     }
 
     // ── Procedural asteroid construction ──────────────────────────────────────
@@ -1016,7 +1098,9 @@ public sealed class PlayingState : IGameState
     private void OnFractureCompleted(FractureCompletedEvent ev)
     {
         _activeCollisions.RemoveWhere(p => p.Item1 == ev.Body.Id || p.Item2 == ev.Body.Id);
-        bool isPlayer = ev.Body == _player;
+        bool isPlayer     = ev.Body == _player;
+        bool isMothership = _world.HasComponent<MothershpId>(ev.Body);
+        MothershpId origMid = isMothership ? _world.GetComponent<MothershpId>(ev.Body) : default;
         BodyColor color = GetBodyColor(ev.Body);
         var (savedAim, savedWc, savedWep, savedSk) = isPlayer ? SavePlayerState(ev.Body) : default;
         var fg = MakeFractureGroup(ev.Body);
@@ -1027,7 +1111,29 @@ public sealed class PlayingState : IGameState
             if (f.IsDebris) { EmitDustBurst(f.WorldCentroid, f.Linear, Vector2.Zero, f.Area, color); continue; }
             var ne = SpawnFracturableBody(f.Body, f.WorldCentroid, f.Rotation, f.Linear, f.Angular, color, ghost: true);
             _world.AddComponent(ne, fg);
-            CopyTags(ev.Body, ne);
+            if (isMothership)
+            {
+                bool hasFragCockpit = f.Body.Cells.Any(c => c.Role == "cockpit");
+                if (hasFragCockpit)
+                {
+                    _world.AddComponent(ne, origMid);
+                    _world.AddComponent(ne, new SpawnerAccumulator { Value = 0f });
+                    _world.AddComponent(ne, new AlienTag());
+                    _world.AddComponent(ne, new AlienVariant { Key = "mothership" });
+                    _world.AddComponent(ne, new ShootCooldown { Remaining = 999f });
+                    if (_world.HasComponent<Collider>(ne))
+                    {
+                        ref var col = ref _world.GetComponent<Collider>(ne);
+                        col.Layer = GameLayers.Alien;
+                        col.Mask  = GameLayers.Asteroid | GameLayers.Player | GameLayers.Alien;
+                    }
+                }
+                // Cockpit-less fragment stays as inert asteroid-layer debris (SpawnFracturableBody default).
+            }
+            else
+            {
+                CopyTags(ev.Body, ne);
+            }
             if (isPlayer && !cockpitFound && f.Body.Cells.Any(c => c.Role == "cockpit"))
             {
                 cockpitFound = true;
@@ -1035,17 +1141,15 @@ public sealed class PlayingState : IGameState
             }
         }
         _world.DestroyEntity(ev.Body);
-
-        if (isPlayer)
-        {
-            if (!cockpitFound) _pendingGameOver = true;
-        }
+        if (isPlayer && !cockpitFound) _pendingGameOver = true;
     }
 
     private void OnFractureSplit(FractureSplitEvent ev)
     {
         _activeCollisions.RemoveWhere(p => p.Item1 == ev.Body.Id || p.Item2 == ev.Body.Id);
-        bool isPlayer = ev.Body == _player;
+        bool isPlayer     = ev.Body == _player;
+        bool isMothership = _world.HasComponent<MothershpId>(ev.Body);
+        MothershpId origMid = isMothership ? _world.GetComponent<MothershpId>(ev.Body) : default;
         BodyColor color = GetBodyColor(ev.Body);
         var (savedAim, savedWc, savedWep, savedSk) = isPlayer ? SavePlayerState(ev.Body) : default;
         var fg = MakeFractureGroup(ev.Body);
@@ -1057,8 +1161,29 @@ public sealed class PlayingState : IGameState
             if (f.IsDebris) { EmitDustBurst(f.WorldCentroid, f.Linear, Vector2.Zero, f.Area, color); continue; }
             var ne = SpawnFracturableBody(f.Body, f.WorldCentroid, f.Rotation, f.Linear, f.Angular, color, ghost: true);
             _world.AddComponent(ne, fg);
-            CopyTags(ev.Body, ne);
             if (p.Process.HasValue) _world.AddComponent(ne, p.Process.Value);
+            if (isMothership)
+            {
+                bool hasFragCockpit = f.Body.Cells.Any(c => c.Role == "cockpit");
+                if (hasFragCockpit)
+                {
+                    _world.AddComponent(ne, origMid);
+                    _world.AddComponent(ne, new SpawnerAccumulator { Value = 0f });
+                    _world.AddComponent(ne, new AlienTag());
+                    _world.AddComponent(ne, new AlienVariant { Key = "mothership" });
+                    _world.AddComponent(ne, new ShootCooldown { Remaining = 999f });
+                    if (_world.HasComponent<Collider>(ne))
+                    {
+                        ref var col = ref _world.GetComponent<Collider>(ne);
+                        col.Layer = GameLayers.Alien;
+                        col.Mask  = GameLayers.Asteroid | GameLayers.Player | GameLayers.Alien;
+                    }
+                }
+            }
+            else
+            {
+                CopyTags(ev.Body, ne);
+            }
             if (isPlayer && !cockpitFound && f.Body.Cells.Any(c => c.Role == "cockpit"))
             {
                 cockpitFound = true;
@@ -1066,8 +1191,187 @@ public sealed class PlayingState : IGameState
             }
         }
         _world.DestroyEntity(ev.Body);
-
         if (isPlayer && !cockpitFound) _pendingGameOver = true;
+    }
+
+    // ── Boss skill systems ────────────────────────────────────────────────────
+
+    private void UpdateBossSkills(float dt)
+    {
+        if (!_ctx.Config.Entities.TryGetValue("mothership", out var ec) || ec.Boss == null) return;
+        var bc = ec.Boss;
+
+        // Collect living mothership fragments + count living cockpits.
+        var msFrags      = new List<Entity>();
+        int msFragCount  = 0;
+        int livingCockpits = 0;
+        Vector2 msCenter = Vector2.Zero;
+        _world.ForEach<MothershpId, Transform, FracturableBody>(
+            (Entity e, ref MothershpId _, ref Transform t, ref FracturableBody fb) =>
+        {
+            msCenter += t.Position;
+            msFragCount++;
+            msFrags.Add(e);
+            bool[]? pulv = _world.HasComponent<FractureProcess>(e)
+                ? _world.GetComponent<FractureProcess>(e).Pulverized : null;
+            for (int i = 0; i < fb.Cells.Length; i++)
+                if (fb.Cells[i].Role == "cockpit" && (pulv == null || !pulv[i]))
+                    livingCockpits++;
+        });
+
+        if (msFragCount == 0 || livingCockpits == 0) { _mothershpKilled = true; return; }
+        msCenter /= msFragCount;
+
+        if (!_bossOverdriveTriggered && livingCockpits <= _mothershpInitialCockpits / 2)
+            _bossOverdriveTriggered = true;
+
+        Vector2 playerPos = _world.IsAlive(_player) && _world.HasComponent<Transform>(_player)
+            ? _world.GetComponent<Transform>(_player).Position
+            : msCenter;
+
+        // Drift: slow thrust toward player on all fragments.
+        foreach (var frag in msFrags)
+        {
+            if (!_world.IsAlive(frag) || !_world.HasComponent<Velocity>(frag)) continue;
+            Vector2 fragPos = _world.GetComponent<Transform>(frag).Position;
+            Vector2 toPlayer = playerPos - fragPos;
+            float   dist = toPlayer.Length();
+            if (dist < 1f) continue;
+            float mass = _world.HasComponent<RigidBody>(frag) ? _world.GetComponent<RigidBody>(frag).Mass : 1f;
+            ref var vel = ref _world.GetComponent<Velocity>(frag);
+            vel.Linear += toPlayer / dist * (bc.DriftThrust / MathF.Max(mass, 0.1f)) * dt;
+        }
+
+        // Ram charge: sustained burst toward player while active.
+        if (_bossRamChargeActive > 0f)
+        {
+            _bossRamChargeActive -= dt;
+            foreach (var frag in msFrags)
+            {
+                if (!_world.IsAlive(frag) || !_world.HasComponent<Velocity>(frag)) continue;
+                Vector2 fragPos  = _world.GetComponent<Transform>(frag).Position;
+                Vector2 toPlayer2 = playerPos - fragPos;
+                float   dist2 = toPlayer2.Length();
+                if (dist2 < 1f) continue;
+                float mass = _world.HasComponent<RigidBody>(frag) ? _world.GetComponent<RigidBody>(frag).Mass : 1f;
+                ref var vel = ref _world.GetComponent<Velocity>(frag);
+                vel.Linear += toPlayer2 / dist2 * (bc.RamChargeThrust / MathF.Max(mass, 0.1f)) * dt;
+            }
+        }
+
+        // Shockwave skill.
+        _bossShockwaveCd -= dt;
+        if (_bossShockwaveCd <= 0f)
+        {
+            DoShockwave(msCenter, bc);
+            _bossShockwaveCd = bc.ShockwaveCooldown;
+        }
+
+        // Black hole skill.
+        _bossBlackHoleCd -= dt;
+        if (_bossBlackHoleCd <= 0f)
+        {
+            SpawnBlackHole(msCenter, playerPos, bc);
+            _bossBlackHoleCd = bc.BlackHoleCooldown;
+        }
+
+        // Ram charge trigger.
+        _bossRamChargeCd -= dt;
+        if (_bossRamChargeCd <= 0f)
+        {
+            if ((msCenter - playerPos).Length() >= bc.RamChargeMinDist)
+                _bossRamChargeActive = bc.RamChargeDuration;
+            _bossRamChargeCd = bc.RamChargeCooldown;
+        }
+
+        // Spawner cells.
+        UpdateSpawners(dt, bc);
+    }
+
+    private void DoShockwave(Vector2 center, BossConfig bc)
+    {
+        float radSq = bc.ShockwaveRadius * bc.ShockwaveRadius;
+        var impulses = new List<(Entity e, Vector2 dir, float accel)>();
+        _world.ForEach<Transform, RigidBody>((Entity e, ref Transform t, ref RigidBody rb) =>
+        {
+            Vector2 delta = t.Position - center;
+            float dSq = delta.LengthSquared();
+            if (dSq < 1f || dSq > radSq) return;
+            float dist  = MathF.Sqrt(dSq);
+            float force = bc.ShockwaveStrength / (dist + 1f);
+            impulses.Add((e, delta / dist, force / MathF.Max(rb.Mass, 0.1f)));
+        });
+        foreach (var (e, dir, accel) in impulses)
+        {
+            if (!_world.IsAlive(e) || !_world.HasComponent<Velocity>(e)) continue;
+            ref var vel = ref _world.GetComponent<Velocity>(e);
+            vel.Linear += dir * accel;
+        }
+        EmitFlash(center, bc.ShockwaveStrength * 0.005f);
+    }
+
+    private void SpawnBlackHole(Vector2 center, Vector2 playerPos, BossConfig bc)
+    {
+        Vector2 toPlayer = playerPos - center;
+        float   tlen     = toPlayer.Length();
+        Vector2 dir      = tlen > 1f ? toPlayer / tlen : -Vector2.UnitY;
+        var bh = _world.CreateEntity();
+        _world.AddComponent(bh, new Transform { Position = center, PreviousPosition = center });
+        _world.AddComponent(bh, new Velocity  { Linear = dir * bc.BlackHoleSpeed });
+        _world.AddComponent(bh, new BlackHoleTag
+        {
+            Radius      = bc.BlackHoleRadius,
+            Strength    = bc.BlackHoleStrength,
+            CrushRadius = bc.BlackHoleCrushRadius,
+        });
+        _world.AddComponent(bh, new TimeToLive { Remaining = bc.BlackHoleDuration });
+    }
+
+    private void UpdateSpawners(float dt, BossConfig bc)
+    {
+        float interval = _bossOverdriveTriggered ? bc.SpawnInterval * 0.5f : bc.SpawnInterval;
+        string spawnType = bc.SpawnType;
+        var toSpawn = new List<Vector2>();
+
+        _world.ForEach<MothershpId, FracturableBody, Transform>(
+            (Entity e, ref MothershpId _, ref FracturableBody fb, ref Transform t) =>
+        {
+            bool hasCockpit = false;
+            bool[]? pulv = _world.HasComponent<FractureProcess>(e)
+                ? _world.GetComponent<FractureProcess>(e).Pulverized : null;
+            for (int i = 0; i < fb.Cells.Length; i++)
+                if (fb.Cells[i].Role == "cockpit" && (pulv == null || !pulv[i]))
+                { hasCockpit = true; break; }
+            if (!hasCockpit) return;
+
+            if (!_world.HasComponent<SpawnerAccumulator>(e)) return;
+            ref var acc = ref _world.GetComponent<SpawnerAccumulator>(e);
+            acc.Value += dt;
+            if (acc.Value < interval) return;
+            acc.Value = 0f;
+
+            // Use first alive spawner cell as spawn origin.
+            float cos = MathF.Cos(t.Rotation);
+            float sin = MathF.Sin(t.Rotation);
+            Vector2 fragCenter = t.Position;
+            for (int i = 0; i < fb.Cells.Length; i++)
+            {
+                if (fb.Cells[i].Role != "spawner") continue;
+                if (pulv != null && pulv[i]) continue;
+                Vector2 cen = fb.Cells[i].Centroid;
+                Vector2 worldCen = new(
+                    cen.X * cos - cen.Y * sin + fragCenter.X,
+                    cen.X * sin + cen.Y * cos + fragCenter.Y);
+                Vector2 outDir = worldCen - fragCenter;
+                float   olen   = outDir.Length();
+                if (olen < 1e-4f) outDir = Vector2.UnitX; else outDir /= olen;
+                toSpawn.Add(worldCen + outDir * bc.SpawnSafetyMargin);
+                break;
+            }
+        });
+
+        foreach (var pos in toSpawn)
+            SpawnAlien(pos, spawnType);
     }
 
     // ── Rendering ─────────────────────────────────────────────────────────────
@@ -1146,6 +1450,17 @@ public sealed class PlayingState : IGameState
             r.DrawLine(tail, p, new Color(255, 170, 60, 80), 5f);
             r.DrawLine(tail, p, new Color(255, 240, 165, 220), 2f);
             r.FillCircle(p, 3f, bv.Color);
+        });
+    }
+
+    private void DrawBlackHoles(IRenderer r, float alpha)
+    {
+        _world.ForEach<Transform, BlackHoleTag>((Entity _, ref Transform t, ref BlackHoleTag bh) =>
+        {
+            var (pos, _) = Interp(t, alpha);
+            r.FillCircle(pos, bh.CrushRadius * 3f, new Color(20, 0, 40, 100));
+            r.FillCircle(pos, bh.CrushRadius * 1.5f, new Color(10, 0, 25, 200));
+            r.FillCircle(pos, bh.CrushRadius, new Color(3, 0, 8, 255));
         });
     }
 
@@ -2009,6 +2324,7 @@ sealed class AlienAiSystem : ISystem
             (Entity e, ref AlienTag _, ref AlienVariant av, ref Transform t) =>
         {
             if (!_ctx.Config.Entities.TryGetValue(av.Key, out var cfg)) return;
+            if (av.Key == "mothership") return; // drift movement handled by boss skill system
 
             Vector2 pos       = t.Position;
             Vector2 facingDir = new Vector2(MathF.Cos(t.Rotation - MathF.PI * 0.5f),
@@ -2213,6 +2529,31 @@ sealed class AlienAiSystem : ISystem
                 world.AddComponent(b, new TimeToLive { Remaining = wcfg.TimeToLive });
             }
         }
+    }
+}
+
+sealed class BlackHoleSystem : ISystem
+{
+    public void Update(World world, double dt)
+    {
+        var holes = new List<(Vector2 pos, float radius, float strength)>();
+        world.ForEach<Transform, BlackHoleTag>((Entity _, ref Transform t, ref BlackHoleTag bh) =>
+            holes.Add((t.Position, bh.Radius, bh.Strength)));
+        if (holes.Count == 0) return;
+
+        float fdt = (float)dt;
+        world.ForEach<Transform, Velocity, RigidBody>((Entity _, ref Transform t, ref Velocity v, ref RigidBody rb) =>
+        {
+            foreach (var (hpos, radius, strength) in holes)
+            {
+                Vector2 delta = hpos - t.Position;
+                float   dSq   = delta.LengthSquared();
+                if (dSq < 1f || dSq > radius * radius) continue;
+                float dist  = MathF.Sqrt(dSq);
+                float accel = strength / ((dist + 1f) * MathF.Max(rb.Mass, 0.1f));
+                v.Linear += delta / dist * accel * fdt;
+            }
+        });
     }
 }
 
