@@ -185,6 +185,31 @@ public sealed class World
         }
     }
 
+    /// <summary>Calls action for every entity that has T1, T2, T3, and T4.</summary>
+    public void ForEach<T1, T2, T3, T4>(EcsAction<T1, T2, T3, T4> action)
+        where T1 : struct
+        where T2 : struct
+        where T3 : struct
+        where T4 : struct
+    {
+        var s1 = Store<T1>();
+        var s2 = Store<T2>();
+        var s3 = Store<T3>();
+        var s4 = Store<T4>();
+        int count = s1.Count;
+        for (int i = 0; i < count; i++)
+        {
+            int id = s1.DenseIds[i];
+            if (!s2.Has(id) || !s3.Has(id) || !s4.Has(id)) continue;
+            action(
+                new Entity(id, _versions[id]),
+                ref s1.GetByDenseIndex(i),
+                ref s2.GetByDenseIndex(s2.GetDenseIndex(id)),
+                ref s3.GetByDenseIndex(s3.GetDenseIndex(id)),
+                ref s4.GetByDenseIndex(s4.GetDenseIndex(id)));
+        }
+    }
+
     // -------------------------------------------------------------------------
     // ForEachParallel — same signatures as ForEach; bodies run on ThreadPool.
     //
@@ -252,6 +277,33 @@ public sealed class World
                 ref s1.GetByDenseIndex(i),
                 ref s2.GetByDenseIndex(s2.GetDenseIndex(id)),
                 ref s3.GetByDenseIndex(s3.GetDenseIndex(id)));
+        });
+    }
+
+    /// <summary>Parallel variant of ForEach&lt;T1, T2, T3, T4&gt;. See preconditions above.</summary>
+    public void ForEachParallel<T1, T2, T3, T4>(EcsAction<T1, T2, T3, T4> action)
+        where T1 : struct
+        where T2 : struct
+        where T3 : struct
+        where T4 : struct
+    {
+        var s1    = Store<T1>();
+        var s2    = Store<T2>();
+        var s3    = Store<T3>();
+        var s4    = Store<T4>();
+        int count = s1.Count;
+        var ids   = s1.RawDenseIds;
+
+        System.Threading.Tasks.Parallel.For(0, count, i =>
+        {
+            int id = ids[i];
+            if (!s2.Has(id) || !s3.Has(id) || !s4.Has(id)) return;
+            action(
+                new Entity(id, _versions[id]),
+                ref s1.GetByDenseIndex(i),
+                ref s2.GetByDenseIndex(s2.GetDenseIndex(id)),
+                ref s3.GetByDenseIndex(s3.GetDenseIndex(id)),
+                ref s4.GetByDenseIndex(s4.GetDenseIndex(id)));
         });
     }
 

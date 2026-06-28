@@ -1,187 +1,136 @@
 {
-  "name": "Bruiser",
-  "material": "metal",
+  "name": "bruiser",
+  "material": "titanium",
   "outline": [
     [
       0,
-      62.59
-    ],
-    [
-      10,
-      52.59
-    ],
-    [
-      30,
-      92.59
-    ],
-    [
-      40,
-      32.59
-    ],
-    [
-      70,
-      62.59
-    ],
-    [
-      40,
-      -7.41
-    ],
-    [
-      30,
-      -87.41
-    ],
-    [
-      20,
-      -47.41
-    ],
-    [
-      0,
-      -117.41
+      65.5
     ],
     [
       -20,
-      -47.41
+      75.5
     ],
     [
-      -30,
-      -87.41
+      -50,
+      75.5
     ],
     [
-      -40,
-      -7.41
+      -60,
+      15.5
     ],
     [
-      -70,
-      62.59
+      -50,
+      -44.5
     ],
     [
-      -40,
-      32.59
+      -20,
+      -84.5
     ],
     [
-      -30,
-      92.59
+      0,
+      -94.5
     ],
     [
-      -10,
-      52.59
+      20,
+      -84.5
+    ],
+    [
+      50,
+      -44.5
+    ],
+    [
+      60,
+      15.5
+    ],
+    [
+      50,
+      75.5
+    ],
+    [
+      20,
+      75.5
     ]
   ],
   "seeds": [
     {
       "x": 0,
-      "y": 12.59,
+      "y": 15.5,
       "role": "cockpit",
-      "bondMult": 5,
-      "blastResist": 0.49
-    },
-    {
-      "x": -30,
-      "y": -67.41,
-      "role": "bumper",
-      "bondMult": 3.65,
-      "blastResist": 0.47
-    },
-    {
-      "x": 30,
-      "y": -67.41,
-      "role": "bumper",
-      "bondMult": 3.6,
-      "blastResist": 0.47
-    },
-    {
-      "x": -10,
-      "y": -77.41,
-      "role": "bumper",
-      "bondMult": 3.5,
-      "blastResist": 0.51
-    },
-    {
-      "x": 10,
-      "y": -77.41,
-      "role": "bumper",
-      "bondMult": 3.55,
-      "blastResist": 0.49
-    },
-    {
-      "x": 0,
-      "y": -107.41,
-      "role": "bumper",
-      "bondMult": 3.6,
-      "blastResist": 0.44
-    },
-    {
-      "x": -40,
-      "y": -17.41,
-      "role": "bumper",
-      "bondMult": 3.65,
-      "blastResist": 0.52
-    },
-    {
-      "x": 40,
-      "y": -17.41,
-      "role": "bumper",
-      "bondMult": 3.5,
-      "blastResist": 0.49
-    },
-    {
-      "x": -30,
-      "y": 22.59,
-      "role": "generic"
-    },
-    {
-      "x": 30,
-      "y": 22.59,
-      "role": "generic"
-    },
-    {
-      "x": -10,
-      "y": -27.41,
-      "role": "generic"
-    },
-    {
-      "x": 10,
-      "y": -27.41,
-      "role": "generic"
-    },
-    {
-      "x": 0,
-      "y": -37.41,
-      "role": "generic"
-    },
-    {
-      "x": 0,
-      "y": 42.59,
-      "role": "generic"
+      "bondMult": 1,
+      "blastResist": 0,
+      "densityMult": 1
     },
     {
       "x": -20,
-      "y": 62.59,
-      "role": "propeller"
+      "y": -64.5,
+      "role": "bumper",
+      "bondMult": 3,
+      "blastResist": 0,
+      "densityMult": 2
     },
     {
       "x": 20,
-      "y": 62.59,
-      "role": "propeller"
-    },
-    {
-      "x": -50,
-      "y": 22.59,
+      "y": -64.5,
       "role": "bumper",
-      "bondMult": 3.65,
-      "blastResist": 0.5
+      "bondMult": 3,
+      "blastResist": 0,
+      "densityMult": 2
     },
     {
-      "x": 50,
-      "y": 22.59,
+      "x": -40,
+      "y": -34.5,
       "role": "bumper",
-      "bondMult": 3.6,
-      "blastResist": 0.41
+      "bondMult": 3,
+      "blastResist": 0,
+      "densityMult": 2
     },
     {
-      "x": 0,
-      "y": -55,
-      "role": "shotgun"
+      "x": 40,
+      "y": -34.5,
+      "role": "bumper",
+      "bondMult": 3,
+      "blastResist": 0,
+      "densityMult": 2
+    },
+    {
+      "x": -30,
+      "y": 65.5,
+      "role": "propeller",
+      "bondMult": 1,
+      "blastResist": 0,
+      "densityMult": 1
+    },
+    {
+      "x": 30,
+      "y": 65.5,
+      "role": "propeller",
+      "bondMult": 1,
+      "blastResist": 0,
+      "densityMult": 1
+    },
+    {
+      "x": 40,
+      "y": 15.5,
+      "role": "bumper",
+      "bondMult": 3,
+      "blastResist": 0,
+      "densityMult": 2
+    },
+    {
+      "x": -40,
+      "y": 15.5,
+      "role": "bumper",
+      "bondMult": 3,
+      "blastResist": 0,
+      "densityMult": 2
+    },
+    {
+      "x": 1.0138358,
+      "y": -31.12849,
+      "role": "shotgun",
+      "bondMult": 1,
+      "blastResist": 0,
+      "densityMult": 1
     }
   ]
 }

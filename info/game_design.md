@@ -363,3 +363,12 @@ At wave 1 I expect around 10/15 asteroids of varying sizes: suppose 7 gravel and
 At wave 10 (around 4 minutes in): 20/25 asteroids spawn, suppose: 10 gravel, 7 standard, 4 spinners, 3 unstable, with an average size of 1.5. That's a budget of around 75.
 
 +5 to the budget at each wave should work fine for a start.
+
+
+### To do
+
+No more tuner: everything synced with game_config file. Lots of more hardcoded parameters need to be there.
+
+Make the map bigger? 
+
+Health system, new weapons, new skills.

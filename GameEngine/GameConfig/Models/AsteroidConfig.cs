@@ -21,6 +21,8 @@ public class AsteroidConfig
     public float[]                   SpeedRange  { get; set; } = [30f, 90f];
     /// <summary>First wave this type can appear on (wave director may still suppress it via zero bias).</summary>
     public int                       UnlockWave  { get; set; } = 1;
+    /// <summary>Per-entity vortex force multiplier ranges sampled at spawn. Null = use defaults (1,1).</summary>
+    public VortexResponseConfig?     VortexResponse { get; set; }
 }
 
 public class ProceduralAsteroidConfig
@@ -34,57 +36,32 @@ public class ProceduralAsteroidConfig
     public float  NoiseFrequency    { get; set; } = 3f;
     /// <summary>Probability [0,1] of an inward dent per vertex.</summary>
     public float  ConcavityBias     { get; set; } = 0.05f;
-    /// <summary>[0,1] bias toward placing seeds near the centroid (0 = uniform, 1 = all central).</summary>
-    public float  SeedClusterCenter { get; set; } = 0.3f;
 
-    /// <summary>
-    /// Spatial distribution of bond-strength multipliers across cells.
-    /// Null = uniform 1.0 (all bonds at material toughness, no variance).
-    /// </summary>
-    public CellPropertyDistribution? BondMultDistribution    { get; set; }
-
-    /// <summary>
-    /// Spatial distribution of per-cell density multipliers.
-    /// Null = uniform 1.0 (mass proportional to cell area × material density only).
-    /// </summary>
-    public CellPropertyDistribution? DensityMultDistribution { get; set; }
-
-    /// <summary>
-    /// Spatial distribution of per-cell blast resistance [0,1].
-    /// Null = uniform 0.0 (no vaporisation resistance).
-    /// </summary>
-    public CellPropertyDistribution? BlastResistDistribution { get; set; }
+    // ── Material clusters ──────────────────────────────────────────────────────
+    // Seeds are placed uniformly; heterogeneity comes from clusters — picked cells
+    // whose higher bond/density/blast-resistance spreads to neighbours by a BFS whose
+    // reach is a fraction of the body radius. (Dense core = few high-centrality
+    // clusters; armored shell = many low-centrality clusters.)
+    /// <summary>Number of clusters seeded across the body (0 = uniform material).</summary>
+    public int     ClusterCount      { get; set; } = 0;
+    /// <summary>[0,1] radial position of cluster centres: 1 = centre (core), 0 = surface (shell).</summary>
+    public float   ClusterCentrality { get; set; } = 0.5f;
+    /// <summary>[min,max] per-cluster reach as a fraction of the body radius (sampled per cluster).</summary>
+    public float[] ClusterSpread     { get; set; } = [0.2f, 0.4f];
+    /// <summary>How strongly a cluster raises bond strength at its core (additive multiplier).</summary>
+    public float   BondGain          { get; set; } = 2f;
+    /// <summary>How strongly a cluster raises per-cell density at its core (additive multiplier).</summary>
+    public float   DensityGain       { get; set; } = 1.5f;
 }
 
 /// <summary>
-/// Describes how a scalar cell property varies across the body of a procedural asteroid.
-/// The generator evaluates this at each cell's normalised radial position (r ∈ [0,1],
-/// where 0 = centroid and 1 = furthest cell from centroid).
-///
-/// Types:
-///   "constant"      — every cell gets Value. Equivalent to the shape-editor default.
-///   "radialGradient"— lerp from CenterValue (r=0) to SurfaceValue (r=1), shaped by Exponent.
-///                     Exponent > 1 concentrates the high end near the centre;
-///                     Exponent &lt; 1 concentrates it near the surface.
-///   "noiseClusters" — BaseValue ± Amplitude·noise(cell·Frequency). Produces random
-///                     pockets of high/low values. Frequency controls cluster size
-///                     (higher = smaller, more numerous clusters).
+/// Per-entity vortex multipliers sampled uniformly from [CentripetalRange, TangentialRange] at spawn.
+/// Negative values make the entity resist or oppose the vortex direction.
 /// </summary>
-public class CellPropertyDistribution
+public class VortexResponseConfig
 {
-    public string Type { get; set; } = "constant";
-
-    // ── constant ──────────────────────────────────────────────────────────────
-    public float Value { get; set; } = 1f;
-
-    // ── radialGradient ────────────────────────────────────────────────────────
-    public float? CenterValue  { get; set; }
-    public float? SurfaceValue { get; set; }
-    /// <summary>Power applied to normalised r before lerping (default 1 = linear).</summary>
-    public float? Exponent     { get; set; }
-
-    // ── noiseClusters ─────────────────────────────────────────────────────────
-    public float? BaseValue  { get; set; }
-    public float? Amplitude  { get; set; }
-    public float? Frequency  { get; set; }
+    /// <summary>[min, max] centripetal (inward) force multiplier. Negative = pushed outward.</summary>
+    public float[] CentripetalRange { get; set; } = [1f, 1f];
+    /// <summary>[min, max] tangential (CCW) force multiplier. Negative = reversed spin direction.</summary>
+    public float[] TangentialRange  { get; set; } = [1f, 1f];
 }

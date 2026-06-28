@@ -1,3 +1,4 @@
+using AsteroidsEngine.Engine.Destruction;
 using AsteroidsEngine.Engine.Input;
 using AsteroidsGame.Config;
 
@@ -27,5 +28,23 @@ public sealed class GameContext
         Input   = input;
         ScreenW = screenW;
         ScreenH = screenH;
+        ApplyFractureTuning(config.Fracture);
+    }
+
+    /// <summary>Push the global fracture tuning constants from config into the engine.</summary>
+    public static void ApplyFractureTuning(FractureGlobalConfig f)
+    {
+        FractureTuning.EnergyScale         = f.EnergyScale;
+        FractureTuning.ReachMin            = f.ReachMin;
+        FractureTuning.ReachMax            = f.ReachMax;
+        FractureTuning.VaporEff            = f.VaporEff;
+        FractureTuning.BreakPerp           = f.BreakPerp;
+        FractureTuning.FlingScale          = f.FlingScale;
+        FractureTuning.AlignExponent       = f.AlignExponent;
+        FractureTuning.SpinCap             = f.SpinCap;
+        FractureTuning.FragmentSpeedMax    = f.FragmentSpeedMax;
+        FractureTuning.TumbleScale         = f.TumbleScale;
+        FractureTuning.FragmentSpinMax     = f.FragmentSpinMax;
+        FractureTuning.SpinProfileBase     = f.SpinProfileBase;
     }
 }

@@ -1,4 +1,5 @@
 using System.Numerics;
+using AsteroidsEngine.Engine.Core;
 using AsteroidsEngine.Engine.Rendering;
 
 namespace AsteroidsGame.Components;
@@ -25,8 +26,10 @@ public struct WeaponCooldowns
 /// <summary>Grenade projectile — detonates on impact or when Remaining reaches 0.</summary>
 public struct GrenadeFuse { public float Remaining; public string WeaponKey; }
 
-/// <summary>Marker on piercing round bodies. Carries aim direction for lateral clamp.</summary>
-public struct PiercingRoundTag { public Vector2 Direction; public float LateralClamp; }
+/// <summary>Marker on piercing round bodies. Carries aim direction for lateral clamp, and a
+/// brief PlayerGrace countdown (seconds) during which the round ignores the player layer so
+/// it can clear the firing ship's shape before colliding with it normally.</summary>
+public struct PiercingRoundTag { public Vector2 Direction; public float LateralClamp; public float PlayerGrace; }
 
 /// <summary>Cooldown state for all three player skills.</summary>
 public struct SkillState
@@ -55,8 +58,16 @@ public struct DebrisPiece { public Vector2[] Local; public Color Color; public f
 /// <summary>Visual colour for a bullet tracer.</summary>
 public struct BulletVisual { public Color Color; }
 
-/// <summary>Weapon key and impact energy carried by this bullet entity.</summary>
-public struct BulletData { public string WeaponKey; public float Energy; }
+/// <summary>Per-bullet data: weapon key + impact energy, optional velocity drag (raycast
+/// bullets bypass PhysicsSystem), and the firing entity + a grace window during which the
+/// bullet ignores hits on its owner so it can escape the hull that spawned it.</summary>
+public struct BulletData
+{
+    public string WeaponKey;
+    public float  Drag;        // 1/s velocity damping; 0 = none
+    public Entity Owner;       // firing entity (ignored while OwnerGrace > 0)
+    public float  OwnerGrace;  // seconds during which owner-hits are skipped
+}
 
 /// <summary>Tags all active mothership fragment entities for shared tracking and win condition.</summary>
 public struct MothershpId { public int Id; public int InitialCockpitCount; }

@@ -104,7 +104,7 @@ public static class VoronoiTessellator
             Cells    = cells,
             Bonds    = bonds,
             Material = material,
-            State    = new FractureState { AbsorbedEnergy = 0f, RngSeed = (uint)rng.Next() },
+            State    = new FractureState { RngSeed = (uint)rng.Next() },
         };
     }
 
@@ -173,7 +173,7 @@ public static class VoronoiTessellator
             Cells    = cells,
             Bonds    = bonds,
             Material = material,
-            State    = new FractureState { AbsorbedEnergy = 0f, RngSeed = (uint)rng.Next() },
+            State    = new FractureState { RngSeed = (uint)rng.Next() },
         };
     }
 
@@ -228,7 +228,7 @@ public static class VoronoiTessellator
             Cells    = cells,
             Bonds    = bonds,
             Material = material,
-            State    = new FractureState { AbsorbedEnergy = 0f, RngSeed = (uint)rng.Next() },
+            State    = new FractureState { RngSeed = (uint)rng.Next() },
         };
     }
 
@@ -363,8 +363,9 @@ public static class VoronoiTessellator
                     bonds.Add(new Bond
                     {
                         A = i, B = j,
-                        EdgeLength = shared,
-                        Strength   = shared * toughness * bm,
+                        EdgeLength   = shared,
+                        Strength     = shared * toughness * bm,
+                        StrengthMult = bm,
                     });
                 }
             }

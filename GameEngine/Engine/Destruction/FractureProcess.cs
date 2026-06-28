@@ -2,15 +2,26 @@ using System.Numerics;
 
 namespace AsteroidsEngine.Engine.Destruction;
 
-/// <summary>Pacing for multi-frame crack propagation. Crack velocity =
-/// StepsPerIteration / (FramesPerIteration · fixedDt) frontier-pops per second.</summary>
+/// <summary>Pacing for multi-frame crack propagation, derived from the material's CrackSpeed
+/// (cells/sec): crack velocity = StepsPerIteration / (FramesPerIteration · fixedDt) pops/sec.</summary>
 public struct FractureTiming
 {
+    public const float DefaultFixedDt = 1f / 120f;   // the game's fixed timestep
+
     public int StepsPerIteration;    // frontier-pops advanced per iteration
     public int FramesPerIteration;   // fixed-steps to wait between iterations
-    public bool DetachOnSplit;       // true = pieces fall off mid-spread; false = finalise whole body at end
 
-    public static FractureTiming Default => new() { StepsPerIteration = 2, FramesPerIteration = 1, DetachOnSplit = true };
+    public static FractureTiming Default => new() { StepsPerIteration = 2, FramesPerIteration = 1 };
+
+    /// <summary>Map a material CrackSpeed (cells/sec) to integer step/frame pacing at the given
+    /// fixed timestep. Fast materials advance several pops per step; slow ones wait frames.</summary>
+    public static FractureTiming FromCrackSpeed(float crackSpeed, float fixedDt)
+    {
+        float popsPerStep = MathF.Max(0.0001f, crackSpeed) * MathF.Max(1e-4f, fixedDt);
+        if (popsPerStep >= 1f)
+            return new FractureTiming { StepsPerIteration = (int)MathF.Round(popsPerStep), FramesPerIteration = 1 };
+        return new FractureTiming { StepsPerIteration = 1, FramesPerIteration = Math.Max(1, (int)MathF.Round(1f / popsPerStep)) };
+    }
 }
 
 /// <summary>One piece produced by a mid-fracture split: a fragment body and, if it is
@@ -22,33 +33,30 @@ public sealed class LivePiece
 }
 
 /// <summary>
-/// Live, multi-frame fracture state on a body whose cracks are still spreading. Holds
-/// one or more co-propagating <see cref="CrackFront"/>s (one per hit) sharing the
-/// accumulating Broken/Pulverized masks, plus the snapshot needed to fling the pieces
-/// when the process finalises. <see cref="FractureCrackSystem"/> advances it and removes
-/// it (via entity destruction on completion). The single-frame path does not use this.
+/// Live, multi-frame fracture state on a body whose cracks are still spreading. Holds one or
+/// more co-propagating <see cref="CrackFront"/>s (one per hit) sharing the accumulating
+/// Broken / Pulverized / FlingE state plus the persistent per-bond Stress on the body's bonds.
+/// <see cref="FractureCrackSystem"/> advances it and removes it on completion.
 /// </summary>
 public struct FractureProcess
 {
     public List<CrackFront> Fronts;
-    public bool[] Broken;        // over body.Bonds — grows as cracks spread
-    public bool[] Pulverized;    // over body.Cells — grows as cells vaporise
-    public float[] Eff;          // effective bond strengths (spin pre-stress snapshot)
-    public List<int>[] Adj;      // per-cell bond adjacency
+    public bool[]  Broken;        // over body.Bonds — grows as cracks spread
+    public bool[]  Pulverized;    // over body.Cells — grows as cells vaporise
+    public bool[]  Emitted;       // over body.Cells — which pulverised cells have been dusted (event sent)
+    public float[] FlingE;        // over body.Cells — accumulated fragment kinetic energy (shared)
+    public float[] SpinMul;       // over body.Bonds — 1+spinFactor, precomputed from body spin ω
+    public List<int>[] Adj;       // per-cell bond adjacency
 
-    // Fling snapshot (latest hit) — fed to FractureSimulator.BuildResult on finalise.
+    // Fling snapshot (latest hit) — fed to fragment construction on finalise.
     public Vector2 ImpactDir;
     public Vector2 ImpactPointWorld;
-    public Vector2 MomentumKick;
-    public float EjectSpeed;
-    public float ImpactSpin;
-    public float Directionality;
+    public float   Directionality;
 
-    // Pacing.
+    // Pacing (from the material CrackSpeed).
     public int StepsPerIteration;
     public int FramesPerIteration;
     public int FrameCounter;
-    public bool DetachOnSplit;   // detach pieces as soon as they separate, vs finalise whole body at end
 
     public bool Done;            // set on finalise so the system ignores it until the entity is destroyed
 }

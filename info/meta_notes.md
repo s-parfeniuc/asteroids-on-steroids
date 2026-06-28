@@ -60,94 +60,29 @@ static class AsteroidPrefab
 }
 ```
 
-The value is that this is the single source of truth for what an asteroid needs. When a bullet hits a large asteroid and splits it, AsteroidSplitSystem calls AsteroidPrefab.Create(world, position, AsteroidSize.Medium) twice — it doesn't need to know what components a medium asteroid requires.
+## NEW SPRINT, LAST
 
-In data-driven engines (Unity, Godot), prefabs are serialized asset files you configure in an editor. In a code-first engine like ours, they're just code with a naming convention. Same concept, different medium.
+Each of these must be implemented and playtested before proceeding to the next task.
 
-## My Game - Asteroids on Steroids
+Alien AI, functionalities not being tied to cells in aliens, cockpit-only AI still steering toward the player.
 
-Simple asteroids-like game with some progression.
-Physics based destruction of asteroids and alien spaceships. Score system and personal leaderboard. 
+Raise BlastFraction of everything and/or lower restitution.
 
-The map is about x10 bigger than the screen. There are waves that become progressively harder (more/bigger asteroids with more health, stronger enemy spaceships). 
+Make the piercing round work as intended (maybe change the shape first).
 
-The focus will be on the physics based destruction of the asteroids, the idea is to make the asteroids of composed simple shapes stuck together, when they're hit by a bullet some pieces are destroyed while the rest of the asteroid splits in smaller composed pieces based on the place and force of the impact.
+Adjust global damages so everything feels right.
 
-I want to design and plan thoroughly the game, analyze doability and potential problems of performance and logic, extensions to the engine that are needed, etc.
+Global Blast Fraction on Asteroid-on-Asteroid Fracturings.
 
+Adjust wave progression (far too chaotic right now), make the vortex move around the map a little.
 
-### TODO
+Make the rounds not disappear if the cell they hit has already been pulverised.
 
-Tune the vortex. Tune the player control (implement from scratch, maybe current approach is wrong). 
-Conclusion: dampening border, vortex as before. To avoid asteroids clamping in the center might make sense to change the force values periodically to spice things up.
+The bullet mass pushes asteroids too much, even at minimum momentumTransfer, need fix (potentially... a new "magic number" constant if necessary).
 
+Mothership rework/improvement.
 
-Implement wave spawn function: takes a list of asteroids (procedural descriptions) and their respective size multiplier velocity and spin, spawns them outside of camera field of view.
-Implement choose asteroids function: takes a budget, a map of available asteroid types with their costs, a bias vector, current cell cap and asteroid_count_cap.
-Sync wave system to the game editor. 
+Optimizations so fps doesn't drop the moment a grenade detonates. Profiling first.
 
+### LOGS piercing
 
-
-
-
-
-
-
-
-
-
-
-### Unrelated
-
-#### Shopping list
-
-Adapter Schuko
-Prenotare locker
-Vedere shuttle GMM
-Tappi orecchie
-Marsupi
-Preordine birra 40$
-
-#### To do before
-
-GMM system with 100$ each
-Scaricare app GMM
-
-Ognuno:
-
-Haine:
-1 prostire
-5 t-shirt
-3 pantaloni 
-1 giacca freddo
-2 scarponi + scarpe normal
-5 calzini + 2 mutande
-1 pajama
-1 borraccia
-
-Hygiene:
-Spazzolino + dentifricio
-Farmaci psico (sertra + litio)
-Farmaci extra
-
-#### To do in Brussels
-
-Comprare snacks/barrette
-See public transport tickets
-
-
-#### Transport
-
-Biglietti aereo
-Vedere shuttle GMM
-Biglietti treno airbnb-airport
-
-#### TimeLine
-
-16 -> arrival at airport
-16-17 -> airbnb
-17 12:30 -> shuttle to graspop (28$ x 2)
-17-22 -> festitent
-22 -> shuttle to brussels
-22-23 -> airbnb
-23 -> departure at airport

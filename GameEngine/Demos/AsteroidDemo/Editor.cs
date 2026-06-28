@@ -2,6 +2,7 @@ using System.Numerics;
 using AsteroidsEngine.Engine.Input;
 using AsteroidsEngine.Engine.Rendering;
 using AsteroidsEngine.Engine.Ui;
+using AsteroidsGame;
 using AsteroidsGame.Config;
 
 namespace AsteroidDemo;
@@ -18,7 +19,7 @@ sealed class Editor
     private readonly string     _assetsDir;
 
     private static readonly string[] TabNames =
-        ["Simulate", "Materials", "Weapons", "Asteroids", "Player", "Shapes", "Waves", "Aliens"];
+        ["Simulate", "Materials", "Weapons", "Asteroids", "Player", "Shapes", "Waves", "Aliens", "Fracture"];
 
     private const float TabH   = 32f;
     private const float LeftW  = 210f;
@@ -44,9 +45,15 @@ sealed class Editor
 
     private bool _dirty;
 
+    // Wave tab state (not persisted — session controls + preview)
+    private DemoSession? _session;
+    private float _previewTime = 0f;
+
     public int    SelectedTab   => _tab;
     public string SelectedShape => _selShape;
     public bool   IsTextInputActive => _ui.IsTextInputActive;
+
+    public void SetSession(DemoSession session) => _session = session;
 
     public Editor(GameConfig config, Dictionary<string, ShapeData> shapes, string assetsDir)
     {
@@ -122,6 +129,7 @@ sealed class Editor
             case 4: DrawPlayerList(); break;
             case 5: DrawStringKeyList(_shapes.Keys,           ref _selShape); break;
             case 6: DrawWaveList(); break;
+            case 8: _ui.Label("Global fracture model tuning.", Ui.ColTextDim); break;
             case 7: _ui.Label("Coming soon", Ui.ColTextDim); break;
         }
     }
@@ -167,16 +175,35 @@ sealed class Editor
 
     private void DrawWaveList()
     {
+        if (_session == null) { _ui.Label("Session not connected.", Ui.ColTextDim); return; }
+
+        _ui.Label("GAME TIME", Ui.ColTextDim, Ui.FontSmall);
+        _ui.Label($"{_session.GameTime:0.0}s", Ui.ColAccent, Ui.FontBold);
+        _ui.Space(2f);
+
         _ui.BeginRow(2);
-        if (_ui.Button("+ Add Wave")) OnAddWave();
-        if (_ui.Button("Remove", Ui.ColDanger)) OnRemoveWave();
+        if (_ui.Button("-60s")) _session.GameTime -= 60f;
+        if (_ui.Button("-10s")) _session.GameTime -= 10f;
         _ui.EndRow();
+        _ui.BeginRow(2);
+        if (_ui.Button("+10s")) _session.GameTime += 10f;
+        if (_ui.Button("+60s")) _session.GameTime += 60f;
+        _ui.EndRow();
+        if (_ui.Button("+5min")) _session.GameTime += 300f;
+
         _ui.Separator();
-        for (int i = 0; i < _config.Waves.Count; i++)
-        {
-            string label = $"Wave {_config.Waves[i].Wave}";
-            if (_ui.Selectable(label, _selWave == i)) _selWave = i;
-        }
+        _ui.Label("SESSION", Ui.ColTextDim, Ui.FontSmall);
+        _ui.Label($"Wave: {_session.WaveNumber}    Timer: {_session.WaveTimer:0.0}s", Ui.ColText);
+        _ui.Label($"Cells: {_session.LiveCells} / {_session.MaxLiveCells}", Ui.ColText);
+        if (_session.WavePending)
+            _ui.Label("Spawning…", new Color(255, 200, 80));
+
+        _ui.Separator();
+        if (_ui.Button("Force Next Wave")) _session.ForceNextWave();
+
+        _ui.Space(4f);
+        _ui.Label("[  ←60s    ]  +60s", Ui.ColTextDim, Ui.FontSmall);
+        _ui.Label("N  — force next wave", Ui.ColTextDim, Ui.FontSmall);
     }
 
     // ── Right panel: param editor ─────────────────────────────────────────────
@@ -194,12 +221,13 @@ sealed class Editor
             case 5: DrawShapeInfo(); break;
             case 6: changed = DrawWaveEditor();     break;
             case 7: _ui.Label("Alien configuration coming in a future update.", Ui.ColTextDim); break;
+            case 8: changed = DrawFractureEditor(); break;
             default: _ui.Label("Select an asset from the left panel.", Ui.ColTextDim); break;
         }
 
         if (changed) _dirty = true;
 
-        if (_tab is >= 1 and <= 6 and not 5 and not 7)
+        if (_tab is (>= 1 and <= 6 and not 5) or 8)
         {
             _ui.Space(8f);
             _ui.Separator();
@@ -219,6 +247,16 @@ sealed class Editor
 
         DrawAssetHeader(_selMat, 1);
         return ConfigEditorDefs.Material.Draw(mat, _ui);
+    }
+
+    // Fracture (global) ────────────────────────────────────────────────────────
+
+    private bool DrawFractureEditor()
+    {
+        _ui.Label("Fracture model (global)", Ui.ColText, Ui.FontBold);
+        bool changed = ConfigEditorDefs.Fracture.Draw(_config.Fracture, _ui);
+        if (changed) GameContext.ApplyFractureTuning(_config.Fracture);   // push to engine statics live
+        return changed;
     }
 
     // Weapons ────────────────────────────────────────────────────────────────
@@ -241,8 +279,8 @@ sealed class Editor
             _ui.Label(has ? "Active" : "Inactive", has ? Ui.ColAccent : Ui.ColTextDim);
             if (has ? _ui.Button("Remove") : _ui.Button("Enable"))
             {
-                if (has) { w.Rays = null; w.EnergyPerRay = null; w.ConeAngle = null; has = false; }
-                else     { w.Rays = 5; w.EnergyPerRay = 20f; w.ConeAngle = 30f; }
+                if (has) { w.Rays = null; w.ConeAngle = null; has = false; }
+                else     { w.Rays = 5; w.ConeAngle = 30f; }
                 changed = true;
             }
             _ui.EndRow();
@@ -250,8 +288,6 @@ sealed class Editor
             {
                 int rays = w.Rays!.Value;
                 if (_ui.SliderInt("Rays", ref rays, 2, 20)) { w.Rays = rays; changed = true; }
-                float epr = w.EnergyPerRay ?? 20f;
-                if (_ui.Slider("Energy/Ray", ref epr, 1f, 200f, "0")) { w.EnergyPerRay = epr; changed = true; }
                 float cone = w.ConeAngle ?? 30f;
                 if (_ui.Slider("Cone Angle°", ref cone, 5f, 180f, "0")) { w.ConeAngle = cone; changed = true; }
             }
@@ -516,119 +552,75 @@ sealed class Editor
 
     private bool DrawWaveEditor()
     {
-        bool changed = false;
+        var ws = _config.WaveSystem;
 
-        // Global simulation cap always lives at the top of the Waves tab.
-        int cells = _config.MaxLiveCells;
-        if (_ui.SliderInt("Max Live Cells", ref cells, 100, 2000))
-        { _config.MaxLiveCells = cells; changed = true; }
-
+        _ui.Label("WAVE PREVIEW", Ui.ColAccent, Ui.FontBold);
         _ui.Separator();
 
-        if (_config.Waves.Count == 0)
-        { _ui.Label("No waves defined.  Click '+ Add Wave'.", Ui.ColTextDim); return changed; }
+        float pt = _previewTime;
+        if (_ui.Slider("Preview Time (s)", ref pt, 0f, 900f, "0")) _previewTime = pt;
 
-        if (_selWave >= _config.Waves.Count) _selWave = _config.Waves.Count - 1;
-        var wave = _config.Waves[_selWave];
+        // Derived values at preview time
+        float gInterval = MathF.Max(1f, ws.GrowthIntervalSeconds);
+        int intervals   = (int)(_previewTime / gInterval);
+        int budget      = ws.BaseBudget + intervals * ws.BudgetGrowthPerInterval;
+        int cellCap     = Math.Min(ws.BaseCellCap + intervals * ws.CellCapGrowthAmount, ws.MaxCellCap);
+        float rampT     = ws.SizeBiasRampEnd > 0f ? MathF.Min(1f, _previewTime / ws.SizeBiasRampEnd) : 1f;
+        float sizeBias  = ws.SizeBiasStart + rampT * (ws.SizeBiasEnd - ws.SizeBiasStart);
 
-        _ui.Label($"Wave {wave.Wave}", Ui.ColAccent, Ui.FontBold);
+        _ui.Label($"Budget: {budget}     Cell Cap: {cellCap}", Ui.ColText);
+        _ui.Label($"Size Bias: {sizeBias:+0.00;-0.00;0.00}", Ui.ColText);
+
         _ui.Separator();
-
-        int waveNum = wave.Wave;
-        if (_ui.SliderInt("Wave #", ref waveNum, 1, 99)) { wave.Wave = waveNum; changed = true; }
-
-        // Budget / Explicit type toggle
-        bool isBudget = wave.Type == "budget";
-        _ui.BeginRow(2);
-        if (_ui.Button("Budget",    isBudget  ? Ui.ColAccent : null)) { wave.Type = "budget";   changed = true; }
-        if (_ui.Button("Explicit", !isBudget  ? Ui.ColAccent : null)) { wave.Type = "explicit"; changed = true; }
-        _ui.EndRow();
-
-        if (isBudget)
+        _ui.Label("Asteroid Weights", Ui.ColText, Ui.FontBold);
+        bool anyAsteroid = false;
+        foreach (var (key, entry) in ws.SpawnBias)
         {
-            int astCount = wave.AsteroidCount;
-            if (_ui.SliderInt("Asteroid Count", ref astCount, 0, 40))
-            { wave.AsteroidCount = astCount; changed = true; }
-            _ui.Label("  (0 = use global Asteroids tunable)", Ui.ColTextDim, Ui.FontSmall);
+            if (!_config.Asteroids.ContainsKey(key)) continue;
+            anyAsteroid = true;
+            float w = EvalBias(entry, _previewTime);
+            var col = w > 0f ? Ui.ColText : Ui.ColTextDim;
+            _ui.Label($"  {key,-12}  {(w > 0f ? $"{w:0.000}" : "—")}", col, Ui.FontSmall);
+        }
+        if (!anyAsteroid) _ui.Label("  (none in SpawnBias)", Ui.ColTextDim, Ui.FontSmall);
 
-            float budget = wave.Budget;
-            if (_ui.Slider("Budget", ref budget, 10f, 2000f, "0")) { wave.Budget = budget; changed = true; }
+        _ui.Separator();
+        _ui.Label("Alien Weights", Ui.ColText, Ui.FontBold);
+        bool anyAlien = false;
+        foreach (var (key, entry) in ws.SpawnBias)
+        {
+            if (!_config.Entities.ContainsKey(key)) continue;
+            anyAlien = true;
+            float w = EvalBias(entry, _previewTime);
+            var col = w > 0f ? Ui.ColText : Ui.ColTextDim;
+            _ui.Label($"  {key,-12}  {(w > 0f ? $"{w:0.000}" : "—")}", col, Ui.FontSmall);
+        }
+        if (!anyAlien) _ui.Label("  (none in SpawnBias)", Ui.ColTextDim, Ui.FontSmall);
 
-            _ui.Separator();
-            _ui.Label("Spawn weights", Ui.ColText, Ui.FontBold);
-            wave.Spawns ??= new Dictionary<string, float>();
-            foreach (var key in wave.Spawns.Keys.ToList())
+        _ui.Separator();
+        if (_session != null)
+        {
+            if (_ui.Button("Spawn at Preview Time"))
             {
-                float w = wave.Spawns[key];
-                if (_ui.Slider(key, ref w, 0f, 10f)) { wave.Spawns[key] = w; changed = true; }
+                _session.GameTime = _previewTime;
+                _session.ForceNextWave();
             }
-            if (_ui.Button("+ Type"))
-            {
-                string? candidate = _config.Asteroids.Keys.FirstOrDefault(k => !wave.Spawns.ContainsKey(k));
-                if (candidate is not null) { wave.Spawns[candidate] = 1f; changed = true; }
-            }
+            if (_ui.Button("Spawn Now")) _session.ForceNextWave();
         }
         else
         {
-            _ui.Separator();
-            _ui.Label("Explicit spawn groups", Ui.ColText, Ui.FontBold);
-            wave.Asteroids ??= [];
-
-            var typeKeys = _config.Asteroids.Keys
-                .Where(k => _config.Asteroids[k].Procedural != null).ToList();
-
-            for (int si = 0; si < wave.Asteroids.Count; si++)
-            {
-                var sp = wave.Asteroids[si];
-                _ui.Separator();
-
-                // Type cycle: [◀] TypeName [▶]
-                int typeIdx = typeKeys.IndexOf(sp.Type);
-                if (typeIdx < 0 && typeKeys.Count > 0) { sp.Type = typeKeys[0]; typeIdx = 0; }
-                _ui.BeginRow(3);
-                if (_ui.Button("◀") && typeKeys.Count > 0)
-                { sp.Type = typeKeys[((typeIdx - 1) + typeKeys.Count) % typeKeys.Count]; changed = true; }
-                _ui.Label(sp.Type, Ui.ColAccent);
-                if (_ui.Button("▶") && typeKeys.Count > 0)
-                { sp.Type = typeKeys[(typeIdx + 1) % typeKeys.Count]; changed = true; }
-                _ui.EndRow();
-
-                int spCount = sp.Count;
-                if (_ui.SliderInt($"Count {si + 1}", ref spCount, 1, 20)) { sp.Count = spCount; changed = true; }
-                float delay = sp.SpawnDelay;
-                if (_ui.Slider($"Delay {si + 1} (s)", ref delay, 0f, 10f)) { sp.SpawnDelay = delay; changed = true; }
-
-                if (_ui.Button("- Remove", Ui.ColDanger))
-                { wave.Asteroids.RemoveAt(si); si--; changed = true; }
-            }
-            _ui.Separator();
-            if (_ui.Button("+ Add Group"))
-            {
-                string defaultType = typeKeys.FirstOrDefault() ?? _selAst;
-                wave.Asteroids.Add(new ExplicitSpawn { Type = defaultType, Count = 1 });
-                changed = true;
-            }
+            _ui.Label("Session not connected.", Ui.ColTextDim);
         }
 
-        // Spawn pattern
-        _ui.Separator();
-        _ui.Label("Spawn pattern", Ui.ColText, Ui.FontBold);
-        string[] patterns = ["burst", "rapid", "staggered"];
-        foreach (var p in patterns)
-        {
-            bool sel = wave.SpawnPattern == p;
-            if (_ui.Selectable(p, sel)) { wave.SpawnPattern = p; changed = true; }
-        }
-        if (wave.SpawnPattern == "rapid")
-        {
-            float ri = wave.RapidInterval;
-            if (_ui.Slider("Rapid Interval", ref ri, 0.05f, 2f)) { wave.RapidInterval = ri; changed = true; }
-        }
+        return false;
+    }
 
-        bool boss = wave.Boss;
-        if (_ui.Toggle("Boss wave", ref boss)) { wave.Boss = boss; changed = true; }
-
-        return changed;
+    private static float EvalBias(SpawnBiasEntry e, float t)
+    {
+        if (t <= e.T0) return e.W0;
+        if (t >= e.T1) return e.W1;
+        float f = (t - e.T0) / (e.T1 - e.T0);
+        return e.W0 + f * (e.W1 - e.W0);
     }
 
     // ── Shared header row: name + Rename button ───────────────────────────────
@@ -685,21 +677,6 @@ sealed class Editor
             case 3: _config.Asteroids.Remove(_selAst); _selAst = _config.Asteroids.Keys.FirstOrDefault() ?? ""; break;
         }
         _editingName = null;
-        _dirty = true;
-    }
-
-    private void OnAddWave()
-    {
-        int next = _config.Waves.Count > 0 ? _config.Waves.Max(w => w.Wave) + 1 : 1;
-        _config.Waves.Add(new WaveDefinition { Wave = next, Type = "budget", Budget = 100f });
-        _selWave = _config.Waves.Count - 1;
-        _dirty = true;
-    }
-
-    private void OnRemoveWave()
-    {
-        if (_selWave < _config.Waves.Count) _config.Waves.RemoveAt(_selWave);
-        _selWave = Math.Max(0, _selWave - 1);
         _dirty = true;
     }
 
@@ -781,6 +758,10 @@ sealed class Editor
                 _config.MaxLiveCells = fresh.MaxLiveCells;
                 if (_selWave < _config.Waves.Count && _selWave < fresh.Waves.Count)
                     _config.Waves[_selWave] = fresh.Waves[_selWave];
+                break;
+            case 8:
+                _config.Fracture = fresh.Fracture;
+                GameContext.ApplyFractureTuning(_config.Fracture);
                 break;
         }
         _dirty = false;

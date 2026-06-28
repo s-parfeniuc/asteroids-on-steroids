@@ -4,7 +4,8 @@ namespace AsteroidsGame.Config;
 public class EntityConfig
 {
     public string           Shape                    { get; set; } = "";
-    public string           Material                 { get; set; } = "metal";
+    /// <summary>Optional material override; empty = use the shape's own material.</summary>
+    public string           Material                 { get; set; } = "";
     public float            Speed                    { get; set; } = 200f;
     public float            DetectionRadius          { get; set; } = 800f;
     public SteeringWeights? SteeringWeights          { get; set; }

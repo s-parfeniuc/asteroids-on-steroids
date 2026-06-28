@@ -16,8 +16,6 @@ using AsteroidsGame;
 using AsteroidsGame.States;
 using AsteroidsGame.Config;
 
-const int W = 1920, H = 1080;
-
 // ── Config ────────────────────────────────────────────────────────────────────
 
 string assetsDir = GameConfigLoader.FindAssetsDir(AppContext.BaseDirectory);
@@ -25,16 +23,18 @@ var (config, shapes) = GameConfigLoader.Load(assetsDir);
 
 // ── Window + input ────────────────────────────────────────────────────────────
 
-using var window = new SdlGameWindow("Asteroids on Steroids", W, H);
+var (W, H) = SdlGameWindow.QueryDisplaySize();
+using var window = new SdlGameWindow("Asteroids on Steroids", W, H, fullscreen: true);
 var input = new InputSystem();
-window.KeyDown          += k       => input.OnKeyDown(k);
-window.KeyUp            += k       => input.OnKeyUp(k);
-window.MouseMoved       += p       => input.OnMouseMove(p);
+window.KeyDown += k => input.OnKeyDown(k);
+window.KeyUp += k => input.OnKeyUp(k);
+window.MouseMoved += p => input.OnMouseMove(p);
 window.MouseButtonChanged += (b, pr) => input.OnMouseButton(b, pr);
+window.TextInput += s => input.OnTextInput(s);
 
 // ── State machine setup ───────────────────────────────────────────────────────
 
-var ctx   = new GameContext(config, shapes, input, W, H);
+var ctx = new GameContext(config, shapes, input, W, H);
 IGameState state = new MainMenuState(ctx);
 state.Enter();
 
@@ -42,7 +42,7 @@ state.Enter();
 
 const double FixedDt = 1.0 / 120.0;
 var fixedStep = new FixedTimestep(FixedDt);
-var sw        = Stopwatch.StartNew();
+var sw = Stopwatch.StartNew();
 long lastTicks = sw.ElapsedTicks;
 
 // ── Main loop ─────────────────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ while (!window.ShouldClose)
 {
     window.PollEvents();
 
-    long   now       = sw.ElapsedTicks;
+    long now = sw.ElapsedTicks;
     double frameTime = (double)(now - lastTicks) / Stopwatch.Frequency;
     lastTicks = now;
 

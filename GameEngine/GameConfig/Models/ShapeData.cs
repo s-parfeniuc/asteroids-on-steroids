@@ -20,8 +20,6 @@ public class SeedData
     public string Role        { get; set; } = "generic";
     /// <summary>Bond-strength multiplier for all bonds adjacent to this cell (default 1).</summary>
     public float  BondMult    { get; set; } = 1f;
-    /// <summary>Vaporisation resistance [0,1]; 0 = normal, 1 = indestructible (default 0).</summary>
-    public float  BlastResist { get; set; } = 0f;
-    /// <summary>Mass contribution multiplier for this cell (default 1).</summary>
+    /// <summary>Mass contribution multiplier for this cell (default 1); also vaporize-resistance.</summary>
     public float  DensityMult { get; set; } = 1f;
 }

@@ -9,23 +9,15 @@ namespace AsteroidsEngine.Engine.Destruction;
 /// </summary>
 public struct FractureInput
 {
-    public int     StruckCell;        // index of the cell hit
-    public float   EnergyTotal;       // E_impact + E_spin (already computed)
-    public Vector2 ImpactPointWorld;  // exact surface hit point
+    public Vector2 ImpactPointWorld;  // exact surface hit point (fragments fling away from it)
     public Vector2 ImpactDir;         // shot direction (steers the directional crack cone)
-    public float   Directionality;    // 0 = isotropic splash … 1 = forward channel
-    public float   SpinOmega;         // body angular velocity (centrifugal pre-stress)
-    // Note: SurfaceEfficiency and SpinPreStress are MATERIAL properties — the
-    // simulator reads them from the body's FractureProperties, not from here.
-    public Vector2 MomentumKick;      // directional push (along the shot) added to all fragments
-    public float   EjectSpeed;        // base radial scatter speed away from the impact (px/s)
-    public float   ImpactSpin;        // rad/s scale for impact-induced (shear) fragment spin
-    public float   BlastFraction;     // cells with crack energy ≥ this × impact energy vaporise (0 = off)
+    public float   Directionality;    // effective (weapon + material)/2: 0 = splash … 1 = forward channel
+    public float   BlastFraction;     // weapon: carves the vaporize budget from each cell's energy
 
     public Vector2 BodyPosition;      // Transform.Position (world centroid)
     public float   BodyRotation;
     public Vector2 BodyLinear;
-    public float   BodyAngular;
+    public float   BodyAngular;       // body spin ω (spin pre-stress on rim bonds)
     public float   BodyMass;          // current RigidBody.Mass
 }
 
@@ -44,15 +36,11 @@ public struct FragmentSpec
 }
 
 /// <summary>
-/// Output of the fracture simulator. The engine computes it and emits it; the game
-/// wires entities from it (thin-engine contract, spec §5).
+/// Output of a one-shot fracture (the multi-frame path uses events instead).
 /// </summary>
 public struct FractureResult
 {
-    public bool           Fractured;       // false = sub-threshold (absorb, no split)
-    public float          AbsorbedEnergy;  // updated accumulator (valid when !Fractured)
-    public FragmentSpec[] Fragments;       // all resulting bodies (largest = survivor)
+    public bool           Fractured;
+    public FragmentSpec[] Fragments;
     public Vector2        ImpactPointWorld;
-    public float          EnergySurface;   // budget spent breaking bonds
-    public float          EnergyKinetic;   // energy given to fragments as fling
 }

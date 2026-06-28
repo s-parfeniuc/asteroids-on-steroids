@@ -31,6 +31,10 @@ public enum KeyCode
     Tab    = 9,
     Back   = 8,
 
+    // Brackets / punctuation (SDL sym = ASCII)
+    LeftBracket  = 91,
+    RightBracket = 93,
+
     // Modifiers
     Shift       = 16,
     Control     = 17,

@@ -12,6 +12,7 @@
     <ProjectReference Include="../../AsteroidsEngine.csproj" />
     <ProjectReference Include="../../Platform/Sdl/Engine.Platform.Sdl.csproj" />
     <ProjectReference Include="../../GameConfig/GameConfig.csproj" />
+    <ProjectReference Include="../../Gameplay/AsteroidsGameplay.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -9,18 +9,32 @@ namespace AsteroidsEngine.Engine.Components;
 public struct FractureProperties
 {
     /// <summary>
-    /// Energy per unit bond length to break a bond (bond.Strength = sharedEdgeLength ×
-    /// Toughness). Higher = harder to fracture. (Abstract units; calibrated against
-    /// the impact energy budget — see spec §9.)
+    /// Sets bond strength: bond.Strength = sharedEdgeLength × Toughness × StrengthMult — the
+    /// stress a bond accumulates before it breaks. High toughness ⇒ a single hit can't crack it;
+    /// repeated hits must accumulate (see <see cref="RelaxRate"/>).
     /// </summary>
     public float Toughness;
 
+    /// <summary>Coefficient of restitution for the dissipated-energy: the fraction of contact
+    /// energy that bounces back rather than coupling into the fracture is e²; only (1 − e²)
+    /// becomes the input energy E. Bouncier materials (high e) fracture less.</summary>
+    public float Restitution;
+
+    /// <summary>Rate (stress per second) at which each bond's accumulated <see cref="Bond.Stress"/>
+    /// relaxes when not being hit (StressRelaxSystem). Higher = hits must land faster to ever
+    /// crack it; 0 = stress never heals. The "sustained DPS demanded" knob.</summary>
+    public float RelaxRate;
+
     /// <summary>
-    /// [0 = ductile, 1 = brittle/glass]. Controls how far crack energy propagates
-    /// through the bond graph (brittle = far → shatter; ductile = local chip) and
-    /// the kinetic/surface energy split.
+    /// [0 = ductile, 1 = brittle/glass]. The central lever: at each cell the energy splits into
+    /// dump = (1−Brittleness)·e (stays local as fling/vaporize) and transmit = Brittleness·e
+    /// (travels onward as cracks). 0 = blunt crater + big fling, short cracks; 1 = long thin cracks.
     /// </summary>
     public float Brittleness;
+
+    /// <summary>Cells/second the crack front advances (multi-frame pacing). Replaces the old
+    /// global crackSteps/crackFrames — different materials crack at different speeds.</summary>
+    public float CrackSpeed;
 
     /// <summary>Target cell area (px²) at tessellation — the material "grain".
     /// Constant grain ⇒ larger bodies get proportionally more cells.</summary>
@@ -30,23 +44,18 @@ public struct FractureProperties
     /// rather than a live collidable body.</summary>
     public float MinFragmentArea;
 
-    /// <summary>Mass per unit area.</summary>
+    /// <summary>Mass per unit area. Cell mass = Area × DensityMult × Density.</summary>
     public float Density;
 
-    /// <summary>
-    /// Fraction of the available fracture energy converted to fragment kinetic energy
-    /// (the remainder creates fracture surface) at Brittleness = 0. Brittle materials
-    /// put more into surface (more cracks), ductile more into fling.
-    /// </summary>
-    public float KineticFraction;
+    /// <summary>Vaporise threshold per unit cell mass: a cell pulverises once accumulated comminution
+    /// (blast·dump, summed over hits) reaches CellToughness × Area × DensityMult × Density. Higher ⇒
+    /// harder to vaporise / more sustained blast to crater.</summary>
+    public float CellToughness;
 
-    /// <summary>Fraction of available energy that becomes fracture surface (the rest
-    /// dissipates as heat/sound). The master "how much shatters" coefficient — a
-    /// material property (a tough/ductile rock dissipates more). ≤0 ⇒ treated as 1.</summary>
-    public float SurfaceEfficiency;
-
-    /// <summary>How strongly the body's spin pre-weakens its tangentially-oriented
-    /// bonds (centrifugal pre-stress). A material property of how spin loads it.</summary>
+    /// <summary>Gain on how strongly body spin ω multiplies the stress delivered to tangential
+    /// rim bonds: spinFactor = clamp(SpinPreStress·ω²·(0.3+0.7·r/rmax)·tangentiality, 0, SpinCap).
+    /// Bond Strength is untouched — spin amplifies the delivered stress, so a fast spinner
+    /// shatters from a lighter hit.</summary>
     public float SpinPreStress;
 
     /// <summary>
@@ -57,11 +66,6 @@ public struct FractureProperties
     /// </summary>
     public float CrackDirectionality;
 
-    /// <summary>Crack-propagation speed for multi-frame fracture: frontier-pops per
-    /// iteration (≈ terminal crack velocity). Brittle materials race (glass shatters
-    /// near-instantly), ductile ones tear slowly. The game may override it live.</summary>
-    public float CrackSpeed;
-
     /// <summary>Mean scale applied to each vertex of a single isolated cell when it
     /// detaches as its own entity. Vertices contract toward the cell centroid by this
     /// factor (e.g. 0.90 = 10% smaller), with ±DetachCellJitter variance per vertex,
@@ -70,18 +74,4 @@ public struct FractureProperties
     public float DetachCellScale;
     /// <summary>Per-vertex ± variance on DetachCellScale (e.g. 0.02 = ±2%).</summary>
     public float DetachCellJitter;
-
-    // ---- Presets (relative values; calibrate the absolute budget per spec §9) ----
-
-    public static readonly FractureProperties Glass = new()
-    { Toughness =  6f, Brittleness = 1.00f, GrainArea =  600f, MinFragmentArea =  40f, Density = 1.0f, KineticFraction = 0.25f, SurfaceEfficiency = 0.20f, SpinPreStress = 0.15f, CrackSpeed = 6f, CrackDirectionality = 0.75f, DetachCellScale = 0.90f, DetachCellJitter = 0.02f };
-
-    public static readonly FractureProperties Ice = new()
-    { Toughness = 10f, Brittleness = 0.80f, GrainArea =  900f, MinFragmentArea =  80f, Density = 0.9f, KineticFraction = 0.30f, SurfaceEfficiency = 0.16f, SpinPreStress = 0.13f, CrackSpeed = 4f, CrackDirectionality = 0.55f, DetachCellScale = 0.90f, DetachCellJitter = 0.02f };
-
-    public static readonly FractureProperties Rock = new()
-    { Toughness = 16f, Brittleness = 0.60f, GrainArea = 1500f, MinFragmentArea = 180f, Density = 1.4f, KineticFraction = 0.35f, SurfaceEfficiency = 0.12f, SpinPreStress = 0.12f, CrackSpeed = 2f, CrackDirectionality = 0.35f, DetachCellScale = 0.90f, DetachCellJitter = 0.02f };
-
-    public static readonly FractureProperties Metal = new()
-    { Toughness = 40f, Brittleness = 0.15f, GrainArea = 3000f, MinFragmentArea = 400f, Density = 2.0f, KineticFraction = 0.45f, SurfaceEfficiency = 0.06f, SpinPreStress = 0.08f, CrackSpeed = 1f, CrackDirectionality = 0.15f, DetachCellScale = 0.92f, DetachCellJitter = 0.01f };
 }

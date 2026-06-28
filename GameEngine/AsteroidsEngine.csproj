@@ -22,6 +22,8 @@
     <Compile Remove="GameConfig/**" />
     <!-- Game project files (future AsteroidsGame.csproj). -->
     <Compile Remove="Game/**" />
+    <!-- Shared gameplay library (systems/components/events), its own project. -->
+    <Compile Remove="Gameplay/**" />
     <!-- Assets are data files, not source. -->
     <Compile Remove="Assets/**" />
     <!-- Dormant future WinForms backend; compiled only under the WINDOWS symbol. -->

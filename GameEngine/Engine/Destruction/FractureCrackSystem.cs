@@ -7,8 +7,7 @@ using AsteroidsEngine.Engine.Events;
 namespace AsteroidsEngine.Engine.Destruction;
 
 /// <summary>A cell vaporised mid-propagation — the game turns this into dust and polygon
-/// debris. Carries the cell's world-space polygon and its inherited surface motion so the
-/// game can cut it into collider-less debris pieces that fly apart and fade.</summary>
+/// debris. Carries the cell's world-space polygon and its inherited surface motion.</summary>
 public readonly struct CellPulverizedEvent
 {
     public readonly Entity Body;
@@ -47,17 +46,19 @@ public readonly struct FractureSplitEvent
 }
 
 /// <summary>
-/// Advances every live <see cref="FractureProcess"/>: each iteration steps its fronts a
-/// few frontier-pops (co-propagating through the shared broken-bond state), vaporises
-/// cells whose crack energy crossed the blast threshold (→ CellPulverizedEvent), and when
-/// all fronts are spent finalises the body into fragments (→ FractureCompletedEvent). The
-/// game wires the events (dust VFX, spawning fragments, destroying the original).
+/// Advances every live <see cref="FractureProcess"/>: each iteration steps its fronts a few
+/// frontier-pops (co-propagating through the shared broken / pulverized / fling / bond-stress
+/// state), dusts cells that vaporised this iteration (→ CellPulverizedEvent), splits the body
+/// when it breaks into ≥2 pieces (→ FractureSplitEvent), and finalises a single remaining piece
+/// (→ FractureCompletedEvent). A hit that broke nothing just drops the process (its accumulated
+/// bond stress stays on the body).
 /// </summary>
 public sealed class FractureCrackSystem : ISystem
 {
     private readonly EventBus _bus;
     private readonly Random _rng;
     private readonly List<Entity> _scratch = new();
+    private readonly List<int> _pulvScratch = new();
 
     public FractureCrackSystem(EventBus bus, Random rng) { _bus = bus; _rng = rng; }
 
@@ -77,7 +78,8 @@ public sealed class FractureCrackSystem : ISystem
 
             ref var body = ref world.GetComponent<FracturableBody>(e);
 
-            // --- advance the fronts, co-propagating through the shared Broken[] ---
+            // --- advance the fronts, co-propagating through the shared state ---
+            _pulvScratch.Clear();
             int steps = fp.StepsPerIteration < 1 ? 1 : fp.StepsPerIteration;
             for (int s = 0; s < steps; s++)
             {
@@ -85,28 +87,28 @@ public sealed class FractureCrackSystem : ISystem
                 foreach (var f in fp.Fronts)
                 {
                     if (!f.Active) continue;
-                    FractureKernel.StepFront(f, body.Cells, body.Bonds, fp.Adj, fp.Eff, fp.Broken);
+                    FractureKernel.StepFront(f, body.Cells, body.Bonds, fp.Adj, fp.SpinMul,
+                                             fp.Broken, fp.Pulverized, fp.FlingE, body.Material, _pulvScratch);
                     any = true;
                 }
                 if (!any) break;
             }
 
-            // --- vaporise cells whose crack energy crossed the blast threshold ---
-            ref var t = ref world.GetComponent<Transform>(e);
-            float cos = MathF.Cos(t.Rotation), sin = MathF.Sin(t.Rotation);
-            Vector2 bodyLin = Vector2.Zero; float bodyAng = 0f;
-            if (world.HasComponent<Velocity>(e))
+            // --- dust cells that vaporised this iteration ---
+            if (_pulvScratch.Count > 0)
             {
-                ref var bv = ref world.GetComponent<Velocity>(e);
-                bodyLin = bv.Linear; bodyAng = bv.Angular;
-            }
-            foreach (var f in fp.Fronts)
-            {
-                float[] en = f.Energy;
-                for (int i = 0; i < body.Cells.Length; i++)
+                ref var t = ref world.GetComponent<Transform>(e);
+                float cos = MathF.Cos(t.Rotation), sin = MathF.Sin(t.Rotation);
+                Vector2 bodyLin = Vector2.Zero; float bodyAng = 0f;
+                if (world.HasComponent<Velocity>(e))
                 {
-                    if (fp.Pulverized[i] || en[i] <= 0f || en[i] <= f.BlastThresh) continue;
-                    fp.Pulverized[i] = true;
+                    ref var bv = ref world.GetComponent<Velocity>(e);
+                    bodyLin = bv.Linear; bodyAng = bv.Angular;
+                }
+                foreach (int i in _pulvScratch)
+                {
+                    if (fp.Emitted[i]) continue;
+                    fp.Emitted[i] = true;
 
                     var srcLocal = body.Cells[i].Local;
                     var wv = new Vector2[srcLocal.Length];
@@ -123,30 +125,37 @@ public sealed class FractureCrackSystem : ISystem
                 }
             }
 
-            ForceLog.CurrentBody = e.Id;   // fragment-construction logs attribute to this body
+            ForceLog.CurrentBody = e.Id;
+            ref var tr = ref world.GetComponent<Transform>(e);
 
-            // --- split: if the body has broken into ≥2 pieces and detachment is on,
-            //     partition it into fresh pieces now (the continuer keeps cracking) ---
-            if (fp.DetachOnSplit &&
-                FractureSimulator.CountComponents(body.Cells.Length, body.Bonds, fp.Broken, fp.Pulverized) >= 2)
+            // --- split: body broke into ≥2 pieces → partition now (continuer keeps cracking) ---
+            if (FractureSimulator.CountComponents(body.Cells.Length, body.Bonds, fp.Broken, fp.Pulverized) >= 2)
             {
-                var pieces = FractureSimulator.SplitLive(body, BuildInput(world, e, in fp, in t), in fp, _rng);
+                var pieces = FractureSimulator.SplitLive(body, BuildInput(world, e, in fp, in tr), in fp, _rng);
                 fp.Done = true;
                 _bus.Publish(new FractureSplitEvent(e, pieces));
                 continue;
             }
 
-            // --- finalise once every front is spent (single remaining piece, or the
-            //     finalise-at-end fallback when detachment is off) ---
+            // --- finalise once every front is spent ---
             bool active = false;
             foreach (var f in fp.Fronts) if (f.Active) { active = true; break; }
             if (active) continue;
 
-            // In detach mode the body has already shed its chunks; the single remaining
-            // piece keeps its motion (no fresh fling). Finalise-at-end mode bursts.
-            var fragments = FractureSimulator.BuildResult(body, BuildInput(world, e, in fp, in t),
-                                                          fp.Broken, fp.Pulverized, _rng,
-                                                          fling: !fp.DetachOnSplit);
+            // Nothing separated and nothing vaporised → the hit only deposited bond stress.
+            // Drop the process; the accumulated stress stays on the body (sustained fire).
+            bool anyPulv = false;
+            for (int i = 0; i < fp.Pulverized.Length; i++) if (fp.Pulverized[i]) { anyPulv = true; break; }
+            if (!anyPulv)
+            {
+                fp.Done = true;
+                world.RemoveComponent<FractureProcess>(e);
+                continue;
+            }
+
+            // Cratered (lost cells) but still one piece → rebuild without the dust, no fling.
+            var fragments = FractureSimulator.BuildResult(body, BuildInput(world, e, in fp, in tr),
+                                                          fp.Broken, fp.Pulverized, fp.FlingE, _rng, fling: false);
             fp.Done = true;
             _bus.Publish(new FractureCompletedEvent(e, fragments));
         }
@@ -166,9 +175,6 @@ public sealed class FractureCrackSystem : ISystem
         {
             ImpactPointWorld = fp.ImpactPointWorld,
             ImpactDir = fp.ImpactDir,
-            MomentumKick = fp.MomentumKick,
-            EjectSpeed = fp.EjectSpeed,
-            ImpactSpin = fp.ImpactSpin,
             Directionality = fp.Directionality,
             BodyPosition = t.Position,
             BodyRotation = t.Rotation,

@@ -234,24 +234,81 @@ public sealed class Ui
 
     /// <summary>
     /// Float slider.  Returns <c>true</c> every frame the value changes.
-    /// Click to jump; click-and-drag to scrub.
+    /// Click-drag on the track to scrub; click the number on the right to type a value directly.
     /// </summary>
     public bool Slider(string label, ref float value, float min, float max,
                        string? valueFmt = null)
     {
-        ulong id = IdFor(label);
+        ulong id      = IdFor(label);
+        ulong inputId = id | 0x8000_0000_0000_0000UL; // high bit distinguishes text-input from drag IDs
         float lx = _px + Pad, ly = _cy;
         float tx = lx + LabelW;
         float tw = _pw - Pad * 2f - LabelW - ValW;
+        float vx = tx + tw + 4f;
+        float vw = ValW - 4f;
 
         _r.DrawText(label, new Vector2(lx, ly + 4f), ColText, FontNormal);
 
+        bool inputFocused = _focusedInputId == inputId;
+        bool changed      = false;
+
+        // ── Value text input (right column, click to type) ────────────────────
+        if (Hit(vx, ly, vw, RowH) && _mousePressed && !inputFocused)
+        {
+            _focusedInputId = inputId;
+            _inputBuffer    = valueFmt is not null ? value.ToString(valueFmt) : AutoFmt(value, min, max);
+            _cursorPos      = _inputBuffer.Length;
+            inputFocused    = true;
+        }
+
+        if (inputFocused)
+        {
+            if (_textInput.Length > 0)
+            {
+                _inputBuffer = _inputBuffer[.._cursorPos] + _textInput + _inputBuffer[_cursorPos..];
+                _cursorPos  += _textInput.Length;
+            }
+            if (_backspace && _cursorPos > 0)
+            {
+                _inputBuffer = _inputBuffer[..(_cursorPos - 1)] + _inputBuffer[_cursorPos..];
+                _cursorPos--;
+                _backspace = false;
+            }
+            if (_enterKey)
+            {
+                if (float.TryParse(_inputBuffer, System.Globalization.NumberStyles.Float,
+                                   System.Globalization.CultureInfo.InvariantCulture, out float parsed))
+                { value = Math.Clamp(parsed, min, max); changed = true; }
+                _focusedInputId = 0;
+                _enterKey       = false;
+            }
+            if (_escapeKey)
+            {
+                _focusedInputId = 0;
+                _escapeKey      = false;
+            }
+
+            FillRect(vx, ly, vw, RowH, ColSliderBg);
+            DrawRect(vx, ly, vw, RowH, ColAccent, 1f);
+            _r.DrawText(_inputBuffer, new Vector2(vx + 4f, ly + 4f), ColText, FontNormal);
+            var sz = _r.MeasureText(_inputBuffer[.._cursorPos], FontNormal);
+            float cx = vx + 4f + sz.X;
+            _r.DrawLine(new Vector2(cx, ly + 3f), new Vector2(cx, ly + RowH - 3f), ColAccent, 1.5f);
+        }
+        else
+        {
+            bool valHot = Hit(vx, ly, vw, RowH);
+            string display = valueFmt is not null ? value.ToString(valueFmt) : AutoFmt(value, min, max);
+            if (valHot) FillRect(vx, ly, vw, RowH, new Color(50, 55, 75, 80));
+            _r.DrawText(display, new Vector2(vx + 4f, ly + 4f), valHot ? ColText : ColTextDim, FontNormal);
+        }
+
+        // ── Slider track (disabled while typing) ──────────────────────────────
         bool hot    = Hit(tx, ly, tw, RowH);
         bool active = _activeId == id;
-        if (hot && _mousePressed) { _activeId = id; active = true; }
+        if (hot && _mousePressed && !inputFocused) { _activeId = id; active = true; }
 
-        bool changed = false;
-        if (active && _mouseDown)
+        if (active && _mouseDown && !inputFocused)
         {
             float t    = Math.Clamp((_mouse.X - tx) / tw, 0f, 1f);
             float nval = min + t * (max - min);
@@ -260,17 +317,11 @@ public sealed class Ui
 
         float fill = tw * Math.Clamp((value - min) / (max - min), 0f, 1f);
         float my   = ly + RowH * 0.5f;
-
         FillRect(tx, my - 4f, tw,   8f, ColSliderBg);
         if (fill > 0f)
             FillRect(tx, my - 4f, fill, 8f, active || hot ? ColSliderHot : ColSliderFill);
-        // Thumb knob
         FillRect(tx + fill - 5f, ly + 3f, 10f, RowH - 6f,
                  active ? ColAccent : hot ? ColSliderHot : ColSliderFill);
-
-        string valStr = valueFmt is not null ? value.ToString(valueFmt)
-                                             : AutoFmt(value, min, max);
-        _r.DrawText(valStr, new Vector2(tx + tw + 4f, ly + 4f), ColTextDim, FontNormal);
 
         _cy += RowH + 1f;
         return changed;

@@ -84,16 +84,22 @@ public sealed class InputSystem
     private static bool IsEditingKey(KeyCode key) =>
         key is KeyCode.Back or KeyCode.Enter or KeyCode.Escape;
 
+    private static bool IsModifier(KeyCode key) =>
+        key is KeyCode.Control or KeyCode.Shift or KeyCode.Alt;
+
+    private bool CtrlHeld => _committed.Contains(KeyCode.Control);
+
     /// <summary>Key is currently held down.</summary>
-    public bool IsHeld(KeyCode key)    => !SuppressKeyboard && _committed.Contains(key);
+    public bool IsHeld(KeyCode key) =>
+        (!SuppressKeyboard || IsModifier(key)) && _committed.Contains(key);
 
     /// <summary>Key went down this frame (true for exactly one frame).</summary>
     public bool IsPressed(KeyCode key) =>
-        (!SuppressKeyboard || IsEditingKey(key)) && _pressedThisFrame.Contains(key);
+        (!SuppressKeyboard || IsEditingKey(key) || CtrlHeld) && _pressedThisFrame.Contains(key);
 
     /// <summary>Key came up this frame (true for exactly one frame).</summary>
     public bool IsReleased(KeyCode key) =>
-        (!SuppressKeyboard || IsEditingKey(key)) && _releasedThisFrame.Contains(key);
+        (!SuppressKeyboard || IsEditingKey(key) || CtrlHeld) && _releasedThisFrame.Contains(key);
 
     public bool IsPressedThisFrame(params KeyCode[] keys) => keys.Any(IsPressed);
 

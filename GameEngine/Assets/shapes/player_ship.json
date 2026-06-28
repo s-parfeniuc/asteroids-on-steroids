@@ -1,156 +1,111 @@
 {
-  "name": "PlayerShip",
-  "material": "metal",
+  "name": "Player Ship",
+  "material": "titanium",
   "outline": [
     [
+      0,
+      22.81
+    ],
+    [
       -40,
-      24.24
+      32.81
     ],
     [
       -80,
-      64.24
+      52.81
     ],
     [
-      -10,
-      64.24
-    ],
-    [
-      -10,
-      44.24
-    ],
-    [
-      10,
-      44.24
-    ],
-    [
-      10,
-      64.24
-    ],
-    [
-      80,
-      64.24
-    ],
-    [
-      40,
-      24.24
-    ],
-    [
-      70,
-      4.24
-    ],
-    [
-      80,
-      -75.76
-    ],
-    [
-      50,
-      -65.76
-    ],
-    [
-      40,
-      -45.76
-    ],
-    [
-      20,
-      -45.76
-    ],
-    [
-      0,
-      -25.76
+      -60,
+      -7.19
     ],
     [
       -20,
-      -45.76
+      -47.19
     ],
     [
-      -40,
-      -45.76
+      0,
+      -57.19
     ],
     [
-      -50,
-      -65.76
+      20,
+      -47.19
     ],
     [
-      -80,
-      -75.76
+      60,
+      -7.19
     ],
     [
-      -70,
-      4.24
+      80,
+      52.81
+    ],
+    [
+      40,
+      32.81
     ]
   ],
   "seeds": [
     {
       "x": 0,
-      "y": 0,
+      "y": -7.19,
       "role": "cockpit",
       "bondMult": 5,
-      "blastResist": 0.33,
-      "densityMult": 2
+      "densityMult": 3
+    },
+    {
+      "x": 50,
+      "y": 22.81,
+      "role": "propeller",
+      "bondMult": 2,
+      "densityMult": 1
     },
     {
       "x": 20,
-      "y": -30,
-      "role": "cannon",
-      "bondMult": 2
-    },
-    {
-      "x": 60,
-      "y": -30,
+      "y": -37.19,
       "role": "bumper",
-      "bondMult": 2,
-      "blastResist": 0.3,
-      "densityMult": 1.8
+      "bondMult": 3,
+      "densityMult": 2
     },
     {
-      "x": 30,
-      "y": 50,
-      "role": "propeller",
-      "bondMult": 1.9,
-      "blastResist": 0.15
-    },
-    {
-      "x": 40,
-      "y": 10,
-      "role": "generic"
+      "x": -50,
+      "y": 22.81,
+      "role": "propeller"
     },
     {
       "x": -20,
-      "y": -30,
-      "role": "shotgun",
-      "bondMult": 2
+      "y": -37.19,
+      "role": "bumper",
+      "bondMult": 3,
+      "densityMult": 2
     },
     {
-      "x": -60,
-      "y": -30,
-      "role": "bumper",
-      "bondMult": 2,
-      "blastResist": 0.3,
-      "densityMult": 1.8
+      "x": 30,
+      "y": 2.81,
+      "role": "grenade"
     },
     {
       "x": -30,
-      "y": 50,
-      "role": "propeller",
-      "bondMult": 1.9,
-      "blastResist": 0.15
+      "y": 2.81,
+      "role": "piercing"
+    },
+    {
+      "x": 20,
+      "y": 12.81,
+      "role": "shotgun"
+    },
+    {
+      "x": -20,
+      "y": 12.81,
+      "role": "shotgun"
+    },
+    {
+      "x": 40,
+      "y": -17.19,
+      "role": "cannon"
     },
     {
       "x": -40,
-      "y": 10,
-      "role": "generic"
-    },
-    {
-      "x": 55,
-      "y": 50,
-      "role": "piercing",
-      "bondMult": 2
-    },
-    {
-      "x": -55,
-      "y": 50,
-      "role": "grenade",
-      "bondMult": 2
+      "y": -17.19,
+      "role": "cannon"
     }
   ]
 }

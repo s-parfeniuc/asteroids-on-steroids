@@ -135,8 +135,10 @@ public sealed unsafe class SdlGameWindow : IGameWindow
                     }
                     // Derive printable char from sym — works for all key-repeat rates,
                     // bypasses SDL text-input / IME (sufficient for ASCII editor names).
+                    // Suppress when a modifier is held so Ctrl+S doesn't insert 's' into text fields.
+                    bool modHeld = (ev.Key.Keysym.Mod & 0x3C0) != 0; // KMOD_CTRL | KMOD_ALT
                     char ch = SdlSymToChar(ksym);
-                    if (ch != '\0') TextInput?.Invoke(ch.ToString());
+                    if (ch != '\0' && !modHeld) TextInput?.Invoke(ch.ToString());
                     break;
                 }
                 case EventType.Keyup:
@@ -174,6 +176,7 @@ public sealed unsafe class SdlGameWindow : IGameWindow
         >= 48 and <= 57  => (char)sym,    // 0-9
         95               => '_',
         45               => '-',
+        46               => '.',
         32               => ' ',
         _                => '\0'
     };
@@ -191,6 +194,14 @@ public sealed unsafe class SdlGameWindow : IGameWindow
         13               => EngineKey.Enter,
         9                => EngineKey.Tab,
         8                => EngineKey.Back,
+        91               => EngineKey.LeftBracket,
+        93               => EngineKey.RightBracket,
+        1073742048       => EngineKey.Control,   // SDLK_LCTRL  (scancode 224)
+        1073742052       => EngineKey.Control,   // SDLK_RCTRL  (scancode 228)
+        1073742049       => EngineKey.Shift,     // SDLK_LSHIFT (scancode 225)
+        1073742053       => EngineKey.Shift,     // SDLK_RSHIFT (scancode 229)
+        1073742050       => EngineKey.Alt,       // SDLK_LALT   (scancode 226)
+        1073742054       => EngineKey.Alt,       // SDLK_RALT   (scancode 230)
         _                => null
     };
 

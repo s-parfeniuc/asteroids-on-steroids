@@ -1,32 +1,95 @@
 {
   "name": "PiercingRound",
-  "material": "metal",
+  "material": "piercing_material",
   "outline": [
-    [0, -35],
-    [7, -15],
-    [7, 25],
-    [0, 35],
-    [-7, 25],
-    [-7, -15]
+    [
+      -20,
+      45.93
+    ],
+    [
+      -20,
+      -14.07
+    ],
+    [
+      -10,
+      -54.07
+    ],
+    [
+      10,
+      -54.07
+    ],
+    [
+      20,
+      -14.07
+    ],
+    [
+      20,
+      45.93
+    ]
   ],
   "seeds": [
     {
-      "x": 0,
-      "y": -20,
+      "x": -10.800996,
+      "y": 35.15816,
       "role": "generic",
-      "bondMult": 2.5
+      "bondMult": 1,
+      "densityMult": 1
     },
     {
-      "x": 0,
-      "y": 2,
+      "x": 8.282972,
+      "y": 33.965412,
       "role": "generic",
-      "bondMult": 2.5
+      "bondMult": 1,
+      "densityMult": 1
     },
     {
-      "x": 0,
-      "y": 22,
+      "x": 6.295059,
+      "y": 19.652435,
       "role": "generic",
-      "bondMult": 2.5
+      "bondMult": 1,
+      "densityMult": 1
+    },
+    {
+      "x": -9.210666,
+      "y": 17.929577,
+      "role": "generic",
+      "bondMult": 1,
+      "densityMult": 1
+    },
+    {
+      "x": -10.270885,
+      "y": -1.6845009,
+      "role": "generic",
+      "bondMult": 1,
+      "densityMult": 1
+    },
+    {
+      "x": 9.740775,
+      "y": -1.2869183,
+      "role": "generic",
+      "bondMult": 1,
+      "densityMult": 1
+    },
+    {
+      "x": 9.343193,
+      "y": -20.768469,
+      "role": "generic",
+      "bondMult": 1,
+      "densityMult": 1
+    },
+    {
+      "x": -7.752862,
+      "y": -19.840776,
+      "role": "generic",
+      "bondMult": 1,
+      "densityMult": 1
+    },
+    {
+      "x": 0.46384645,
+      "y": -41.44277,
+      "role": "generic",
+      "bondMult": 1,
+      "densityMult": 1
     }
   ]
 }

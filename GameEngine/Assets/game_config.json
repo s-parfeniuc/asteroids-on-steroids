@@ -1,121 +1,186 @@
 {
   "materials": {
     "rock": {
-      "brittleness": 0.6,
-      "toughness": 16,
+      "brittleness": 0.5,
+      "toughness": 38,
+      "restitution": 0.3,
+      "relaxRate": 200,
       "crackDirectionality": 0.35,
+      "crackSpeed": 240,
       "grainArea": 1500,
       "minFragmentArea": 180,
       "density": 1.4,
-      "kineticFraction": 0.35,
-      "surfaceEfficiency": 0.12,
+      "cellToughness": 0.5,
       "spinPreStress": 0.12,
-      "crackSpeed": 2,
       "detachCellScale": 0.9,
       "detachCellJitter": 0.02
     },
     "ice": {
-      "brittleness": 0.8,
-      "toughness": 10,
+      "brittleness": 0.7,
+      "toughness": 30,
+      "restitution": 0.25,
+      "relaxRate": 150,
       "crackDirectionality": 0.55,
+      "crackSpeed": 300,
       "grainArea": 900,
       "minFragmentArea": 80,
       "density": 0.9,
-      "kineticFraction": 0.3,
-      "surfaceEfficiency": 0.16,
-      "spinPreStress": 0.13,
-      "crackSpeed": 4,
+      "cellToughness": 0.35,
+      "spinPreStress": 0.07,
       "detachCellScale": 0.9,
       "detachCellJitter": 0.02
     },
     "metal": {
       "brittleness": 0.15,
-      "toughness": 40,
+      "toughness": 60,
+      "restitution": 0.2,
+      "relaxRate": 350,
       "crackDirectionality": 0.15,
+      "crackSpeed": 180,
       "grainArea": 3000,
       "minFragmentArea": 400,
       "density": 2,
-      "kineticFraction": 0.45,
-      "surfaceEfficiency": 0.06,
-      "spinPreStress": 0.08,
-      "crackSpeed": 1,
+      "cellToughness": 1,
+      "spinPreStress": 0.15,
       "detachCellScale": 0.92,
       "detachCellJitter": 0.01
     },
     "glass": {
-      "brittleness": 1,
-      "toughness": 6,
+      "brittleness": 0.85,
+      "toughness": 18,
+      "restitution": 0.15,
+      "relaxRate": 100,
       "crackDirectionality": 0.75,
+      "crackSpeed": 400,
       "grainArea": 600,
       "minFragmentArea": 40,
       "density": 1,
-      "kineticFraction": 0.25,
-      "surfaceEfficiency": 0.2,
-      "spinPreStress": 0.15,
-      "crackSpeed": 6,
+      "cellToughness": 0.3,
+      "spinPreStress": 0.03,
       "detachCellScale": 0.9,
       "detachCellJitter": 0.02
+    },
+    "titanium": {
+      "brittleness": 0.08,
+      "toughness": 110,
+      "restitution": 0.12,
+      "relaxRate": 400,
+      "crackDirectionality": 0.1,
+      "crackSpeed": 150,
+      "grainArea": 5000,
+      "minFragmentArea": 800,
+      "density": 3.5,
+      "cellToughness": 1.5,
+      "spinPreStress": 0.04,
+      "detachCellScale": 0.94,
+      "detachCellJitter": 0.005
+    },
+    "piercing_material": {
+      "brittleness": 0.08,
+      "toughness": 110,
+      "restitution": 0,
+      "relaxRate": 400,
+      "crackDirectionality": 0.9,
+      "crackSpeed": 150,
+      "grainArea": 5000,
+      "minFragmentArea": 800,
+      "density": 9,
+      "cellToughness": 1.5,
+      "spinPreStress": 0.04,
+      "detachCellScale": 0.94,
+      "detachCellJitter": 0.005
     }
   },
   "weapons": {
     "cannon": {
       "fireRate": 15,
-      "projectileSpeed": 1500,
+      "projectileSpeed": 2500,
       "timeToLive": 2.5,
       "directionality": 0.55,
-      "momentumTransfer": 0.01,
-      "ejectFraction": 0.08,
-      "impactSpin": 0.5,
-      "blastFraction": 0.3548387,
-      "energy": 1200
+      "blastFraction": 0.1,
+      "knockback": 0,
+      "speedJitter": 0,
+      "ttlJitter": 0,
+      "spreadJitter": 0,
+      "drag": 0
     },
     "shotgun": {
       "fireRate": 1.5,
-      "projectileSpeed": 750,
+      "projectileSpeed": 2500,
       "timeToLive": 1.2,
       "directionality": 0.3,
-      "momentumTransfer": 0.005,
-      "ejectFraction": 0.06,
-      "impactSpin": 0.3,
       "blastFraction": 0.15,
-      "energy": 0,
-      "rays": 7,
-      "energyPerRay": 400,
+      "knockback": 0,
+      "speedJitter": 0.25,
+      "ttlJitter": 0.3,
+      "spreadJitter": 0.6,
+      "drag": 1.5,
+      "rays": 17,
+      "coneAngle": 30
+    },
+    "cannon_alien": {
+      "fireRate": 15,
+      "projectileSpeed": 700,
+      "timeToLive": 2.5,
+      "directionality": 0.55,
+      "blastFraction": 0.1,
+      "knockback": 0.01,
+      "speedJitter": 0,
+      "ttlJitter": 0,
+      "spreadJitter": 0,
+      "drag": 0
+    },
+    "shotgun_alien": {
+      "fireRate": 1.5,
+      "projectileSpeed": 700,
+      "timeToLive": 1.2,
+      "directionality": 0.3,
+      "blastFraction": 0.15,
+      "knockback": 0.005,
+      "speedJitter": 0.25,
+      "ttlJitter": 0.3,
+      "spreadJitter": 0.6,
+      "drag": 1.5,
+      "rays": 17,
       "coneAngle": 18
     },
     "piercing": {
       "fireRate": 1,
-      "projectileSpeed": 1100,
-      "timeToLive": 3,
+      "projectileSpeed": 2500,
+      "timeToLive": 2,
       "directionality": 0.85,
-      "momentumTransfer": 0.04,
-      "ejectFraction": 0.05,
-      "impactSpin": 0.2,
       "blastFraction": 0.05,
-      "energy": 2800,
-      "mass": 3,
-      "lateralImpulseClamp": 0.4
+      "knockback": 0,
+      "speedJitter": 0,
+      "ttlJitter": 0,
+      "spreadJitter": 0,
+      "drag": 0,
+      "mass": 50,
+      "lateralImpulseClamp": 1000,
+      "shapeScale": 0.5
     },
     "grenade": {
       "fireRate": 0.8,
-      "projectileSpeed": 320,
-      "timeToLive": 4,
+      "projectileSpeed": 1000,
+      "timeToLive": 1.5,
       "directionality": 0.05,
-      "momentumTransfer": 0.02,
-      "ejectFraction": 0.15,
-      "impactSpin": 0.8,
       "blastFraction": 0.75,
-      "energy": 3500,
+      "knockback": 0.02,
+      "speedJitter": 0.3,
+      "ttlJitter": 0.4,
+      "spreadJitter": 0.5,
+      "drag": 2,
       "fuseTime": 1.8,
-      "shrapnelCount": 12,
-      "shrapnelSpread": 360
+      "shrapnelCount": 45,
+      "shrapnelSpread": 360,
+      "shrapnelSpeed": 1900
     }
   },
   "skills": {
     "dash": {
       "cooldown": 3,
       "duration": 0,
-      "velocitySpike": 1400,
+      "velocitySpike": 2200,
       "invincibilityTime": 0.35
     },
     "turbo": {
@@ -133,7 +198,7 @@
   "player": {
     "shape": "player_ship",
     "shapeScale": 0.3451613,
-    "material": "metal",
+    "material": "",
     "thrust": 258.0645,
     "rotSpeed": 6.064516,
     "maxSpeed": 549.67737,
@@ -146,31 +211,33 @@
       "turbo",
       "slowmo"
     ],
-    "playerImpactCoeff": 0.4,
-    "thrustPartialMult": 0.6
+    "playerImpactCoeff": 0.1,
+    "thrustPartialMult": 0.6,
+    "vortexCentripetal": 0.5,
+    "vortexTangential": 0.5
   },
   "entities": {
     "drone": {
       "shape": "drone",
-      "material": "metal",
+      "material": "",
       "speed": 220,
       "detectionRadius": 800,
       "steeringWeights": {
         "separation": 1.2,
         "pursuit": 0.8,
-        "avoidance": 1.0
+        "avoidance": 1
       },
       "thrust": 680,
-      "shootCooldown": 2.0,
+      "shootCooldown": 2,
       "lateralThrustPenaltyMult": 0.5,
-      "alienImpactCoeff": 1.0,
-      "shapeScale": 0.28,
+      "alienImpactCoeff": 1,
+      "shapeScale": 1,
       "baseCost": 15,
       "cellCount": 19
     },
     "bruiser": {
       "shape": "bruiser",
-      "material": "metal",
+      "material": "",
       "speed": 130,
       "detectionRadius": 1100,
       "steeringWeights": {
@@ -179,16 +246,16 @@
         "avoidance": 0.5
       },
       "thrust": 900,
-      "shootCooldown": 3.0,
+      "shootCooldown": 3,
       "lateralThrustPenaltyMult": 0.3,
-      "alienImpactCoeff": 1.0,
-      "shapeScale": 0.45,
+      "alienImpactCoeff": 1,
+      "shapeScale": 1,
       "baseCost": 30,
       "cellCount": 19
     },
     "mothership": {
       "shape": "mothership",
-      "material": "metal",
+      "material": "",
       "speed": 55,
       "detectionRadius": 2200,
       "steeringWeights": {
@@ -200,27 +267,27 @@
       "shootCooldown": 999,
       "lateralThrustPenaltyMult": 0.15,
       "alienImpactCoeff": 0.5,
-      "shapeScale": 1.0,
+      "shapeScale": 1,
       "baseCost": 100,
       "cellCount": 20,
       "boss": {
-        "shockwaveCooldown": 8.0,
-        "shockwaveRadius": 1200.0,
-        "shockwaveStrength": 80000.0,
-        "blackHoleCooldown": 15.0,
-        "blackHoleRadius": 500.0,
-        "blackHoleStrength": 50000.0,
-        "blackHoleCrushRadius": 40.0,
-        "blackHoleDuration": 6.0,
-        "blackHoleSpeed": 200.0,
-        "ramChargeCooldown": 12.0,
-        "ramChargeMinDist": 600.0,
+        "shockwaveCooldown": 8,
+        "shockwaveRadius": 1200,
+        "shockwaveStrength": 80000,
+        "blackHoleCooldown": 15,
+        "blackHoleRadius": 500,
+        "blackHoleStrength": 50000,
+        "blackHoleCrushRadius": 40,
+        "blackHoleDuration": 6,
+        "blackHoleSpeed": 200,
+        "ramChargeCooldown": 12,
+        "ramChargeMinDist": 600,
         "ramChargeDuration": 2.5,
-        "ramChargeThrust": 6000.0,
-        "spawnInterval": 8.0,
+        "ramChargeThrust": 6000,
+        "spawnInterval": 8,
         "spawnType": "drone",
-        "spawnSafetyMargin": 80.0,
-        "driftThrust": 150.0
+        "spawnSafetyMargin": 80,
+        "driftThrust": 150
       }
     }
   },
@@ -235,7 +302,14 @@
         "roughness": 0.3,
         "noiseFrequency": 4,
         "concavityBias": 0.1,
-        "seedClusterCenter": 0.0
+        "clusterCount": 0,
+        "clusterCentrality": 0.5,
+        "clusterSpread": [
+          0.2,
+          0.4
+        ],
+        "bondGain": 0,
+        "densityGain": 0
       },
       "material": "rock",
       "sizeRange": [
@@ -252,7 +326,17 @@
         60,
         150
       ],
-      "unlockWave": 1
+      "unlockWave": 1,
+      "vortexResponse": {
+        "centripetalRange": [
+          0.5,
+          1.5
+        ],
+        "tangentialRange": [
+          0.8,
+          2
+        ]
+      }
     },
     "standard": {
       "procedural": {
@@ -264,7 +348,14 @@
         "roughness": 0.22,
         "noiseFrequency": 3,
         "concavityBias": 0.7,
-        "seedClusterCenter": 0.25
+        "clusterCount": 0,
+        "clusterCentrality": 0.5,
+        "clusterSpread": [
+          0.2,
+          0.4
+        ],
+        "bondGain": 0,
+        "densityGain": 0
       },
       "material": "rock",
       "sizeRange": [
@@ -281,7 +372,17 @@
         30,
         90
       ],
-      "unlockWave": 1
+      "unlockWave": 1,
+      "vortexResponse": {
+        "centripetalRange": [
+          0.6,
+          1.4
+        ],
+        "tangentialRange": [
+          0.5,
+          1.5
+        ]
+      }
     },
     "spinner": {
       "procedural": {
@@ -293,14 +394,14 @@
         "roughness": 0.18,
         "noiseFrequency": 2,
         "concavityBias": 0.02,
-        "seedClusterCenter": 0.2,
-        "bondMultDistribution": {
-          "type": "radialGradient",
-          "value": 1,
-          "centerValue": 0.6,
-          "surfaceValue": 1.4,
-          "exponent": 2
-        }
+        "clusterCount": 2,
+        "clusterCentrality": 0.25,
+        "clusterSpread": [
+          0.15,
+          0.3
+        ],
+        "bondGain": 1,
+        "densityGain": 0.5
       },
       "material": "rock",
       "sizeRange": [
@@ -308,8 +409,8 @@
         2
       ],
       "spinRange": [
-        2.5,
-        5
+        5,
+        7.5
       ],
       "densityMult": 1,
       "baseCost": 4,
@@ -317,7 +418,17 @@
         25,
         75
       ],
-      "unlockWave": 2
+      "unlockWave": 2,
+      "vortexResponse": {
+        "centripetalRange": [
+          0.2,
+          1.2
+        ],
+        "tangentialRange": [
+          -3.5,
+          -2
+        ]
+      }
     },
     "boulder": {
       "procedural": {
@@ -329,21 +440,14 @@
         "roughness": 0.12,
         "noiseFrequency": 2,
         "concavityBias": 0.02,
-        "seedClusterCenter": 0.5,
-        "bondMultDistribution": {
-          "type": "radialGradient",
-          "value": 1,
-          "centerValue": 3,
-          "surfaceValue": 0.7,
-          "exponent": 1.5
-        },
-        "densityMultDistribution": {
-          "type": "radialGradient",
-          "value": 1,
-          "centerValue": 2,
-          "surfaceValue": 0.9,
-          "exponent": 1.2
-        }
+        "clusterCount": 2,
+        "clusterCentrality": 0.85,
+        "clusterSpread": [
+          0.3,
+          0.55
+        ],
+        "bondGain": 1.5,
+        "densityGain": 2
       },
       "material": "rock",
       "sizeRange": [
@@ -360,7 +464,17 @@
         20,
         55
       ],
-      "unlockWave": 3
+      "unlockWave": 3,
+      "vortexResponse": {
+        "centripetalRange": [
+          0.4,
+          1
+        ],
+        "tangentialRange": [
+          0.2,
+          0.8
+        ]
+      }
     },
     "armored": {
       "procedural": {
@@ -372,21 +486,14 @@
         "roughness": 0.14,
         "noiseFrequency": 3,
         "concavityBias": 0.03,
-        "seedClusterCenter": 0.4,
-        "bondMultDistribution": {
-          "type": "radialGradient",
-          "value": 1,
-          "centerValue": 0.7,
-          "surfaceValue": 3.5,
-          "exponent": 3
-        },
-        "blastResistDistribution": {
-          "type": "radialGradient",
-          "value": 1,
-          "centerValue": 0,
-          "surfaceValue": 0.8,
-          "exponent": 4
-        }
+        "clusterCount": 7,
+        "clusterCentrality": 0.1,
+        "clusterSpread": [
+          0.1,
+          0.2
+        ],
+        "bondGain": 2.5,
+        "densityGain": 0.5
       },
       "material": "metal",
       "sizeRange": [
@@ -403,7 +510,17 @@
         25,
         60
       ],
-      "unlockWave": 5
+      "unlockWave": 5,
+      "vortexResponse": {
+        "centripetalRange": [
+          -0.5,
+          0.5
+        ],
+        "tangentialRange": [
+          -0.5,
+          0.5
+        ]
+      }
     },
     "unstable": {
       "procedural": {
@@ -415,21 +532,14 @@
         "roughness": 0.35,
         "noiseFrequency": 5,
         "concavityBias": 0.15,
-        "seedClusterCenter": 0.1,
-        "bondMultDistribution": {
-          "type": "noiseClusters",
-          "value": 1,
-          "baseValue": 1,
-          "amplitude": 1.2,
-          "frequency": 2.5
-        },
-        "blastResistDistribution": {
-          "type": "noiseClusters",
-          "value": 1,
-          "baseValue": 0.1,
-          "amplitude": 0.35,
-          "frequency": 2
-        }
+        "clusterCount": 3,
+        "clusterCentrality": 0.5,
+        "clusterSpread": [
+          0.15,
+          0.3
+        ],
+        "bondGain": 1.2,
+        "densityGain": 0.3
       },
       "material": "glass",
       "sizeRange": [
@@ -437,8 +547,8 @@
         2
       ],
       "spinRange": [
-        1,
-        2.5
+        3,
+        5
       ],
       "densityMult": 1,
       "baseCost": 5,
@@ -446,7 +556,17 @@
         40,
         110
       ],
-      "unlockWave": 6
+      "unlockWave": 6,
+      "vortexResponse": {
+        "centripetalRange": [
+          0.8,
+          2
+        ],
+        "tangentialRange": [
+          0.8,
+          2
+        ]
+      }
     }
   },
   "maxLiveCells": 2000,
@@ -644,15 +764,15 @@
   "world": {
     "width": 5760,
     "height": 3240,
-    "cameraFollowSpeed": 4.0
+    "cameraFollowSpeed": 10
   },
   "vortex": {
-    "centripetal": 0.05,
-    "tangential": 0.02,
-    "deadzone": 800,
-    "capFrames": 8,
-    "variationCentripetal": 0.3,
-    "variationTangential": 0.3
+    "centripetal": 0.01,
+    "tangential": 0.007,
+    "deadzone": 0,
+    "capFrames": 360,
+    "variationCentripetal": 0.05,
+    "variationTangential": 0.03
   },
   "waveSystem": {
     "baseCellCap": 300,
@@ -661,23 +781,100 @@
     "growthIntervalSeconds": 30,
     "baseBudget": 20,
     "budgetGrowthPerInterval": 5,
-    "triggerThreshold": 0.30,
-    "gracePeriodSeconds": 8.0,
-    "hardTriggerIntervalSeconds": 30.0,
+    "triggerThreshold": 0.3,
+    "gracePeriodSeconds": 8,
+    "hardTriggerIntervalSeconds": 30,
     "spawnDelaySeconds": 1.5,
     "sizeBiasStart": -0.2,
     "sizeBiasEnd": 0.6,
-    "sizeBiasRampEnd": 600.0,
-    "mothershpSpawnTime": 600.0,
+    "sizeBiasRampEnd": 600,
+    "mothershpSpawnTime": 30,
     "spawnBias": {
-      "gravel":   { "w0": 0.15, "w1": 0.02, "t0": 0,   "t1": 300 },
-      "standard": { "w0": 0.12, "w1": 0.12, "t0": 0,   "t1": 600 },
-      "spinner":  { "w0": 0.05, "w1": 0.20, "t0": 60,  "t1": 300 },
-      "boulder":  { "w0": 0.05, "w1": 0.25, "t0": 60,  "t1": 300 },
-      "armored":  { "w0": 0.00, "w1": 0.25, "t0": 180, "t1": 420 },
-      "unstable": { "w0": 0.05, "w1": 0.20, "t0": 30,  "t1": 330 },
-      "drone":    { "w0": 0.00, "w1": 0.15, "t0": 180, "t1": 300 },
-      "bruiser":  { "w0": 0.00, "w1": 0.10, "t0": 420, "t1": 540 }
+      "gravel": {
+        "w0": 0.15,
+        "w1": 0.02,
+        "t0": 0,
+        "t1": 300
+      },
+      "standard": {
+        "w0": 0.12,
+        "w1": 0.12,
+        "t0": 0,
+        "t1": 600
+      },
+      "spinner": {
+        "w0": 0.05,
+        "w1": 0.2,
+        "t0": 60,
+        "t1": 300
+      },
+      "boulder": {
+        "w0": 0.05,
+        "w1": 0.25,
+        "t0": 60,
+        "t1": 300
+      },
+      "armored": {
+        "w0": 0,
+        "w1": 0.25,
+        "t0": 180,
+        "t1": 420
+      },
+      "unstable": {
+        "w0": 0.05,
+        "w1": 0.2,
+        "t0": 30,
+        "t1": 330
+      },
+      "drone": {
+        "w0": 0,
+        "w1": 0.15,
+        "t0": 180,
+        "t1": 300
+      },
+      "bruiser": {
+        "w0": 0,
+        "w1": 0.1,
+        "t0": 420,
+        "t1": 540
+      }
     }
+  },
+  "vfx": {
+    "dustCount": 14,
+    "dustSize": 2.6,
+    "dustTtl": 0.7,
+    "dustSpeed": 60,
+    "dustSpread": 0.5,
+    "flashSize": 22,
+    "flashTtl": 0.12,
+    "tracerLength": 26,
+    "tracerWidth": 2,
+    "debrisTtl": 0.8,
+    "debrisScatter": 40
+  },
+  "fracture": {
+    "energyScale": 0.0005,
+    "reachMin": 0.1,
+    "reachMax": 0.96,
+    "vaporEff": 0.4,
+    "breakPerp": 1,
+    "flingScale": 140,
+    "alignExponent": 2.8,
+    "spinCap": 4,
+    "fragmentSpeedMax": 400,
+    "tumbleScale": 220,
+    "fragmentSpinMax": 3.5,
+    "spinProfileBase": 0.3,
+    "asteroidBlastFraction": 0.26451612,
+    "asteroidDirSpin": 1,
+    "asteroidCollisionThreshold": 20,
+    "bulletMass": 10
+  },
+  "physics": {
+    "linearDrag": 0.05,
+    "angularDrag": 0.05,
+    "restitution": 0.3,
+    "friction": 0.2
   }
 }

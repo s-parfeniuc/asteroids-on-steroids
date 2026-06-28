@@ -1,106 +1,190 @@
 using System.Numerics;
+using AsteroidsEngine.Engine.Components;
 
 namespace AsteroidsEngine.Engine.Destruction;
 
+/// <summary>Global, model-shaping fracture scalars (not worth a per-material knob). Set once
+/// from config by the game layer; default to the values the HTML prototype was tuned with.</summary>
+public static class FractureTuning
+{
+    public static float EnergyScale         = 0.0001f; // physical ½·m·v² → fracture-energy units (one global conversion)
+    public static float ReachMin            = 0.1f;   // transmit fraction at brittleness 0 (lerp floor)
+    public static float ReachMax            = 0.96f;  // transmit fraction at brittleness 1 (lerp ceiling)
+    public static float VaporEff            = 0.4f;   // blast-wave penetration: surplus continued outward vs lost to heat
+    public static float BreakPerp           = 1.0f;   // 0 = break ALONG flow (tunnel) … 1 = PERPENDICULAR (cleave)
+    public static float AlignExponent       = 1.6f;   // directional cone sharpness
+    public static float SpinCap             = 4.0f;   // max spin stress multiplier
+    public static float FlingScale          = 140f;   // fling energy → fragment speed
+    public static float FragmentSpeedMax    = 600f;   // clamp on a fragment's fling speed (px/s)
+    public static float TumbleScale         = 220f;   // fling-asymmetry → fragment spin gain
+    public static float FragmentSpinMax     = 3.5f;   // clamp on a fragment's spin (rad/s)
+    public static float SpinProfileBase     = 0.3f;   // spin pre-stress at the centre; rises to 1.0 at the rim
+}
+
 /// <summary>
-/// One impact's live crack field: a descending-energy frontier spending a surface
-/// budget across the bond graph. Single-frame fracture drains a front in one call;
-/// multi-frame fracture advances several fronts a few steps per iteration, all
-/// sharing the body's broken-bond state so independent hits co-propagate and fuse
-/// where they meet (docs/destruction_engine_spec.md §4.6).
+/// One impact's live crack field over a body's bond graph. A cell receiving energy splits it
+/// into named channels that sum to the input (break / vaporize / fling / transmit) — nothing
+/// vanishes. Single field per hit; multi-frame fracture advances several co-propagating fronts
+/// a few pops per frame, all sharing the body's broken / pulverized / bond-stress / fling state.
 /// </summary>
 public sealed class CrackFront
 {
-    public float[] Energy = System.Array.Empty<float>();    // per cell, this front's crack field
-    public float[] Processed = System.Array.Empty<float>(); // per cell, highest energy already spent there
+    public float[] Energy    = System.Array.Empty<float>();  // per cell, incoming energy (this front)
+    public float[] Processed = System.Array.Empty<float>();  // -1 = not processed; ≥0 = processed at that energy
+    public int[]   Parent    = System.Array.Empty<int>();    // per cell, who delivered its energy → local flow dir
     public readonly List<int> Frontier = new();
-    public float Budget;
-    public Vector2 ImpactDirLocal;
-    public float Directionality;
-    public float Transmission;
-    public float BlastThresh;     // a cell whose energy exceeds this vaporises (FractureCrackSystem applies it)
-    internal readonly List<(int bond, int j, float w)> Out = new();   // reused scratch
+    public Vector2 ImpactDirLocal;     // flow at the struck cell (no parent)
+    public float   Directionality;     // effective (weapon + material)/2
+    public float   Brittleness;        // material: transmit vs dump split
+    public float   BlastFraction;      // weapon: vaporize budget fraction
+    internal readonly List<(int bk, int j, float wc, float wd)> Out = new();   // reused scratch
 
-    public bool Active => Budget > 0f && Frontier.Count > 0;
+    public bool Active => Frontier.Count > 0;
 
     /// <summary>Seed a front at the struck cell over the given (per-front) energy array.</summary>
-    public static CrackFront Seed(float[] energy, int struck, float startEnergy, float budget,
-        Vector2 impactDirLocal, float directionality, float transmission, float blastThresh)
+    public static CrackFront Seed(float[] energy, int struck, float startEnergy,
+        Vector2 impactDirLocal, float directionality, float brittleness, float blastFraction)
     {
         var f = new CrackFront
         {
             Energy = energy,
             Processed = new float[energy.Length],
-            Budget = budget,
+            Parent = new int[energy.Length],
             ImpactDirLocal = impactDirLocal,
             Directionality = directionality,
-            Transmission = transmission,
-            BlastThresh = blastThresh,
+            Brittleness = brittleness,
+            BlastFraction = blastFraction,
         };
-        for (int i = 0; i < f.Processed.Length; i++) f.Processed[i] = -1f;
+        for (int i = 0; i < f.Processed.Length; i++) { f.Processed[i] = -1f; f.Parent[i] = -1; }
         energy[struck] = startEnergy;
         f.Frontier.Add(struck);
         return f;
     }
 }
 
-/// <summary>The pure propagation kernel shared by single- and multi-frame fracture,
-/// so both paths break bonds by identical physics.</summary>
+/// <summary>The pure conservative propagation kernel (ported 1:1 from the HTML prototype).</summary>
 public static class FractureKernel
 {
-    public const float BoostCap = 3f;       // max directional concentration per bond
-    public const float DirExponent = 1.6f;
-
-    /// <summary>Advance a front by one frontier-pop: process the highest-energy cell,
-    /// break its outgoing bonds in alignment order, hand the surplus to neighbours.</summary>
-    public static void StepFront(CrackFront f, Cell[] cells, Bond[] bonds, List<int>[] adj, float[] eff, bool[] broken)
+    /// <summary>Advance a front by one frontier-pop: process the highest-energy cell — vaporise it
+    /// (carving the crater) or keep its local fling, then route the leftover `transmit` outward,
+    /// dividing it across intact bonds by alignment and accumulating stress until bonds break.
+    /// <paramref name="spinMul"/>[bk] = 1+spinFactor (precomputed); <paramref name="flingE"/> and
+    /// <paramref name="pulverized"/> are SHARED across co-propagating fronts; newly-vaporised cell
+    /// indices are appended to <paramref name="pulvOut"/> for the system to dust.</summary>
+    public static void StepFront(CrackFront f, Cell[] cells, Bond[] bonds, List<int>[] adj,
+        float[] spinMul, bool[] broken, bool[] pulverized, float[] flingE, in FractureProperties mat, List<int> pulvOut)
     {
         var frontier = f.Frontier;
-        if (frontier.Count == 0 || f.Budget <= 0f) return;
+        if (frontier.Count == 0) return;
         float[] energy = f.Energy, processed = f.Processed;
 
+        // pop the highest-energy frontier cell (descending order ⇒ each cell processed once at its peak)
         int mi = 0;
         for (int k = 1; k < frontier.Count; k++)
             if (energy[frontier[k]] > energy[frontier[mi]]) mi = k;
         int i = frontier[mi];
         float e = energy[i];
         frontier.RemoveAt(mi);
-        if (e <= processed[i]) return;   // stale / already processed at ≥ this energy
+
+        if (processed[i] >= 0f) { RouteFling(i, e, pulverized, flingE); return; }   // settled: surplus → fling
         processed[i] = e;
 
+        // Brittleness ALWAYS sets the outward/local split (lerp floors keep both ends non-degenerate).
+        // Local dump → fling (1-blast) + vaporiseEnergy (blast). Vaporisation accumulates comminution
+        // per-cell toward the threshold (fatigue); once reached the cell pulverises and the surplus
+        // continues OUTWARD by VaporEff (penetration), the rest lost to heat.
+        float transmit;
+        if (pulverized[i])
+        {
+            transmit = e;   // already dust (another front) → pure conduit
+        }
+        else
+        {
+            float tf = Lerp(FractureTuning.ReachMin, FractureTuning.ReachMax, f.Brittleness);
+            transmit = tf * e;
+            float dump = e - transmit;
+
+            flingE[i] += (1f - f.BlastFraction) * dump;       // 1.2 local shove
+
+            float vaporiseEnergy = f.BlastFraction * dump;    // 1.1 pulverisation (0 at blast=0)
+            if (vaporiseEnergy > 0f)
+            {
+                float threshold = mat.CellToughness * cells[i].Area * cells[i].DensityMult * mat.Density;
+                float comminution = MathF.Min(vaporiseEnergy, MathF.Max(0f, threshold - cells[i].Damage));
+                cells[i].Damage += comminution;               // accumulates (fatigue); persists across hits
+                float surplus = vaporiseEnergy - comminution; // > 0 only once the threshold is reached
+                if (cells[i].Damage >= threshold)
+                {
+                    pulverized[i] = true; pulvOut.Add(i);
+                    transmit += FractureTuning.VaporEff * surplus;  // penetration; (1-VaporEff)·surplus → heat (lost)
+                }
+            }
+        }
+
+        // Local flow direction: from the cell that delivered this energy (impact dir at the struck cell).
+        Vector2 flow = f.ImpactDirLocal;
+        int par = f.Parent[i];
+        if (par >= 0)
+        {
+            Vector2 fd = cells[i].Centroid - cells[par].Centroid;
+            float fl = fd.Length();
+            if (fl > 1e-6f) flow = fd / fl;
+        }
+
+        // Each intact bond splits its share by ONE formula: conduct weight wc (alignment, directionality
+        // shapes the cone) + damage weight wd (perpendicularity, breakPerp blends ∥↔⊥). Normalised over W.
         var outBonds = f.Out;
         outBonds.Clear();
-        float sumW = 0f;
+        float W = 0f, sumWc = 0f;
         foreach (int bk in adj[i])
         {
             if (broken[bk]) continue;
             int j = bonds[bk].A == i ? bonds[bk].B : bonds[bk].A;
+            if (pulverized[j]) continue;
             Vector2 d = cells[j].Centroid - cells[i].Centroid;
             float dl = d.Length();
             if (dl > 1e-6f) d /= dl;
-            float align = Vector2.Dot(d, f.ImpactDirLocal);
-            float w = Lerp(1f, MathF.Pow(MathF.Max(0f, align), DirExponent), f.Directionality);
-            outBonds.Add((bk, j, w));
-            sumW += w;
+            float align = Vector2.Dot(d, flow);
+            float aa = MathF.Abs(align);
+            float wc = Lerp(1f, MathF.Pow(MathF.Max(0f, align), FractureTuning.AlignExponent), f.Directionality);
+            float wd = Lerp(aa, 1f - aa, FractureTuning.BreakPerp);
+            outBonds.Add((bk, j, wc, wd));
+            W += wc + wd; sumWc += wc;
         }
-        if (outBonds.Count == 0) return;
+        // isolated/last cell: transmit has nowhere to go → becomes this cell's fling (disperses if vapor)
+        if (outBonds.Count == 0 || W <= 1e-9f) { RouteFling(i, transmit, pulverized, flingE); return; }
 
-        outBonds.Sort((x, y) => y.w.CompareTo(x.w));      // spend on most-aligned first
-        float norm = outBonds.Count / MathF.Max(sumW, 1e-6f);   // mean weight 1: steer, don't attenuate
-
-        foreach (var (bk, j, w) in outBonds)
+        // DAMAGE pass: each bond is directed transmit·wd/W, but a break only CONSUMES what it needs
+        // (its Strength = surface energy); the over-damage is recovered and continues forward.
+        float recovered = 0f;
+        foreach (var (bk, j, wc, wd) in outBonds)
         {
-            if (f.Budget <= 0f) break;
-            float deliver = e * MathF.Min(w * norm, BoostCap);
-            if (deliver > eff[bk])
+            float absorb = transmit * wd / W;
+            float effStr = bonds[bk].Strength / spinMul[bk];          // spin lowers the break threshold
+            float consumed = MathF.Min(absorb, MathF.Max(0f, effStr - bonds[bk].Stress));
+            bonds[bk].Stress += consumed;
+            if (bonds[bk].Stress >= effStr - 1e-4f) broken[bk] = true;
+            recovered += absorb - consumed;
+        }
+        // FORWARD = conduct budget + recovered over-damage, distributed by conduct weight.
+        float fwdTotal = transmit * (sumWc / W) + recovered;
+        if (sumWc > 1e-9f)
+        {
+            foreach (var (bk, j, wc, wd) in outBonds)
             {
-                broken[bk] = true;
-                f.Budget -= eff[bk];
-                float tr = (deliver - eff[bk]) * f.Transmission;
-                if (tr > e) tr = e;                          // child never exceeds parent
-                if (tr > energy[j]) { energy[j] = tr; frontier.Add(j); }
+                float fwd = fwdTotal * wc / sumWc;
+                if (fwd <= 0f) continue;
+                if (processed[j] < 0f && fwd > energy[j]) { energy[j] = fwd; f.Parent[j] = i; frontier.Add(j); }
+                else RouteFling(j, fwd, pulverized, flingE);
             }
         }
+        else RouteFling(i, fwdTotal, pulverized, flingE);
+    }
+
+    private static void RouteFling(int j, float amount, bool[] pulverized, float[] flingE)
+    {
+        if (amount <= 0f) return;
+        if (!pulverized[j]) flingE[j] += amount;   // a vaporised cell just disperses it as dust
     }
 
     internal static float Lerp(float a, float b, float t) => a + (b - a) * t;

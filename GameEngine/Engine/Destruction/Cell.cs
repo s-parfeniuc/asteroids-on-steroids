@@ -12,8 +12,12 @@ public struct Cell
     public Vector2[] Local = null!; // convex polygon, body-local vertices
     public Vector2   Centroid;     // body-local centroid of this cell
     public float     Area;         // |area| of the cell (px²)
-    public float     DensityMult = 1f;  // per-cell density multiplier (default 1 = material density)
-    public float     BlastResist = 0f;  // [0,1] fraction of extra energy needed to vaporise this cell
+    public float     DensityMult = 1f;  // per-cell density multiplier (default 1 = material density).
+                                        // Cell mass = Area × DensityMult × material Density; this is the
+                                        // single resistance-to-vaporization axis (armor = dense + heavy).
+    public float     Damage      = 0f;  // accumulated comminution toward the vaporise threshold
+                                        // (cellToughness × mass); repeated hits build it (fatigue),
+                                        // it decays by RelaxRate, and the cell pulverises when it's reached.
     /// <summary>Functional role assigned by the shape editor (cockpit, cannon, propeller, etc.).
     /// Null / empty = generic. Preserved through fracture splits.</summary>
     public string?   Role        = null;

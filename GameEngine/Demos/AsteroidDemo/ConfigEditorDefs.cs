@@ -13,20 +13,45 @@ static class ConfigEditorDefs
     // ── Material ──────────────────────────────────────────────────────────────
     public static readonly EditorDef<MaterialConfig> Material =
         new EditorDef<MaterialConfig>()
-            .Slider(m => m.Toughness,            "Toughness",         0.5f,   40f)
+            .Slider(m => m.Toughness,            "Toughness",         0.5f,   120f)
+            .Slider(m => m.Restitution,          "Restitution",       0f,     0.9f)
+            .Slider(m => m.RelaxRate,            "Relax Rate",        0f,     2000f, "0")
             .Slider(m => m.Brittleness,          "Brittleness",       0f,     1f)
             .Slider(m => m.CrackDirectionality,  "Crack Direction.",  0f,     1f)
+            .Slider(m => m.CrackSpeed,           "Crack Speed",       20f,    2000f, "0")
             .Slider(m => m.GrainArea,            "Grain Area",        200f,   6000f, "0")
             .Slider(m => m.MinFragmentArea,      "Min Fragment",      20f,    1000f, "0")
             .Separator()
             .Slider(m => m.Density,              "Density",           0.2f,   6f)
-            .Slider(m => m.KineticFraction,      "Kinetic Frac.",     0f,     1f)
-            .Slider(m => m.SurfaceEfficiency,    "Surface Eff.",      0f,     0.5f)
+            .Slider(m => m.CellToughness,        "Cell Toughness",    0f,     5f)
             .Slider(m => m.SpinPreStress,        "Spin PreStress",    0f,     0.5f)
             .Separator()
-            .Slider(m => m.CrackSpeed,           "Crack Speed",       0.1f,   6f)
             .Slider(m => m.DetachCellScale,      "Detach Scale",      0.5f,   1.1f)
             .Slider(m => m.DetachCellJitter,     "Detach Jitter",     0f,     0.2f);
+
+    // ── Fracture (global model tuning) ────────────────────────────────────────
+    public static readonly EditorDef<FractureGlobalConfig> Fracture =
+        new EditorDef<FractureGlobalConfig>()
+            .Slider(f => f.EnergyScale,         "Energy Scale",     0.00001f, 0.001f, "0.00000")
+            .Slider(f => f.BulletMass,          "Bullet Mass",      0.5f,    50f)
+            .Separator()
+            .Slider(f => f.ReachMin,            "Reach Min",        0f,      0.5f)
+            .Slider(f => f.ReachMax,            "Reach Max",        0.5f,    1f)
+            .Slider(f => f.VaporEff,            "Vaporize Eff.",    0f,      1f)
+            .Slider(f => f.BreakPerp,           "Break Perp.",      0f,      1f)
+            .Slider(f => f.AlignExponent,       "Align Exp.",       0.5f,    4f)
+            .Separator()
+            .Slider(f => f.FlingScale,          "Fling Scale",      0f,      500f, "0")
+            .Slider(f => f.FragmentSpeedMax,    "Frag Speed Max",   50f,     1500f, "0")
+            .Slider(f => f.TumbleScale,         "Tumble Scale",     0f,      1000f, "0")
+            .Slider(f => f.FragmentSpinMax,     "Frag Spin Max",    0f,      10f)
+            .Separator()
+            .Slider(f => f.SpinCap,             "Spin Cap",         0f,      10f)
+            .Slider(f => f.SpinProfileBase,     "Spin Profile Base", 0f,     1f)
+            .Separator()
+            .Slider(f => f.AsteroidBlastFraction, "Ast. Blast Frac.", 0f,    1f)
+            .Slider(f => f.AsteroidDirSpin,     "Ast. Dir Spin",    0f,      1f)
+            .Slider(f => f.AsteroidCollisionThreshold, "Ast. Collide Thr.", 0f, 200f, "0");
 
     // ── Weapon (base fields shared by all weapon types) ───────────────────────
     public static readonly EditorDef<WeaponConfig> Weapon =
@@ -35,12 +60,14 @@ static class ConfigEditorDefs
             .Slider(w => w.ProjectileSpeed,   "Proj. Speed",      100f,   1500f, "0")
             .Slider(w => w.TimeToLive,        "Time to Live",     0.5f,   6f)
             .Separator()
-            .Slider(w => w.Energy,            "Energy",           0f,     600f,  "0")
             .Slider(w => w.Directionality,    "Directionality",   0f,     1f)
-            .Slider(w => w.MomentumTransfer,  "Momentum Xfer",    0f,     0.05f)
-            .Slider(w => w.EjectFraction,     "Eject Frac.",      0f,     0.5f)
-            .Slider(w => w.ImpactSpin,        "Impact Spin",      0f,     2f)
-            .Slider(w => w.BlastFraction,     "Blast Frac.",      0f,     1f);
+            .Slider(w => w.BlastFraction,     "Blast Frac.",      0f,     1f)
+            .Slider(w => w.Knockback,         "Knockback",        0f,     0.05f)
+            .Separator()
+            .Slider(w => w.SpeedJitter,       "Speed Jitter",     0f,     0.6f)
+            .Slider(w => w.TtlJitter,         "TTL Jitter",       0f,     0.6f)
+            .Slider(w => w.SpreadJitter,      "Spread Jitter",    0f,     1f)
+            .Slider(w => w.Drag,              "Drag",             0f,     5f);
 
     // ── Procedural asteroid shape ─────────────────────────────────────────────
     public static readonly EditorDef<ProceduralAsteroidConfig> ProceduralShape =
@@ -49,7 +76,13 @@ static class ConfigEditorDefs
             .Slider(p => p.Roughness,          "Roughness",        0f,     0.6f)
             .Slider(p => p.NoiseFrequency,     "Noise Freq.",      0.5f,   8f)
             .Slider(p => p.ConcavityBias,      "Concavity Bias",   0f,     0.4f)
-            .Slider(p => p.SeedClusterCenter,  "Cluster Center",   0f,     1f)
+            .Separator()
+            .SliderInt(p => p.ClusterCount,    "Clusters",         0,      12)
+            .Slider(p => p.ClusterCentrality,  "Centrality",       0f,     1f)
+            .Slider("Spread Min", p => p.ClusterSpread[0], (p, v) => p.ClusterSpread[0] = v, 0f, 1f)
+            .Slider("Spread Max", p => p.ClusterSpread[1], (p, v) => p.ClusterSpread[1] = v, 0f, 1f)
+            .Slider(p => p.BondGain,           "Bond Gain",        0f,     5f)
+            .Slider(p => p.DensityGain,        "Density Gain",     0f,     5f)
             .Separator()
             // Arrays need explicit lambdas; expression trees can't assign array elements.
             .SliderInt("Verts Min", p => p.VertexCount[0], (p, v) => p.VertexCount[0] = v, 4, 24)

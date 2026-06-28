@@ -12,3 +12,8 @@ public struct AsteroidVariant { public string Key; }
 
 /// <summary>Key into GameConfig.Entities (e.g. "drone", "bruiser", "mothership").</summary>
 public struct AlienVariant { public string Key; }
+
+/// <summary>Tracks which GameConfig asteroid type key spawned this body, enabling live
+/// material sync: editor changes to that material propagate to the running simulation.
+/// (Used by the demo/editor; harmless in the game.)</summary>
+public struct AsteroidTypeKey { public string Key; }
