@@ -1,4 +1,4 @@
-# Wave spawn log — started 2026-07-17 16:17:09
+# Wave spawn log — started 2026-07-17 21:46:14
 
 [Wave 1] T=0.0s   budget=60   sizeBias=-0.20   maxCells=300
   9 asteroids   ~295 cells total
@@ -7,25 +7,86 @@
   standard   x1   sizes: 1.52   cells: ~31   subtotal≈31
   gravel     x4   sizes: 1.42 1.41 0.81 0.51   cells: ~6 ~6 ~2 ~1   subtotal≈15
 
-[Wave 2] T=12.6s   budget=60   sizeBias=-0.18   maxCells=300
-  9 asteroids   ~216 cells total
-  unstable   x2   sizes: 0.83 1.52   cells: ~26 ~87   subtotal≈113
-  standard   x1   sizes: 1.36   cells: ~24   subtotal≈24
-  boulder    x2   sizes: 1.26 1.02   cells: ~39 ~26   subtotal≈65
-  gravel     x4   sizes: 1.86 0.72 0.51 0.61   cells: ~11 ~1 ~1 ~1   subtotal≈14
+[Wave 2] T=16.5s   budget=60   sizeBias=-0.18   maxCells=300
+  11 asteroids   ~219 cells total
+  gravel     x6   sizes: 2.42 1.94 2.84 1.16 0.52 0.54   cells: ~19 ~12 ~27 ~4 ~1 ~1   subtotal≈64
+  spinner    x2   sizes: 1.04 1.91   cells: ~11 ~37   subtotal≈48
+  boulder    x1   sizes: 1.45   cells: ~53   subtotal≈53
+  standard   x1   sizes: 0.82   cells: ~9   subtotal≈9
+  dune       x1   sizes: 0.94   cells: ~45   subtotal≈45
 
-[Wave 3] T=24.9s   budget=60   sizeBias=-0.17   maxCells=300
-  5 asteroids   ~210 cells total
-  unstable   x1   sizes: 1.60   cells: ~96   subtotal≈96
-  dune       x1   sizes: 1.35   cells: ~94   subtotal≈94
-  gravel     x1   sizes: 1.16   cells: ~4   subtotal≈4
-  spinner    x1   sizes: 0.82   cells: ~6   subtotal≈6
+[Wave 3] T=33.0s   budget=67   sizeBias=-0.16   maxCells=320
+  7 asteroids   ~220 cells total
+  dune       x1   sizes: 1.01   cells: ~52   subtotal≈52
+  unstable   x1   sizes: 1.98   cells: ~147   subtotal≈147
+  gravel     x4   sizes: 1.52 1.00 0.65 0.62   cells: ~7 ~3 ~1 ~1   subtotal≈12
+  standard   x1   sizes: 0.84   cells: ~9   subtotal≈9
+
+[Wave 4] T=42.7s   budget=67   sizeBias=-0.14   maxCells=320
+  5 asteroids   ~157 cells total
+  standard   x1   sizes: 1.67   cells: ~37   subtotal≈37
+  dune       x2   sizes: 0.90 1.20   cells: ~41 ~74   subtotal≈115
+  droplet    x1   sizes: 0.58   cells: ~2   subtotal≈2
+  gravel     x1   sizes: 0.98   cells: ~3   subtotal≈3
+
+[Wave 5] T=52.2s   budget=67   sizeBias=-0.13   maxCells=320
+  7 asteroids   ~259 cells total
+  gravel     x4   sizes: 2.36 0.53 0.51 0.53   cells: ~18 ~1 ~1 ~1   subtotal≈21
+  dune       x1   sizes: 1.98   cells: ~200   subtotal≈200
+  spinner    x1   sizes: 1.67   cells: ~28   subtotal≈28
   standard   x1   sizes: 0.87   cells: ~10   subtotal≈10
 
-[Wave 4] T=34.4s   budget=67   sizeBias=-0.15   maxCells=320
-  10 asteroids   ~251 cells total
-  gravel     x3   sizes: 2.81 2.77 0.93   cells: ~26 ~25 ~2   subtotal≈53
-  unstable   x2   sizes: 1.51 1.10   cells: ~85 ~46   subtotal≈131
-  standard   x3   sizes: 1.02 0.81 1.55   cells: ~13 ~8 ~32   subtotal≈53
-  spinner    x1   sizes: 0.98   cells: ~9   subtotal≈9
-  droplet    x1   sizes: 0.78   cells: ~5   subtotal≈5
+[Wave 6] T=54.7s   budget=67   sizeBias=-0.13   maxCells=320
+  5 asteroids   ~45 cells total
+  gravel     x4   sizes: 2.53 0.53 1.01 0.98   cells: ~21 ~1 ~3 ~3   subtotal≈28
+  standard   x1   sizes: 1.15   cells: ~17   subtotal≈17
+
+[Wave 7] T=64.2s   budget=74   sizeBias=-0.11   maxCells=340
+  9 asteroids   ~310 cells total   3 aliens
+  spinner    x1   sizes: 1.07   cells: ~11   subtotal≈11
+  unstable   x3   sizes: 1.26 0.88 1.93   cells: ~59 ~29 ~140   subtotal≈228
+  boulder    x1   sizes: 1.30   cells: ~42   subtotal≈42
+  gravel     x2   sizes: 1.05 1.62   cells: ~3 ~8   subtotal≈11
+  standard   x2   sizes: 0.90 0.80   cells: ~10 ~8   subtotal≈18
+  drone      ×3 (alien)
+
+[Wave 8] T=77.0s   budget=74   sizeBias=-0.10   maxCells=340
+  8 asteroids   ~151 cells total   3 aliens
+  boulder    x1   sizes: 1.43   cells: ~52   subtotal≈52
+  gravel     x4   sizes: 0.70 2.97 1.16 0.63   cells: ~1 ~29 ~4 ~1   subtotal≈35
+  unstable   x1   sizes: 1.13   cells: ~48   subtotal≈48
+  standard   x1   sizes: 1.00   cells: ~13   subtotal≈13
+  droplet    x1   sizes: 0.62   cells: ~3   subtotal≈3
+  drone      ×3 (alien)
+
+[Wave 9] T=86.5s   budget=74   sizeBias=-0.08   maxCells=340
+  6 asteroids   ~271 cells total   3 aliens
+  standard   x2   sizes: 1.81 1.32   cells: ~44 ~23   subtotal≈67
+  unstable   x4   sizes: 1.01 1.63 0.88 1.00   cells: ~38 ~100 ~29 ~37   subtotal≈204
+  drone      ×3 (alien)
+
+[Wave 10] T=100.0s   budget=81   sizeBias=-0.07   maxCells=360
+  6 asteroids   ~261 cells total   3 aliens
+  unstable   x1   sizes: 1.66   cells: ~103   subtotal≈103
+  standard   x1   sizes: 1.31   cells: ~23   subtotal≈23
+  dune       x2   sizes: 1.23 1.05   cells: ~77 ~56   subtotal≈133
+  gravel     x2   sizes: 0.62 0.70   cells: ~1 ~1   subtotal≈2
+  drone      ×3 (alien)
+
+[Wave 11] T=115.3s   budget=81   sizeBias=-0.05   maxCells=360
+  12 asteroids   ~265 cells total   3 aliens
+  dune       x1   sizes: 0.81   cells: ~33   subtotal≈33
+  unstable   x2   sizes: 1.07 1.05   cells: ~43 ~41   subtotal≈84
+  boulder    x1   sizes: 1.10   cells: ~30   subtotal≈30
+  spinner    x2   sizes: 0.95 1.83   cells: ~9 ~34   subtotal≈43
+  gravel     x4   sizes: 1.69 1.13 0.68 0.57   cells: ~9 ~4 ~1 ~1   subtotal≈15
+  standard   x1   sizes: 2.00   cells: ~53   subtotal≈53
+  droplet    x1   sizes: 0.92   cells: ~7   subtotal≈7
+  drone      ×3 (alien)
+
+[Wave 12] T=128.0s   budget=88   sizeBias=-0.03   maxCells=380
+  3 asteroids   ~280 cells total   3 aliens
+  unstable   x1   sizes: 0.99   cells: ~37   subtotal≈37
+  dune       x1   sizes: 1.99   cells: ~203   subtotal≈203
+  boulder    x1   sizes: 1.27   cells: ~40   subtotal≈40
+  drone      ×3 (alien)
