@@ -112,7 +112,7 @@ public sealed unsafe class SdlGameWindow : IGameWindow
         _surface = SKSurface.Create(_grContext, rt, GRSurfaceOrigin.BottomLeft, SKColorType.Rgba8888)
             ?? throw new InvalidOperationException("SKSurface.Create returned null");
 
-        _skiaRenderer = new SkiaRenderer(_surface.Canvas);
+        _skiaRenderer = new SkiaRenderer(_surface, width, height);   // needs the surface for snapshot-based post FX
     }
 
     public void PollEvents()

@@ -31,6 +31,11 @@ public struct GrenadeFuse { public float Remaining; public string WeaponKey; }
 /// <summary>Marker on piercing round bodies. Carries aim direction for lateral clamp, and a
 /// brief PlayerGrace countdown (seconds) during which the round ignores the player layer so
 /// it can clear the firing ship's shape before colliding with it normally.</summary>
+/// <summary>A wave body spawned in the off-screen ring OUTSIDE the playable field. Exempts it from
+/// the border hazard (damp/push/clamp/erosion) until it crosses into the field — without this the
+/// hazard would teleport it to the edge on its first frame. Removed on entry.</summary>
+public struct InboundSpawn { }
+
 /// <summary>
 /// A piercing body's terminal-ballistics state. <see cref="Power"/> is its remaining penetration
 /// budget, set once at spawn from the body's own kinetic energy (<see cref="PowerPerKE"/> is the
@@ -85,9 +90,10 @@ public struct BulletVisual { public Color Color; }
 public struct BulletData
 {
     public string WeaponKey;
-    public float  Drag;        // 1/s velocity damping; 0 = none
-    public Entity Owner;       // firing entity (ignored while OwnerGrace > 0)
-    public float  OwnerGrace;  // seconds during which owner-hits are skipped
+    public float  Drag;         // 1/s velocity damping; 0 = none
+    public Entity Owner;        // firing entity (ignored while OwnerGrace > 0)
+    public float  OwnerGrace;   // seconds during which owner-hits are skipped
+    public float? MassOverride; // impact mass, trumping the weapon config's (e.g. boss barrage rays)
 }
 
 /// <summary>Tags all active mothership fragment entities for shared tracking and win condition.</summary>

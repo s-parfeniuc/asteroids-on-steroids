@@ -9,14 +9,27 @@ namespace AsteroidsEngine.Platform.Sdl;
 /// owned by <see cref="SdlGameWindow"/>; the window uploads and presents the
 /// backing bitmap. This and SdlGameWindow are the only types that know Skia.
 /// </summary>
-public sealed class SkiaRenderer : IRenderer, IDisposable
+public sealed class SkiaRenderer : IRenderer, IPostEffects, IDisposable
 {
+    private readonly SKSurface _surface;
     private readonly SKCanvas _canvas;
+    private readonly int _width, _height;
     private readonly SKPaint  _fill   = new() { Style = SKPaintStyle.Fill,   IsAntialias = true };
     private readonly SKPaint  _stroke = new() { Style = SKPaintStyle.Stroke, IsAntialias = true };
+    private readonly SKPaint  _warp   = new() { IsAntialias = true };
     private readonly Dictionary<string, SKPaint> _textPaints = new();
 
-    public SkiaRenderer(SKCanvas canvas) => _canvas = canvas;
+    // Reusable warp scratch (triangle list, 6 verts per mesh cell) — kept exactly sized for CreateCopy.
+    private SKPoint[] _warpPos = System.Array.Empty<SKPoint>();
+    private SKPoint[] _warpTex = System.Array.Empty<SKPoint>();
+
+    public SkiaRenderer(SKSurface surface, int width, int height)
+    {
+        _surface = surface;
+        _canvas  = surface.Canvas;
+        _width   = width;
+        _height  = height;
+    }
 
     public void Begin(Color clear)
     {
@@ -129,6 +142,60 @@ public sealed class SkiaRenderer : IRenderer, IDisposable
         return path;
     }
 
+    public void Distort(Vector2 regionMin, Vector2 regionMax, int gridX, int gridY, Func<Vector2, Vector2> sourceOf)
+    {
+        // Clamp the region to the framebuffer; bail on anything degenerate.
+        int x0 = (int)MathF.Floor(Math.Clamp(MathF.Min(regionMin.X, regionMax.X), 0, _width));
+        int y0 = (int)MathF.Floor(Math.Clamp(MathF.Min(regionMin.Y, regionMax.Y), 0, _height));
+        int x1 = (int)MathF.Ceiling(Math.Clamp(MathF.Max(regionMin.X, regionMax.X), 0, _width));
+        int y1 = (int)MathF.Ceiling(Math.Clamp(MathF.Max(regionMin.Y, regionMax.Y), 0, _height));
+        if (x1 - x0 < 2 || y1 - y0 < 2) return;
+        gridX = Math.Max(1, gridX); gridY = Math.Max(1, gridY);
+
+        // Snapshot the region as it stands, so the warp resamples the frame drawn so far.
+        _canvas.Flush();
+        using var image = _surface.Snapshot(new SKRectI(x0, y0, x1, y1));
+        if (image == null) return;
+        // The snapshot's pixel (0,0) is surface (x0,y0); a plain image shader samples in those
+        // local coords, so texture coords are sourceScreen − regionOrigin.
+        var origin = new Vector2(x0, y0);
+        using var shader = SKShader.CreateImage(image, SKShaderTileMode.Clamp, SKShaderTileMode.Clamp);
+        _warp.Shader = shader;
+
+        int need = gridX * gridY * 6;
+        if (_warpPos.Length != need) { _warpPos = new SKPoint[need]; _warpTex = new SKPoint[need]; }
+
+        float cellW = (x1 - x0) / (float)gridX, cellH = (y1 - y0) / (float)gridY;
+        SKPoint Dst(int i, int j) => new(x0 + i * cellW, y0 + j * cellH);
+        SKPoint Src(SKPoint d)
+        {
+            Vector2 s = sourceOf(new Vector2(d.X, d.Y)) - origin;
+            return new SKPoint(s.X, s.Y);
+        }
+
+        int v = 0;
+        for (int j = 0; j < gridY; j++)
+        for (int i = 0; i < gridX; i++)
+        {
+            SKPoint a = Dst(i, j),     b = Dst(i + 1, j);
+            SKPoint c = Dst(i, j + 1), e = Dst(i + 1, j + 1);
+            // two triangles: a,b,c and c,b,e
+            _warpPos[v]   = a; _warpTex[v++]   = Src(a);
+            _warpPos[v]   = b; _warpTex[v++]   = Src(b);
+            _warpPos[v]   = c; _warpTex[v++]   = Src(c);
+            _warpPos[v]   = c; _warpTex[v++]   = Src(c);
+            _warpPos[v]   = b; _warpTex[v++]   = Src(b);
+            _warpPos[v]   = e; _warpTex[v++]   = Src(e);
+        }
+
+        using var verts = SKVertices.CreateCopy(SKVertexMode.Triangles, _warpPos, _warpTex, null);
+        _canvas.Save();
+        _canvas.ResetMatrix();   // positions are absolute screen px
+        _canvas.DrawVertices(verts, SKBlendMode.Src, _warp);   // Src = overwrite the region with its warp
+        _canvas.Restore();
+        _warp.Shader = null;
+    }
+
     private static SKColor ToSk(Color c) => new(c.R, c.G, c.B, c.A);
 
     // Matrix3x2 (row-vector, M3x = translation) → SKMatrix.
@@ -141,6 +208,7 @@ public sealed class SkiaRenderer : IRenderer, IDisposable
     {
         _fill.Dispose();
         _stroke.Dispose();
+        _warp.Dispose();
         foreach (var p in _textPaints.Values) p.Dispose();
         _textPaints.Clear();
     }

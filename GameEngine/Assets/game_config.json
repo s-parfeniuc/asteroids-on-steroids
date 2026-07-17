@@ -107,7 +107,7 @@
     },
     "bollocksium": {
       "brittleness": 0.08,
-      "toughness": 530,
+      "toughness": 700,
       "restitution": 0.12,
       "relaxRate": 4000,
       "crackDirectionality": 0.40,
@@ -115,7 +115,7 @@
       "grainArea": 5000,
       "minFragmentArea": 5000,
       "density": 7.5,
-      "cellToughness": 2.5,
+      "cellToughness": 4.5,
       "spinPreStress": 0.04,
       "detachCellScale": 0.94,
       "detachCellJitter": 0.005
@@ -123,9 +123,9 @@
   },
   "weapons": {
     "cannon": {
-      "fireRate": 15,
+      "fireRate": 5,
       "projectileSpeed": 2500,
-      "timeToLive": 2.5,
+      "timeToLive": 0.7,
       "directionality": 0.55,
       "blastFraction": 0.1,
       "knockback": 0,
@@ -133,10 +133,10 @@
       "ttlJitter": 0,
       "spreadJitter": 0,
       "drag": 0,
-      "mass": 18
+      "mass": 36
     },
     "shotgun": {
-      "fireRate": 1.5,
+      "fireRate": 0.5,
       "projectileSpeed": 2500,
       "timeToLive": 0.5,
       "directionality": 0.2,
@@ -161,25 +161,25 @@
       "ttlJitter": 0,
       "spreadJitter": 0,
       "drag": 0,
-      "mass": 150
+      "mass": 500
     },
     "shotgun_alien": {
-      "fireRate": 1.5,
-      "projectileSpeed": 700,
-      "timeToLive": 1.2,
+      "fireRate": 2.5,
+      "projectileSpeed": 900,
+      "timeToLive": 0.7,
       "directionality": 0.3,
       "blastFraction": 0.15,
       "knockback": 0.005,
       "speedJitter": 0.25,
       "ttlJitter": 0.3,
       "spreadJitter": 0.6,
-      "drag": 1.5,
-      "rays": 17,
+      "drag": 1.0,
+      "rays": 11,
       "coneAngle": 18,
-      "mass": 100
+      "mass": 350
     },
     "piercing": {
-      "fireRate": 1,
+      "fireRate": 0.3,
       "projectileSpeed": 1900,
       "timeToLive": 2,
       "directionality": 0.9,
@@ -199,8 +199,8 @@
       "shapeScale": 0.5
     },
     "grenade": {
-      "fireRate": 0.8,
-      "projectileSpeed": 1200,
+      "fireRate": 0.2,
+      "projectileSpeed": 1500,
       "timeToLive": 0.15,
       "directionality": 0.05,
       "blastFraction": 0.75,
@@ -208,12 +208,12 @@
       "speedJitter": 0.3,
       "ttlJitter": 0.2554839,
       "spreadJitter": 0.5,
-      "drag": 2,
-      "fuseTime": 1.2212903,
+      "drag": 3,
+      "fuseTime": 0.8,
       "shrapnelCount": 45,
       "shrapnelSpread": 360,
       "shrapnelSpeed": 2700,
-      "shrapnelMass": 18
+      "shrapnelMass": 6
     }
   },
   "skills": {
@@ -240,12 +240,12 @@
     "shape": "player_ship",
     "shapeScale": 0.40,
     "material": "",
-    "thrust": 258.0645,
-    "rotSpeed": 6.064516,
-    "maxSpeed": 749.67737,
-    "brakeDrag": 1.9354838,
-    "impulse": 38.709675,
-    "lateralDrag": 1.6774194,
+    "thrust": 350.0,
+    "rotSpeed": 6.0,
+    "maxSpeed": 750.0,
+    "brakeDrag": 2.0,
+    "impulse": 50.0,
+    "lateralDrag": 1.67,
     "startingWeapon": "cannon",
     "skills": [
       "dash",
@@ -269,8 +269,8 @@
         "avoidance": 1
       },
       "thrust": 680,
-      "turnSpeed": 7,
-      "shootCooldown": 2,
+      "turnSpeed": 3,
+      "shootCooldown": 3,
       "lateralThrustPenaltyMult": 0.5,
       "alienImpactCoeff": 1,
       "shapeScale": 1,
@@ -282,7 +282,7 @@
     "bruiser": {
       "shape": "bruiser",
       "material": "",
-      "speed": 130,
+      "speed": 170,
       "detectionRadius": 1100,
       "steeringWeights": {
         "separation": 0.6,
@@ -290,8 +290,8 @@
         "avoidance": 0.5
       },
       "thrust": 900,
-      "turnSpeed": 3.5,
-      "shootCooldown": 3,
+      "turnSpeed": 1.5,
+      "shootCooldown": 5,
       "lateralThrustPenaltyMult": 0.3,
       "alienImpactCoeff": 1,
       "shapeScale": 1,
@@ -301,8 +301,8 @@
       "preferredRange": 0,
       "dash": {
         "cooldown": 2,
-        "triggerRange": 480,
-        "speed": 700
+        "triggerRange": 300,
+        "speed": 800
       }
     },
     "mothership": {
@@ -323,21 +323,21 @@
       "baseCost": 100,
       "cellCount": 20,
       "boss": {
-        "shockwaveCooldown": 8,
+        "shockwaveCooldown": 3,
         "shockwaveRadius": 1800,
-        "shockwaveStrength": 150000,
+        "shockwaveStrength": 250000,
         "blackHoleCooldown": 7,
         "blackHoleRadius": 1300,
         "blackHoleStrength": 150000,
         "blackHoleCrushRadius": 40,
         "blackHoleDuration": 3,
         "blackHoleSpeed": 600,
-        "ramChargeCooldown": 6,
-        "ramChargeMinDist": 600,
-        "ramChargeDuration": 2.5,
-        "ramChargeSpeed": 350,
-        "ramChargeAccel": 800,
-        "spawnInterval": 8,
+        "ramChargeCooldown": 9,
+        "ramChargeMinDist": 350,
+        "ramChargeDuration": 3.5,
+        "ramChargeSpeed": 750,
+        "ramChargeAccel": 1600,
+        "spawnInterval": 5,
         "spawnType": "bruiser",
         "spawnSafetyMargin": 80,
         "driftThrust": 150,
@@ -357,7 +357,8 @@
         "barrageSpeedJitter": 0.25,
         "barrageSpreadJitter": 0.6,
         "barrageTtlJitter": 0.3,
-        "barrageSpawnRadius": 220
+        "barrageSpawnRadius": 220,
+        "barrageRayMass": 500
       },
       "aggroRadius": 0,
       "preferredRange": 0
@@ -366,7 +367,7 @@
   "asteroids": {
     "dune": {
       "procedural": {
-        "baseRadius": 170,
+        "baseRadius": 70,
         "vertexCount": [
           18,
           28
@@ -623,7 +624,7 @@
         0.8
       ],
       "densityMult": 2.5,
-      "baseCost": 8,
+      "baseCost": 6,
       "speedRange": [
         20,
         55
@@ -669,7 +670,7 @@
         1.2
       ],
       "densityMult": 1,
-      "baseCost": 10,
+      "baseCost": 8,
       "speedRange": [
         25,
         60
@@ -914,7 +915,7 @@
     }
   ],
   "scoring": {
-    "cellScoreAreaWeight": 0.00001,
+    "cellScoreAreaWeight": 0.00002,
     "killChainSteps": [
       1,
       1.1,
@@ -985,7 +986,8 @@
   "world": {
     "width": 5760,
     "height": 3240,
-    "cameraFollowSpeed": 10
+    "cameraFollowSpeed": 10,
+    "spawnMargin": 500
   },
   "borderHazard": {
     "enabled": true,
@@ -999,13 +1001,19 @@
     "baseMass": 8,
     "ramp": 0.5,
     "impactSpeed": 1000,
-    "decayRate": 0.5
+    "decayRate": 0.5,
+    "tintMaxAlpha": 120,
+    "warpEnabled": true,
+    "warpStrength": 7,
+    "warpFreq": 0.03,
+    "warpSpeed": 2.2,
+    "warpGrid": 24
   },
   "vortex": {
     "centripetal": 0.01,
     "tangential": 0.007,
     "deadzone": 0,
-    "capFrames": 360,
+    "capFrames": 180,
     "variationCentripetal": 0.1,
     "variationTangential": 0.06,
     "moveAmpX": 1400,
@@ -1015,13 +1023,34 @@
     "movePhase": 1.5707964,
     "borderMargin": 700
   },
+  "vortexFx": {
+    "enabled": true,
+    "gustInterval": 0.5,
+    "gustJitter": 0.6,
+    "motesPerGust": 14,
+    "maxMotes": 400,
+    "ttl": 2.2,
+    "ttlJitter": 0.4,
+    "maxRadius": 1600,
+    "streakSeconds": 0.09,
+    "speedScale": 1.0,
+    "color": [
+      150,
+      130,
+      240
+    ],
+    "warpEnabled": true,
+    "warpRadius": 620,
+    "warpStrength": 0.6,
+    "warpGrid": 20
+  },
   "waveSystem": {
-    "baseCellCap": 600,
+    "baseCellCap": 300,
     "maxCellCap": 2000,
-    "cellCapGrowthAmount": 30,
+    "cellCapGrowthAmount": 20,
     "growthIntervalSeconds": 30,
-    "baseBudget": 30,
-    "budgetGrowthPerInterval": 5,
+    "baseBudget": 60,
+    "budgetGrowthPerInterval": 7,
     "triggerThreshold": 0.3,
     "gracePeriodSeconds": 8,
     "hardTriggerIntervalSeconds": 15,
@@ -1029,13 +1058,41 @@
     "sizeBiasStart": -0.2,
     "sizeBiasEnd": 0.6,
     "sizeBiasRampEnd": 600,
-    "mothershpSpawnTime": 240,
+    "mothershpSpawnTime": 420,
     "pattern": {
-      "pattern": "scattered",
-      "direction": "inward",
+      "pattern": "wall",
+      "direction": "atPlayer",
       "spawnDuration": 4,
       "speedMult": 1.0,
       "aimJitter": 0.35
+    },
+    "campingResponse": {
+      "enabled": true,
+      "zoneDepth": 300,
+      "cornerScale": 1.8,
+      "triggerSeconds": 3,
+      "decayRate": 0.5,
+      "repeatSeconds": 12,
+      "budget": 150,
+      "cellCap": 600,
+      "sizeBias": 0,
+      "banner": "HUNTERS INBOUND",
+      "tintMaxAlpha": 70,
+      "weights": {
+        "drone": 0.3,
+        "bruiser": 0.4,
+        "armored": 0.6,
+        "unstable": 0.5,
+        "droplet": 0.5
+      },
+      "pattern": {
+        "pattern": "burst",
+        "direction": "atPlayer",
+        "side": "nearPlayer",
+        "spawnDuration": 2,
+        "burstRadius": 300,
+        "aimJitter": 0.2
+      }
     },
     "spawnBias": {
       "dune": {

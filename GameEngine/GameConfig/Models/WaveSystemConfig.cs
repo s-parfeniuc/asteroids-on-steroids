@@ -25,6 +25,42 @@ public class WaveSystemConfig
 
     /// <summary>Spawn pattern for normal waves (special waves may override with their own).</summary>
     public SpawnPatternConfig Pattern { get; set; } = new();
+
+    /// <summary>Anti-camping response: lingering near the border rim builds a timer that sends
+    /// hunter waves at the player from their nearest side.</summary>
+    public CampingResponseConfig CampingResponse { get; set; } = new();
+}
+
+/// <summary>
+/// Camping is tracked as time spent inside the border band (borderHazard.hazardZone + ZoneDepth
+/// from any edge). The timer DECAYS when the player leaves — it does not reset — so dipping in
+/// and out doesn't cheese it. At TriggerSeconds a hunter wave fires at the player from their
+/// nearest side, then again every RepeatSeconds while they stay camped.
+/// </summary>
+public class CampingResponseConfig
+{
+    public bool  Enabled        { get; set; } = true;
+    /// <summary>Band beyond the erosion rim that still counts as camping (px).</summary>
+    public float ZoneDepth      { get; set; } = 200f;
+    /// <summary>Corner reach as a multiple of the edge band: near a corner (close to two edges at
+    /// once) the zone extends this much further in, so hugging a corner is caught sooner and deeper
+    /// than hugging a flat edge.</summary>
+    public float CornerScale    { get; set; } = 1.8f;
+    public float TriggerSeconds { get; set; } = 20f;
+    /// <summary>Timer decay per second while outside the zone (1 = unwinds as fast as it builds).</summary>
+    public float DecayRate      { get; set; } = 0.5f;
+    /// <summary>Cadence of further hunter waves while the player keeps camping.</summary>
+    public float RepeatSeconds  { get; set; } = 12f;
+    public int   Budget         { get; set; } = 90;
+    public int   CellCap        { get; set; } = 400;
+    public float SizeBias       { get; set; } = 0f;
+    public string Banner        { get; set; } = "HUNTERS INBOUND";
+    /// <summary>Full-screen grey "you're exposed" filter alpha at full pressure (distinct from the
+    /// red erosion tint). 0 disables it.</summary>
+    public float TintMaxAlpha   { get; set; } = 70f;
+    public Dictionary<string, float> Weights { get; set; } = new() { ["drone"] = 1f };
+    public SpawnPatternConfig Pattern { get; set; } = new()
+        { Pattern = "burst", Direction = "atPlayer", Side = "nearPlayer", SpawnDuration = 2f };
 }
 
 public class SpecialWaveConfig
@@ -49,6 +85,9 @@ public class SpawnPatternConfig
     /// <summary>inward (at the world centre) · atPlayer (at the player's position at RELEASE time)
     /// · random · fixed (FixedAngle).</summary>
     public string Direction { get; set; } = "inward";
+    /// <summary>Which border the wave enters from (burst/wall/pincer): random · nearPlayer (the
+    /// side closest to the player, anchored at their projection — the anti-camping entry).</summary>
+    public string Side { get; set; } = "random";
     /// <summary>Aim angle in degrees when Direction == "fixed" (0 = +X, 90 = +Y/down).</summary>
     public float FixedAngle { get; set; } = 0f;
     /// <summary>Seconds the wave takes to trickle in (bodies released spread across the window).
@@ -95,11 +134,49 @@ public class VortexConfig
     public float BorderMargin         { get; set; } = 700f;
 }
 
+/// <summary>
+/// Vortex visualisation: sporadic wind-gust motes advected along the real force field (sparse and
+/// slow at the calm eye, dense and fast further out — the field's terminal speed grows with radius),
+/// drawn as fading streaks, plus an optional screen-space swirl warp centred on the eye.
+/// </summary>
+public class VortexFxConfig
+{
+    public bool  Enabled       { get; set; } = true;
+    /// <summary>Seconds between gust bursts (±GustJitter).</summary>
+    public float GustInterval  { get; set; } = 0.5f;
+    public float GustJitter    { get; set; } = 0.6f;
+    public int   MotesPerGust  { get; set; } = 14;
+    public int   MaxMotes      { get; set; } = 400;
+    public float Ttl           { get; set; } = 2.2f;
+    public float TtlJitter     { get; set; } = 0.4f;
+    /// <summary>Radius (world px) of the disc around the eye where motes spawn. Area-uniform, so
+    /// more appear further out — matching the field getting stronger with radius.</summary>
+    public float MaxRadius     { get; set; } = 1600f;
+    /// <summary>Streak tail length, in seconds of the mote's velocity (faster motes → longer tails).</summary>
+    public float StreakSeconds { get; set; } = 0.09f;
+    /// <summary>Visual multiplier on the advection speed (does not affect physics).</summary>
+    public float SpeedScale    { get; set; } = 1f;
+    public float[] Color       { get; set; } = [150f, 130f, 240f];
+
+    // ── Screen-space swirl warp centred on the eye ──────────────────────────────
+    public bool  WarpEnabled   { get; set; } = true;
+    /// <summary>Radius (world px) of the warp disc.</summary>
+    public float WarpRadius    { get; set; } = 620f;
+    /// <summary>Peak twist (radians) at the eye, falling to 0 at WarpRadius.</summary>
+    public float WarpStrength  { get; set; } = 0.6f;
+    public int   WarpGrid      { get; set; } = 20;
+}
+
 public class WorldConfig
 {
+    /// <summary>Playable field size. The camera clamps to it and the border hazard encloses it.</summary>
     public int   Width             { get; set; } = 5760;
     public int   Height            { get; set; } = 3240;
     public float CameraFollowSpeed { get; set; } = 4f;
+    /// <summary>Width (px) of the spawn ring OUTSIDE the playable field. Wave bodies spawn there and
+    /// drift in — guaranteed off-screen (the camera never sees past the playable bounds), so waves
+    /// can enter from the player's own side even when they're parked in a corner.</summary>
+    public float SpawnMargin       { get; set; } = 500f;
 }
 
 /// <summary>
@@ -137,4 +214,18 @@ public class BorderHazardConfig
     public float ImpactSpeed  { get; set; } = 1000f;
     /// <summary>Exposure recovery rate (× dt) once a body leaves the hazard rim.</summary>
     public float DecayRate    { get; set; } = 0.5f;
+
+    // ── Visuals: the primary cue is a red tint that deepens as the PLAYER goes into the rim; a
+    //    subtle heat-haze warp on the on-screen world edges is the secondary, thematic cue. ──
+    /// <summary>Full-screen red tint alpha (0..255) at the very edge, fading to 0 at the rim boundary.</summary>
+    public float TintMaxAlpha { get; set; } = 120f;
+    /// <summary>Heat-haze shimmer on the world edges when they are on-screen. 0 disables it.</summary>
+    public bool  WarpEnabled  { get; set; } = true;
+    /// <summary>Peak horizontal/vertical ripple (px) at the very edge, fading inward across HazardZone.</summary>
+    public float WarpStrength { get; set; } = 7f;
+    /// <summary>Ripple spatial frequency (radians per px along the edge).</summary>
+    public float WarpFreq     { get; set; } = 0.03f;
+    /// <summary>Ripple scroll speed (radians/s).</summary>
+    public float WarpSpeed    { get; set; } = 2.2f;
+    public int   WarpGrid     { get; set; } = 24;
 }

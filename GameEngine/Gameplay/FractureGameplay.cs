@@ -162,6 +162,27 @@ public sealed class FractureGameplay
         });
     }
 
+    /// <summary>True when the player ship can neither move nor fight: no propeller and no weapon
+    /// cell left alive — only the cockpit and generic hull. A drifting wreck is a lost run even
+    /// though the cockpit still lives.</summary>
+    private bool PlayerIsDerelict()
+    {
+        if (!_world.IsAlive(Player) || !_world.HasComponent<FracturableBody>(Player)) return false;
+        ref var fb = ref _world.GetComponent<FracturableBody>(Player);
+        bool[]? pulv = _world.HasComponent<FractureProcess>(Player)
+            ? _world.GetComponent<FractureProcess>(Player).Pulverized : null;
+        for (int i = 0; i < fb.Cells.Length; i++)
+        {
+            if (pulv != null && pulv[i]) continue;
+            switch (fb.Cells[i].Role)
+            {
+                case "propeller" or "cannon" or "shotgun" or "piercing" or "grenade":
+                    return false;
+            }
+        }
+        return true;
+    }
+
     private bool IsDashInvincible() =>
         _world.IsAlive(Player) && _world.HasComponent<SkillState>(Player)
         && _world.GetComponent<SkillState>(Player).DashActive > 0f;
@@ -202,7 +223,10 @@ public sealed class FractureGameplay
         // fracture units; per-weapon damage also differs through projectile SPEED (E ∝ v²) and count.
         // Shrapnel carry the "grenade" key (the grenade projectile itself detonates at line 162 and
         // never reaches here), so they take the grenade's dedicated ShrapnelMass.
-        float bulletMass = (weaponKey == "grenade" ? weaponCfg.ShrapnelMass : weaponCfg.Mass) ?? frac.BulletMass;
+        float? massOverride = hasData ? _world.GetComponent<BulletData>(ev.Bullet).MassOverride : null;
+        float bulletMass = massOverride
+                        ?? (weaponKey == "grenade" ? weaponCfg.ShrapnelMass : weaponCfg.Mass)
+                        ?? frac.BulletMass;
 
         float impactE = 0.5f * bulletMass * bulletVel.LengthSquared();
         _effects.EmitFlash(ev.Point, impactE);
@@ -345,10 +369,13 @@ public sealed class FractureGameplay
                     && _world.GetComponent<Collider>(ev.Body).Shape is CompoundShape cs)
                     cs.DisablePart(cell);
 
-                // Player loses if its cockpit cell was the one pulverized.
+                // Player loses if its cockpit cell was the one pulverized…
                 if (ev.Body == Player && fb.Cells[cell].Role == "cockpit") PendingGameOver = true;
             }
         }
+
+        // …or if the ship is now a derelict: cockpit + generic hull only, no way to move or fight.
+        if (ev.Body == Player && !PendingGameOver && PlayerIsDerelict()) PendingGameOver = true;
 
         BodyColor color = GetBodyColor(ev.Body);
         _effects.EmitDustBurst(ev.WorldCentroid,
@@ -375,6 +402,7 @@ public sealed class FractureGameplay
         var parentVr = _world.HasComponent<VortexResponse>(ev.Body)
             ? _world.GetComponent<VortexResponse>(ev.Body)
             : new VortexResponse { CentripetalMult = 1f, TangentialMult = 1f };
+        bool parentInbound = _world.HasComponent<InboundSpawn>(ev.Body);   // still outside the field
         bool cockpitFound = false;
         // Ephemeral bodies (the piercing round, or any TTL'd fragment of one) pass the TTL on
         // to their own shards so later crack generations also fade instead of littering the map.
@@ -388,6 +416,7 @@ public sealed class FractureGameplay
             var ne = SpawnBody(f.Body, f.WorldCentroid, f.Rotation, f.Linear, f.Angular, color, ghost: true);
             _world.AddComponent(ne, parentVr);
             _world.AddComponent(ne, fg);
+            if (parentInbound) _world.AddComponent(ne, new InboundSpawn());   // keep the entry exemption
             if (ephemeral) _world.AddComponent(ne, new TimeToLive { Remaining = PiercingFragmentTtl });
             bool fragCockpit = f.Body.Cells.Any(c => c.Role == "cockpit");
             if (isMothership)
@@ -421,7 +450,9 @@ public sealed class FractureGameplay
             }
         }
         _world.DestroyEntity(ev.Body);
-        if (isPlayer && !cockpitFound) PendingGameOver = true;
+        // Lost run: no cockpit fragment survived, or the surviving cockpit fragment is a derelict
+        // (cockpit + generic hull only — it can neither move nor fight).
+        if (isPlayer && (!cockpitFound || PlayerIsDerelict())) PendingGameOver = true;
     }
 
     private void OnFractureSplit(FractureSplitEvent ev)
@@ -439,6 +470,7 @@ public sealed class FractureGameplay
         var parentVr = _world.HasComponent<VortexResponse>(ev.Body)
             ? _world.GetComponent<VortexResponse>(ev.Body)
             : new VortexResponse { CentripetalMult = 1f, TangentialMult = 1f };
+        bool parentInbound = _world.HasComponent<InboundSpawn>(ev.Body);   // still outside the field
         bool cockpitFound = false;
         bool ephemeral = _world.HasComponent<PiercingRoundTag>(ev.Body) || _world.HasComponent<TimeToLive>(ev.Body);
         bool isPiercing = _world.HasComponent<PiercingRoundTag>(ev.Body);
@@ -451,6 +483,7 @@ public sealed class FractureGameplay
             var ne = SpawnBody(f.Body, f.WorldCentroid, f.Rotation, f.Linear, f.Angular, color, ghost: true);
             _world.AddComponent(ne, parentVr);
             _world.AddComponent(ne, fg);
+            if (parentInbound) _world.AddComponent(ne, new InboundSpawn());   // keep the entry exemption
             if (ephemeral) _world.AddComponent(ne, new TimeToLive { Remaining = PiercingFragmentTtl });
             if (p.Process.HasValue) _world.AddComponent(ne, p.Process.Value);
             bool fragCockpit = f.Body.Cells.Any(c => c.Role == "cockpit");
@@ -482,6 +515,8 @@ public sealed class FractureGameplay
             }
         }
         _world.DestroyEntity(ev.Body);
-        if (isPlayer && !cockpitFound) PendingGameOver = true;
+        // Lost run: no cockpit fragment survived, or the surviving cockpit fragment is a derelict
+        // (cockpit + generic hull only — it can neither move nor fight).
+        if (isPlayer && (!cockpitFound || PlayerIsDerelict())) PendingGameOver = true;
     }
 }

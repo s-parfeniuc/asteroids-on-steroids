@@ -12,12 +12,13 @@ namespace AsteroidsGame.Gameplay;
 public static class AlienPrefab
 {
     /// <summary><paramref name="aimDir"/> overrides the default inward-±30° entry direction (wave
-    /// spawn patterns aim their bodies); <paramref name="speedMult"/> scales the entry speed.</summary>
-    public static void Spawn(World world, GameContext ctx, Random rng, Vector2 pos, string typeKey,
-                             Vector2? aimDir = null, float speedMult = 1f)
+    /// spawn patterns aim their bodies); <paramref name="speedMult"/> scales the entry speed.
+    /// Returns the spawned entity (default if the type/shape was invalid).</summary>
+    public static Entity Spawn(World world, GameContext ctx, Random rng, Vector2 pos, string typeKey,
+                               Vector2? aimDir = null, float speedMult = 1f)
     {
-        if (!ctx.Config.Entities.TryGetValue(typeKey, out var ec)) return;
-        if (!ctx.Shapes.TryGetValue(ec.Shape, out var sd)) return;
+        if (!ctx.Config.Entities.TryGetValue(typeKey, out var ec)) return default;
+        if (!ctx.Shapes.TryGetValue(ec.Shape, out var sd)) return default;
         var mat = ctx.Config.ResolveMaterial(ec.Material, sd);   // shape owns it; config overrides
 
         float sc      = ec.ShapeScale;
@@ -67,5 +68,6 @@ public static class AlienPrefab
             col.Mask  = GameLayers.Asteroid | GameLayers.Player | GameLayers.Alien;
         }
         ctx.CellBudget.Add(body.Cells.Length);
+        return e;
     }
 }

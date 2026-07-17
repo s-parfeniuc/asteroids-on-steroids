@@ -131,8 +131,14 @@ public sealed class BossSystem : ISystem
                 brain.RamCd -= dt;
                 if (brain.RamCd <= 0f)
                 {
-                    if ((playerPos - pos).Length() >= bc.RamChargeMinDist) brain.RamActive = bc.RamChargeDuration;
-                    brain.RamCd = bc.RamChargeCooldown * w;
+                    if ((playerPos - pos).Length() >= bc.RamChargeMinDist)
+                    {
+                        brain.RamActive = bc.RamChargeDuration;
+                        brain.RamCd     = bc.RamChargeCooldown * w;
+                    }
+                    // Too close for a run-up: retry shortly instead of burning the whole cooldown on a
+                    // no-op (which is why the boss "never rammed" when PreferredRange < RamChargeMinDist).
+                    else brain.RamCd = 0.4f;
                 }
             }
 
@@ -209,7 +215,8 @@ public sealed class BossSystem : ISystem
             float spd    = bc.BarrageSpeed * (1f + ((float)_rng.NextDouble() * 2f - 1f) * bc.BarrageSpeedJitter);
             float ttl    = wcfg.TimeToLive * (1f + ((float)_rng.NextDouble() * 2f - 1f) * bc.BarrageTtlJitter);
             WeaponEffects.SpawnBullet(world, center + dir * bc.BarrageSpawnRadius, dir * MathF.Max(1f, spd),
-                "cannon_alien", MathF.Max(0.05f, ttl), color, owner: default, ownerGrace: 0f, wcfg.Drag, alien: true);
+                "cannon_alien", MathF.Max(0.05f, ttl), color, owner: default, ownerGrace: 0f, wcfg.Drag, alien: true,
+                massOverride: bc.BarrageRayMass);
         }
         _camera.AddTrauma(0.35f);
         _fx.EmitFlash(center, 30000f);

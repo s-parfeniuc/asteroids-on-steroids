@@ -82,6 +82,10 @@ public class BossConfig
     public float  BarrageSpreadJitter { get; set; } = 0.6f;  // angular scatter within the ring spacing
     public float  BarrageTtlJitter    { get; set; } = 0.3f;
     public float  BarrageSpawnRadius  { get; set; } = 220f;  // ring radius bullets spawn on (clears the hull)
+    /// <summary>Impact mass of each barrage ray. Barrage rays reuse the cannon_alien visual/TTL but
+    /// hit with THIS mass instead of that weapon's, so the barrage's damage tunes independently.
+    /// Null = fall back to the cannon_alien weapon mass.</summary>
+    public float? BarrageRayMass      { get; set; }
 }
 
 public class SteeringWeights

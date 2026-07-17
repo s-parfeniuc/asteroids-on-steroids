@@ -14,6 +14,7 @@ public class GameConfig
     public WorldConfig                         World      { get; set; } = new();
     public BorderHazardConfig                  BorderHazard { get; set; } = new();
     public VortexConfig                        Vortex     { get; set; } = new();
+    public VortexFxConfig                      VortexFx   { get; set; } = new();
     public WaveSystemConfig                    WaveSystem { get; set; } = new();
     public VfxConfig                           Vfx        { get; set; } = new();
     public FractureGlobalConfig                Fracture   { get; set; } = new();

@@ -83,68 +83,6 @@ public sealed class WorldRenderer
         r.PopTransform();
     }
 
-    /// <summary>
-    /// World-space overlay for the two invisible hazards the player must read: the vortex eye
-    /// (rotating spiral arms + bright core) and the border danger rim (translucent red strips +
-    /// a pulsing inner warning line at the erosion boundary). Drawn over the field as a HUD-in-world.
-    /// </summary>
-    public void DrawEnvironment(IRenderer r, Camera camera, Vector2 vortexCentre,
-                                float worldW, float worldH, BorderHazardConfig hazard, float time)
-    {
-        r.PushTransform(camera.GetViewMatrix());
-
-        // ── Border danger rim ──────────────────────────────────────────────────
-        if (hazard.Enabled && hazard.HazardZone > 1f)
-        {
-            float hz = hazard.HazardZone;
-            float pulse = 0.5f + 0.5f * MathF.Sin(time * 3f);
-            var band = new Color(200, 40, 40, 34);
-            void Strip(Vector2 a, Vector2 b, Vector2 c, Vector2 d)
-            {
-                Span<Vector2> q = [a, b, c, d];
-                r.FillPolygon(q, band);
-            }
-            Strip(new(0, 0), new(hz, 0), new(hz, worldH), new(0, worldH));                       // left
-            Strip(new(worldW - hz, 0), new(worldW, 0), new(worldW, worldH), new(worldW - hz, worldH)); // right
-            Strip(new(hz, 0), new(worldW - hz, 0), new(worldW - hz, hz), new(hz, hz));           // top (between L/R)
-            Strip(new(hz, worldH - hz), new(worldW - hz, worldH - hz), new(worldW - hz, worldH), new(hz, worldH)); // bottom
-
-            // Inner warning line at the erosion boundary (pulsing).
-            var line = new Color(230, 70, 70, (byte)(70 + 120 * pulse));
-            r.DrawLine(new(hz, hz), new(worldW - hz, hz), line, 2.5f);
-            r.DrawLine(new(worldW - hz, hz), new(worldW - hz, worldH - hz), line, 2.5f);
-            r.DrawLine(new(worldW - hz, worldH - hz), new(hz, worldH - hz), line, 2.5f);
-            r.DrawLine(new(hz, worldH - hz), new(hz, hz), line, 2.5f);
-        }
-
-        // ── Vortex eye (spiral arms sweeping around the moving centre) ──────────
-        const int arms = 3, seg = 22;
-        const float rInner = 40f, rOuter = 520f, turns = 2.3f;
-        float spin = time * 0.5f;
-        for (int a = 0; a < arms; a++)
-        {
-            float a0 = spin + a * MathF.Tau / arms;
-            Vector2 prev = default; bool have = false;
-            for (int k = 0; k <= seg; k++)
-            {
-                float u  = k / (float)seg;
-                float rr = rInner + (rOuter - rInner) * u;
-                float th = a0 + u * turns * MathF.Tau;
-                Vector2 p = vortexCentre + new Vector2(MathF.Cos(th), MathF.Sin(th)) * rr;
-                if (have)
-                {
-                    byte al = (byte)(120 * (1f - u));   // fade outward
-                    r.DrawLine(prev, p, new Color(150, 120, 235, al), 2f);
-                }
-                prev = p; have = true;
-            }
-        }
-        r.FillCircle(vortexCentre, 6f, new Color(200, 180, 255, 210));
-        r.DrawCircle(vortexCentre, 14f, new Color(150, 120, 235, 150), 2f);
-
-        r.PopTransform();
-    }
-
     private void DrawBodies(IRenderer r, World world, Camera camera, float alpha)
     {
         world.ForEach<Transform, FracturableBody, BodyColor>(

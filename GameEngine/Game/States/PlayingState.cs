@@ -26,6 +26,7 @@ public sealed class PlayingState : IGameState
     private readonly WorldRenderer  _worldRenderer = new();
     private readonly ISystem[]      _systems;
     private readonly VortexSystem   _vortex;   // held for the environment overlay (pull visual)
+    private readonly VortexFx       _vortexFx = new();
     private readonly Camera         _camera;
     private readonly Random         _rng;
 
@@ -113,7 +114,7 @@ public sealed class PlayingState : IGameState
             new PhysicsSystem(),
             _vortex,
             new MovementSystem(),
-            new BorderHazardSystem(wc.Width, wc.Height, ctx.Config.BorderHazard, _rng),
+            new BorderHazardSystem(wc.Width, wc.Height, ctx.Config.BorderHazard, _rng, _effects),
             new RaycastBulletSystem(_bus, _fx, _rng),
             new GrenadeSystem(_world, _bus),
             new ProjectileSystem(_world, ctx, _bus, _rng, () => _fracture.Player),
@@ -222,6 +223,9 @@ public sealed class PlayingState : IGameState
         _finalScore               = 0f;
         _specialFired             = new bool[_ctx.Config.WaveSystem.SpecialWaves.Count];
         _spawnQueue.Clear();
+        _campTime                 = 0f;
+        _campInZone               = false;
+        _vortexFx.Reset();
 
         SpawnPlayer();
         SpawnNextWave();
@@ -318,6 +322,12 @@ public sealed class PlayingState : IGameState
         UpdatePopups((float)dt);
         if (_bannerTimer > 0f) _bannerTimer -= (float)dt;
 
+        // Vortex gust motes ride the live field; tick with the simulated clock (so slow-mo slows them
+        // too) and keep going under the game-over overlay while the world drifts.
+        Vector2 vHalf = new(_ctx.ScreenW * 0.5f / _camera.Zoom, _ctx.ScreenH * 0.5f / _camera.Zoom);
+        _vortexFx.Update((float)gameDt, _vortex.Centre, _vortex.FieldVelocity, _ctx.Config.VortexFx,
+                         _camera.Position - vHalf, _camera.Position + vHalf);
+
         // Run over: clock/waves stay frozen; only the overlay ticks. Leave once it's fully up.
         if (_gameOverActive)
         {
@@ -337,6 +347,7 @@ public sealed class PlayingState : IGameState
         _waveTimer += (float)dt;
 
         DrainSpawnQueue();   // release queued wave bodies whose time has come (SpawnDuration trickle)
+        UpdateCampingResponse((float)dt);
 
         var ws = _ctx.Config.WaveSystem;
         int liveCells    = CountLiveCells();
@@ -391,14 +402,117 @@ public sealed class PlayingState : IGameState
     {
         r.Begin(new Color(8, 9, 14));
         _worldRenderer.Draw(r, _world, _camera, _fx, _player, _ctx.Config.Vfx, alpha);
-        _worldRenderer.DrawEnvironment(r, _camera, _vortex.Centre,
-            _ctx.Config.World.Width, _ctx.Config.World.Height, _ctx.Config.BorderHazard, _gameTime);
+
+        // Vortex gust streaks (world space), then the swirl warp (screen space, reads the frame so far).
+        r.PushTransform(_camera.GetViewMatrix());
+        _vortexFx.DrawStreaks(r, _vortex.Centre, _ctx.Config.VortexFx);
+        r.PopTransform();
+        var post = r as IPostEffects;
+        _vortexFx.DrawWarp(post, _camera, _vortex.Centre, _ctx.Config.VortexFx);
+        DrawBorderCue(r, post);
+        if (!_gameOverActive) DrawCampCue(r);
+
         DrawPopups(r);
         DrawBanner(r);
         DrawHud(r);
         if (_gameOverActive) DrawGameOverOverlay(r);
         if (_paused) DrawPauseMenu(r);
         r.End();
+    }
+
+    /// <summary>
+    /// The border rim's cues. Primary: a full-screen red tint that deepens as the PLAYER goes into
+    /// the rim (this is the signal the player reads). Secondary: a subtle heat-haze warp on whichever
+    /// world edges are currently on-screen — thematic, and self-gated (edges are only visible when the
+    /// camera is near a border, i.e. exactly when it matters).
+    /// </summary>
+    private void DrawBorderCue(IRenderer r, IPostEffects? post)
+    {
+        var hz = _ctx.Config.BorderHazard;
+        if (!hz.Enabled || hz.HazardZone <= 1f) return;
+        var wc = _ctx.Config.World;
+        float zone = hz.HazardZone;
+
+        // ── Secondary: heat-haze shimmer on the on-screen world edges ────────────
+        if (post != null && hz.WarpEnabled && hz.WarpStrength > 0.5f)
+        {
+            float amp   = hz.WarpStrength * _camera.Zoom;
+            float phase = _gameTime * hz.WarpSpeed;
+            float zonePx = zone * _camera.Zoom;
+            float sw = _ctx.ScreenW, sh = _ctx.ScreenH;
+
+            // Vertical edges (left x=0, right x=W): a vertical strip, displaced horizontally.
+            void VEdge(float edgeWorldX, float inwardSign)
+            {
+                float sEdge  = _camera.WorldToScreen(new Vector2(edgeWorldX, _camera.Position.Y)).X;
+                float sInner = sEdge + inwardSign * zonePx;
+                float x0 = MathF.Min(sEdge, sInner), x1 = MathF.Max(sEdge, sInner);
+                if (x1 <= 0f || x0 >= sw) return;   // off-screen
+                post.Distort(new Vector2(x0, 0f), new Vector2(x1, sh), Math.Max(2, hz.WarpGrid / 3), hz.WarpGrid, p =>
+                {
+                    float wx = _camera.ScreenToWorld(p).X;
+                    float depth = Math.Clamp((zone - MathF.Abs(wx - edgeWorldX)) / zone, 0f, 1f);
+                    float dx = amp * depth * MathF.Sin(p.Y * hz.WarpFreq + phase);
+                    return new Vector2(p.X + dx, p.Y);
+                });
+            }
+            // Horizontal edges (top y=0, bottom y=H): a horizontal strip, displaced vertically.
+            void HEdge(float edgeWorldY, float inwardSign)
+            {
+                float sEdge  = _camera.WorldToScreen(new Vector2(_camera.Position.X, edgeWorldY)).Y;
+                float sInner = sEdge + inwardSign * zonePx;
+                float y0 = MathF.Min(sEdge, sInner), y1 = MathF.Max(sEdge, sInner);
+                if (y1 <= 0f || y0 >= sh) return;
+                post.Distort(new Vector2(0f, y0), new Vector2(sw, y1), hz.WarpGrid, Math.Max(2, hz.WarpGrid / 3), p =>
+                {
+                    float wy = _camera.ScreenToWorld(p).Y;
+                    float depth = Math.Clamp((zone - MathF.Abs(wy - edgeWorldY)) / zone, 0f, 1f);
+                    float dy = amp * depth * MathF.Sin(p.X * hz.WarpFreq + phase);
+                    return new Vector2(p.X, p.Y + dy);
+                });
+            }
+            VEdge(0f, +1f); VEdge(wc.Width, -1f);
+            HEdge(0f, +1f); HEdge(wc.Height, -1f);
+        }
+
+        // ── Primary: red tint by the player's depth into the rim ─────────────────
+        if (hz.TintMaxAlpha > 0.5f && _world.IsAlive(_player) && _world.HasComponent<Transform>(_player))
+        {
+            Vector2 p = _world.GetComponent<Transform>(_player).Position;
+            float dist = MathF.Min(MathF.Min(p.X, wc.Width - p.X), MathF.Min(p.Y, wc.Height - p.Y));
+            float depth = Math.Clamp((zone - dist) / zone, 0f, 1f);
+            if (depth > 0.01f)
+                FillRect(r, 0f, 0f, _ctx.ScreenW, _ctx.ScreenH,
+                    new Color(190, 30, 30, (byte)(hz.TintMaxAlpha * depth)));
+        }
+    }
+
+    /// <summary>
+    /// The hunter-zone exposure cue: a full-screen GREY filter (distinct from the red erosion tint)
+    /// that appears the moment the player enters the camping band and deepens as the hunter timer
+    /// fills, plus a countdown to the next hunter wave. Tells the player they're being watched.
+    /// </summary>
+    private void DrawCampCue(IRenderer r)
+    {
+        var cr = _ctx.Config.WaveSystem.CampingResponse;
+        if (!cr.Enabled || cr.TriggerSeconds <= 0f) return;
+        if (_campTime <= 0.05f && !_campInZone) return;
+
+        float progress  = Math.Clamp(_campTime / cr.TriggerSeconds, 0f, 1f);
+        float intensity = MathF.Max(_campInZone ? 0.30f : 0f, progress);   // present in-zone, deepens with the timer
+
+        if (cr.TintMaxAlpha > 0.5f && intensity > 0.01f)
+            FillRect(r, 0f, 0f, _ctx.ScreenW, _ctx.ScreenH,
+                new Color(165, 170, 180, (byte)(cr.TintMaxAlpha * intensity)));
+
+        // Countdown to the next hunter wave, top-centre.
+        int secs = (int)MathF.Ceiling(MathF.Max(0f, cr.TriggerSeconds - _campTime));
+        string s = $"EXPOSED — HUNTERS {secs}s";
+        var font = new FontSpec("monospace", 18f, bold: true);
+        byte a   = (byte)(160 + 95 * intensity);
+        var col  = new Color(210, 215, 225, a);
+        Vector2 sz = r.MeasureText(s, font);
+        r.DrawText(s, new Vector2(_ctx.ScreenW / 2f - sz.X / 2f, 14f), col, font);
     }
 
     /// <summary>The game-over verdict, drawn over a still-running playfield: a scrim that darkens
@@ -515,9 +629,33 @@ public sealed class PlayingState : IGameState
     private readonly List<QueuedSpawn> _spawnQueue = new();
     private readonly List<(Vector2 pos, float r)> _frameSpawned = new();   // per-frame overlap scratch
 
+    // Anti-camping: accrued seconds inside the border camping band (decays outside, never resets).
+    private float _campTime;
+    private bool  _campInZone;   // is the player in the band THIS frame (for the exposure cue)
+
     private void EnqueueWave(List<(bool IsAlien, string Key, float SizeMult)> spawns, SpawnPatternConfig pc)
     {
         if (spawns.Count == 0) return;
+
+        // nearPlayer: enter from the border closest to the player, anchored at their projection
+        // onto it — the wave arrives right next to (but off-screen from) wherever they're hiding.
+        int side; float anchorT;
+        if (string.Equals(pc.Side, "nearPlayer", StringComparison.OrdinalIgnoreCase))
+        {
+            var wc = _ctx.Config.World;
+            Vector2 pp = WavePlayerPos();
+            float dTop = pp.Y, dBot = wc.Height - pp.Y, dLeft = pp.X, dRight = wc.Width - pp.X;
+            float min = MathF.Min(MathF.Min(dTop, dBot), MathF.Min(dLeft, dRight));
+            side    = min == dTop ? 0 : min == dBot ? 1 : min == dLeft ? 2 : 3;
+            anchorT = side <= 1 ? pp.X / wc.Width : pp.Y / wc.Height;
+            anchorT = Math.Clamp(anchorT + ((float)_rng.NextDouble() - 0.5f) * 0.1f, 0.05f, 0.95f);
+        }
+        else
+        {
+            side    = _rng.Next(4);
+            anchorT = 0.2f + (float)_rng.NextDouble() * 0.6f;   // keep anchors off the corners
+        }
+
         var plan = new SpawnPlan
         {
             Pattern = pc.Pattern?.ToLowerInvariant() switch
@@ -535,8 +673,8 @@ public sealed class PlayingState : IGameState
                 _ => AimKind.Inward,
             },
             FixedAngleRad = pc.FixedAngle * MathF.PI / 180f,
-            Side          = _rng.Next(4),
-            AnchorT       = 0.2f + (float)_rng.NextDouble() * 0.6f,   // keep anchors off the corners
+            Side          = side,
+            AnchorT       = anchorT,
             BurstRadius   = MathF.Max(40f, pc.BurstRadius),
             Spread        = Math.Clamp(pc.Spread, 0.05f, 1f),
             SpeedMult     = MathF.Max(0.05f, pc.SpeedMult),
@@ -576,23 +714,88 @@ public sealed class PlayingState : IGameState
             _frameSpawned.Add((pos, r));
             Vector2 aim = ResolveAim(q.Plan, pos, playerPos);
 
-            if (q.IsAlien) AlienPrefab.Spawn(_world, _ctx, _rng, pos, q.Key, aim, q.Plan.SpeedMult);
-            else           AsteroidPrefab.Spawn(_world, _ctx, _rng, pos, q.Key, q.SizeMult, aim, q.Plan.SpeedMult);
+            Entity e = q.IsAlien
+                ? AlienPrefab.Spawn(_world, _ctx, _rng, pos, q.Key, aim, q.Plan.SpeedMult)
+                : AsteroidPrefab.Spawn(_world, _ctx, _rng, pos, q.Key, q.SizeMult, aim, q.Plan.SpeedMult);
+            TagIfInbound(e, pos);
         }
     }
 
-    /// <summary>A point in the border strip of a side: t ∈ 0..1 along it, random depth into the strip.</summary>
+    /// <summary>Marks a body spawned in the off-screen ring outside the playable field, so the
+    /// border hazard leaves it alone until it flies in (see <see cref="InboundSpawn"/>).</summary>
+    private void TagIfInbound(Entity e, Vector2 pos)
+    {
+        if (!_world.IsAlive(e)) return;
+        var wc = _ctx.Config.World;
+        if (pos.X < 0f || pos.Y < 0f || pos.X > wc.Width || pos.Y > wc.Height)
+            _world.AddComponent(e, new InboundSpawn());
+    }
+
+    /// <summary>Tracks time spent hugging the border (within borderHazard.hazardZone + ZoneDepth of
+    /// any edge). The timer decays while outside — it never hard-resets — and at TriggerSeconds a
+    /// hunter wave is sent at the player from their nearest side, repeating every RepeatSeconds
+    /// for as long as they stay camped.</summary>
+    private void UpdateCampingResponse(float dt)
+    {
+        var cr = _ctx.Config.WaveSystem.CampingResponse;
+        if (!cr.Enabled || !_world.IsAlive(_player) || !_world.HasComponent<Transform>(_player)) return;
+
+        Vector2 p  = _world.GetComponent<Transform>(_player).Position;
+        _campInZone = CampZoneDepth(p) > 0f;
+
+        if (_campInZone) _campTime += dt;
+        else             _campTime  = MathF.Max(0f, _campTime - dt * cr.DecayRate);
+
+        if (_campTime < cr.TriggerSeconds) return;
+
+        // Fire the hunters and re-arm: staying camped brings the next batch in RepeatSeconds.
+        _campTime = MathF.Max(0f, cr.TriggerSeconds - cr.RepeatSeconds);
+        var bias = new Dictionary<string, float>();
+        foreach (var (k, w) in cr.Weights)
+            if (w > 0f && (_ctx.Config.Asteroids.ContainsKey(k) || _ctx.Config.Entities.ContainsKey(k)))
+                bias[k] = w;
+        EnqueueWave(ChooseSpawns(cr.Budget, bias, cr.SizeBias, cr.CellCap), cr.Pattern);
+        ShowBanner(cr.Banner, WaveBannerTime, boss: true);
+    }
+
+    /// <summary>How exposed the player is to the hunter zone at <paramref name="p"/>: 0 outside,
+    /// →1 at the very edge/corner. The zone is a band of width <c>hazardZone + ZoneDepth</c> off each
+    /// edge, PLUS a deeper square in each corner (side = band·CornerScale), so a corner is caught
+    /// sooner and reads as more dangerous than a flat wall.</summary>
+    private float CampZoneDepth(Vector2 p)
+    {
+        var cr = _ctx.Config.WaveSystem.CampingResponse;
+        var wc = _ctx.Config.World;
+        float band = _ctx.Config.BorderHazard.HazardZone + cr.ZoneDepth;
+        if (band <= 1f) return 0f;
+
+        float dx = MathF.Min(p.X, wc.Width  - p.X);   // distance to nearest vertical edge
+        float dy = MathF.Min(p.Y, wc.Height - p.Y);   // distance to nearest horizontal edge
+
+        float edge = Math.Clamp((band - MathF.Min(dx, dy)) / band, 0f, 1f);
+
+        float cornerBand = band * MathF.Max(1f, cr.CornerScale);
+        float corner = 0f;
+        if (dx < cornerBand && dy < cornerBand)   // near a corner: both edges close
+            corner = Math.Clamp((cornerBand - MathF.Max(dx, dy)) / cornerBand, 0f, 1f);
+
+        return MathF.Max(edge, corner);
+    }
+
+    /// <summary>A point in the spawn ring OUTSIDE a side of the playable field: t ∈ 0..1 along it,
+    /// random depth into the ring. Off-screen by construction — the camera never sees past the
+    /// playable bounds — so waves can enter beside the player wherever they are.</summary>
     private Vector2 SidePoint(int side, float t)
     {
         var wc = _ctx.Config.World;
-        float depth = (float)_rng.NextDouble() * BorderZone;
+        float depth = 40f + (float)_rng.NextDouble() * MathF.Max(40f, wc.SpawnMargin - 80f);
         t = Math.Clamp(t, 0f, 1f);
         return side switch
         {
-            0 => new Vector2(t * wc.Width, depth),                    // top
-            1 => new Vector2(t * wc.Width, wc.Height - depth),        // bottom
-            2 => new Vector2(depth, t * wc.Height),                   // left
-            _ => new Vector2(wc.Width - depth, t * wc.Height),        // right
+            0 => new Vector2(t * wc.Width, -depth),                   // above the top edge
+            1 => new Vector2(t * wc.Width, wc.Height + depth),        // below the bottom edge
+            2 => new Vector2(-depth, t * wc.Height),                  // left of the left edge
+            _ => new Vector2(wc.Width + depth, t * wc.Height),        // right of the right edge
         };
     }
 
@@ -614,9 +817,12 @@ public sealed class PlayingState : IGameState
                 // wall / pincer: a slot along the side, spread around the anchor
                 _ => SidePoint(side, plan.AnchorT + ((float)_rng.NextDouble() - 0.5f) * plan.Spread),
             };
+            // Clamp to the EXTENDED bounds (field + spawn ring) — clamping to the field would drag
+            // ring positions back inside and put them on-screen.
             var wc = _ctx.Config.World;
-            pos = Vector2.Clamp(pos, new Vector2(radius, radius),
-                                new Vector2(wc.Width - radius, wc.Height - radius));
+            float m = wc.SpawnMargin;
+            pos = Vector2.Clamp(pos, new Vector2(radius - m, radius - m),
+                                new Vector2(wc.Width + m - radius, wc.Height + m - radius));
             if (SpawnSpotClear(pos, radius, playerPos)) return pos;
         }
         // Pattern spot never cleared (crowded corner, viewport…) → classic scattered fallback.
@@ -728,18 +934,13 @@ public sealed class PlayingState : IGameState
 
     private Vector2 FindSpawnPosition(float radius, List<(Vector2 pos, float r)> placed, Vector2 playerPos)
     {
-        var wc = _ctx.Config.World;
         float playerClear = radius + 18f + 150f;
 
         for (int attempt = 0; attempt < 60; attempt++)
         {
-            Vector2 pos = _rng.Next(4) switch
-            {
-                0 => new((float)_rng.NextDouble() * wc.Width, (float)_rng.NextDouble() * BorderZone),
-                1 => new((float)_rng.NextDouble() * wc.Width, wc.Height - (float)_rng.NextDouble() * BorderZone),
-                2 => new((float)_rng.NextDouble() * BorderZone, (float)_rng.NextDouble() * wc.Height),
-                _ => new(wc.Width - (float)_rng.NextDouble() * BorderZone, (float)_rng.NextDouble() * wc.Height),
-            };
+            // Scattered spawns live in the OFF-SCREEN ring outside the playable field (SidePoint),
+            // so they never pop into view and can enter from any side, wherever the player is.
+            Vector2 pos = SidePoint(_rng.Next(4), (float)_rng.NextDouble());
 
             // Reject if inside the visible viewport.
             Vector2 sp = _camera.WorldToScreen(pos);
@@ -764,10 +965,8 @@ public sealed class PlayingState : IGameState
             return pos;
         }
 
-        // Fallback: top border strip.
-        return new Vector2(
-            (float)_rng.NextDouble() * _ctx.Config.World.Width,
-            (float)_rng.NextDouble() * BorderZone);
+        // Fallback: somewhere in the top spawn ring.
+        return SidePoint(0, (float)_rng.NextDouble());
     }
 
     // Spawns a typed asteroid from GameConfig.Asteroids using the procedural pipeline.
@@ -790,7 +989,8 @@ public sealed class PlayingState : IGameState
         Vector2 vel    = len > 1f ? dir / len * ec.Speed : Vector2.Zero;
 
         _mothershpGroupId = _fracture.AllocateGroupId();
-        MothershipPrefab.Spawn(_world, _ctx, _rng, pos, vel, _mothershpGroupId, out _mothershpInitialCockpits);
+        var boss = MothershipPrefab.Spawn(_world, _ctx, _rng, pos, vel, _mothershpGroupId, out _mothershpInitialCockpits);
+        TagIfInbound(boss, pos);   // it spawns in the off-screen ring and cruises in
 
         ShowBanner("ALIEN BOSS HAS APPEARED", BossBannerTime, boss: true);
     }
@@ -860,9 +1060,9 @@ public sealed class PlayingState : IGameState
     // Cooldown-bar geometry (weapons and skills share it so the HUD reads as one row).
     private const float HudBarW      = 82f;
     private const float HudBarH      = 13f;
-    private const float HudBarGap    = 96f;
-    // Where skill bars start (from right).
-    private const float HudSkillOffX = 3f * HudBarGap + 14f;
+    // Right-edge padding for the (right-aligned) skill row.
+    private const float HudRightPad  = 14f;
+    // Column pitch is computed from the widest label so names never overlap (HudColumnWidth).
 
     // Labels carry the bound key so the HUD can never drift from PlayerControlSystem's bindings.
     private static readonly (string Role, string WeapKey, string Label, string Key, Color Color)[] WeaponDefs =
@@ -879,10 +1079,23 @@ public sealed class PlayingState : IGameState
         ("slowmo", "SLOW-MO", "R"),
     ];
 
+    private static readonly FontSpec HudLabelFont = new("monospace", 14f, bold: true);
+    private static readonly FontSpec HudKeyFont   = new("monospace", 12f);
+
+    /// <summary>Uniform column pitch for the cooldown row: the widest "NAME [KEY]" label (or the bar,
+    /// whichever is larger) plus padding, so no two widgets' text can overlap regardless of wording.</summary>
+    private float HudColumnWidth(IRenderer r)
+    {
+        float widest = 0f;
+        foreach (var d in WeaponDefs)
+            widest = MathF.Max(widest, r.MeasureText(d.Label, HudLabelFont).X + 6f + r.MeasureText($"[{d.Key}]", HudKeyFont).X);
+        foreach (var d in SkillDefs)
+            widest = MathF.Max(widest, r.MeasureText(d.Label, HudLabelFont).X + 6f + r.MeasureText($"[{d.Key}]", HudKeyFont).X);
+        return MathF.Max(HudBarW, widest) + 16f;
+    }
+
     private void DrawHud(IRenderer r)
     {
-        var label = new FontSpec("monospace", 14f, bold: true);
-
         // ── Top-left: timer (big) / score (big) / best / combo ────────────────
         int elapsed = (int)_gameTime;
         r.DrawText($"{elapsed / 60:00}:{elapsed % 60:00}",
@@ -910,11 +1123,15 @@ public sealed class PlayingState : IGameState
         var shipCenter = new Vector2(HudShipCX, _ctx.ScreenH - HudShipCYOff);
         DrawShipWidget(r, shipCenter, HudShipScale);
 
-        // ── Weapon cooldown bars ───────────────────────────────────────────────
-        DrawWeaponBars(r, HudWeapX, bY, label);
+        // Uniform column pitch, so labels can't overlap; skills right-aligned to the same pitch.
+        float col = HudColumnWidth(r);
 
-        // ── Skill cooldown bars ────────────────────────────────────────────────
-        DrawSkillBars(r, _ctx.ScreenW - HudSkillOffX, bY, label);
+        // ── Weapon cooldown bars (from the left) ────────────────────────────────
+        DrawWeaponBars(r, HudWeapX, bY, col);
+
+        // ── Skill cooldown bars (right-aligned) ─────────────────────────────────
+        float skillStart = _ctx.ScreenW - HudRightPad - SkillDefs.Length * col;
+        DrawSkillBars(r, skillStart, bY, col);
     }
 
     private void DrawShipWidget(IRenderer r, Vector2 center, float scale)
@@ -1012,7 +1229,7 @@ public sealed class PlayingState : IGameState
             new Vector2(cx - 168f, cy + 92f), new Color(80, 100, 130), new FontSpec("monospace", 13f));
     }
 
-    private void DrawWeaponBars(IRenderer r, float startX, float bottomY, in FontSpec font)
+    private void DrawWeaponBars(IRenderer r, float startX, float bottomY, float columnW)
     {
         bool hasFb  = _world.HasComponent<FracturableBody>(_player);
         bool hasFp  = hasFb && _world.HasComponent<FractureProcess>(_player);
@@ -1020,7 +1237,6 @@ public sealed class PlayingState : IGameState
         WeaponCooldowns wcd = _world.HasComponent<WeaponCooldowns>(_player)
             ? _world.GetComponent<WeaponCooldowns>(_player) : default;
 
-        var keyFont = new FontSpec("monospace", 12f);
         float x = startX;
         foreach (var (role, key, label, bind, col) in WeaponDefs)
         {
@@ -1031,9 +1247,9 @@ public sealed class PlayingState : IGameState
             Color fgC   = cellAlive ? col : new Color(45, 48, 58);
 
             // Name + bound key above the bar: "CANNON [LMB]".
-            r.DrawText(label, new Vector2(x + 1f, bottomY - HudBarH - 22f), textC, font);
-            Vector2 nameSz = r.MeasureText(label, font);
-            r.DrawText($"[{bind}]", new Vector2(x + 1f + nameSz.X + 5f, bottomY - HudBarH - 20f), keyC, keyFont);
+            r.DrawText(label, new Vector2(x + 1f, bottomY - HudBarH - 22f), textC, HudLabelFont);
+            Vector2 nameSz = r.MeasureText(label, HudLabelFont);
+            r.DrawText($"[{bind}]", new Vector2(x + 1f + nameSz.X + 5f, bottomY - HudBarH - 20f), keyC, HudKeyFont);
             FillRect(r, x, bottomY - HudBarH, HudBarW, HudBarH, bgC);
 
             if (cellAlive)
@@ -1054,7 +1270,7 @@ public sealed class PlayingState : IGameState
                 }
                 if (fill > 0f) FillRect(r, x, bottomY - HudBarH, fill, HudBarH, fgC);
             }
-            x += HudBarGap;
+            x += columnW;
         }
     }
 
@@ -1070,7 +1286,7 @@ public sealed class PlayingState : IGameState
         return false;
     }
 
-    private void DrawSkillBars(IRenderer r, float startX, float bottomY, in FontSpec font)
+    private void DrawSkillBars(IRenderer r, float startX, float bottomY, float columnW)
     {
         bool hasFb  = _world.HasComponent<FracturableBody>(_player);
         bool hasFp  = hasFb && _world.HasComponent<FractureProcess>(_player);
@@ -1079,12 +1295,11 @@ public sealed class PlayingState : IGameState
         SkillState sk = _world.HasComponent<SkillState>(_player)
             ? _world.GetComponent<SkillState>(_player) : default;
 
-        var keyFont = new FontSpec("monospace", 12f);
         float x = startX;
         foreach (var (key, label, bind) in SkillDefs)
         {
             bool gate = key == "slowmo" || propOk;
-            if (!_ctx.Config.Skills.TryGetValue(key, out var sc)) { x += HudBarGap; continue; }
+            if (!_ctx.Config.Skills.TryGetValue(key, out var sc)) { x += columnW; continue; }
 
             float cdRem = key switch
             {
@@ -1110,13 +1325,13 @@ public sealed class PlayingState : IGameState
             Color fgC   = gate ? col : new Color(45, 48, 58);
 
             // Name + bound key above the bar: "DASH [Q]".
-            r.DrawText(label, new Vector2(x + 1f, bottomY - HudBarH - 22f), textC, font);
-            Vector2 nameSz = r.MeasureText(label, font);
-            r.DrawText($"[{bind}]", new Vector2(x + 1f + nameSz.X + 5f, bottomY - HudBarH - 20f), keyC, keyFont);
+            r.DrawText(label, new Vector2(x + 1f, bottomY - HudBarH - 22f), textC, HudLabelFont);
+            Vector2 nameSz = r.MeasureText(label, HudLabelFont);
+            r.DrawText($"[{bind}]", new Vector2(x + 1f + nameSz.X + 5f, bottomY - HudBarH - 20f), keyC, HudKeyFont);
             FillRect(r, x, bottomY - HudBarH, HudBarW, HudBarH, bgC);
             float fill = HudBarW * ratio;
             if (fill > 0f && gate) FillRect(r, x, bottomY - HudBarH, fill, HudBarH, fgC);
-            x += HudBarGap;
+            x += columnW;
         }
     }
 

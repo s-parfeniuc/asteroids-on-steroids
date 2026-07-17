@@ -17,7 +17,8 @@ public static class WeaponEffects
     /// <summary>Spawns one raycast bullet, carrying its per-bullet drag and the owner-grace
     /// window (so it ignores hits on the entity that fired it until it clears the hull).</summary>
     public static Entity SpawnBullet(World world, Vector2 pos, Vector2 vel, string weaponKey,
-        float ttl, Color color, Entity owner, float ownerGrace, float drag, bool alien)
+        float ttl, Color color, Entity owner, float ownerGrace, float drag, bool alien,
+        float? massOverride = null)
     {
         var b = world.CreateEntity();
         world.AddComponent(b, new Transform { Position = pos, PreviousPosition = pos });
@@ -26,7 +27,7 @@ public static class WeaponEffects
         if (alien) world.AddComponent(b, new AlienBulletTag());
         world.AddComponent(b, new BulletVisual { Color = color });
         world.AddComponent(b, new BulletData
-            { WeaponKey = weaponKey, Drag = drag, Owner = owner, OwnerGrace = ownerGrace });
+            { WeaponKey = weaponKey, Drag = drag, Owner = owner, OwnerGrace = ownerGrace, MassOverride = massOverride });
         world.AddComponent(b, new TimeToLive { Remaining = ttl });
         return b;
     }

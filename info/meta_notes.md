@@ -86,12 +86,27 @@ Optimizations so fps doeafterward isn't drop the moment a grenade detonates. Pro
 
 ## Notes for Claude
 
-Piercing round refinement
+Piercing round refinement:
+the fact it can pierce through even if its force isn't enough to fracture the asteroid, sometimes the fracture starts inside the asteroid, not on the surface which remains intact. Ideas?
 
 Cells don't inherit stress on split
 
 Visual indicators have to be reworked, border should "eat" projectiles instead of pushing them back.
 The vortex visual indicator shouldn't be a static spiral moving with its center, I was considering these ideas:
-1. 
+1. Some sporadic gusts/wind-like particles around the center, less frequent and weaker the further.
+2. Visual distorsion in the surrounding area, gets stronger toward the center.
+Other ideas?
 
 fracturing frontiers must be revisited, the problem is evident when multiple shots hit the same slow-fracturing asteroid: the new hits don't feel impactful because the fracture moves along the main path.
+
+hunter zone should be wider at the corners of the map and the player should have a visual indicator that he's in the zone (a timer could also work fine, along with a grey filter on all the screen, different color from the erosion zone tint).
+
+
+## To tune
+
+Boss is too weak, never rams, the barrage is very weak.
+
+All alien bullets are too weak.
+
+The grenade weapon should be reworked/tuned, maybe consider shooting physical pellets with a collider or sensor.
+

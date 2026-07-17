@@ -247,7 +247,7 @@ sealed class DemoSession
             new PhysicsSystem(),
             new VortexSystem(WorldCenter, GameConst.WorldW, GameConst.WorldH, gc.Vortex),
             new MovementSystem(),
-            new BorderHazardSystem(GameConst.WorldW, GameConst.WorldH, gc.BorderHazard, _rng),
+            new BorderHazardSystem(GameConst.WorldW, GameConst.WorldH, gc.BorderHazard, _rng, _effects),
             new RaycastBulletSystem(_bus, _fx, _rng),
             new GrenadeSystem(_world, _bus),
             new ProjectileSystem(_world, _ctx, _bus, _rng, () => _fracture.Player),

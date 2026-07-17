@@ -253,9 +253,26 @@ public sealed class VortexSystem : ISystem
     private readonly float        _worldW, _worldH;
     private readonly VortexConfig _cfg;
     private float _time = 0f;
+    private float _centripetalK, _tangentialK;   // this frame's strengths, for FieldVelocity
 
     /// <summary>Current vortex centre (updated each frame). Renderers can read it for the pull visual.</summary>
     public Vector2 Centre { get; private set; }
+
+    /// <summary>Terminal drift velocity (px/s) a neutral body riding the field reaches at
+    /// <paramref name="pos"/> this frame — the honest thing to advect gust motes along. Zero inside
+    /// the deadzone / at the eye; grows with radius (the field is strongest far out).</summary>
+    public Vector2 FieldVelocity(Vector2 pos)
+    {
+        Vector2 toCenter = Centre - pos;
+        float dist = toCenter.Length();
+        if (dist < 1e-3f) return Vector2.Zero;
+        float excess = dist - _cfg.Deadzone;
+        if (excess <= 0f) return Vector2.Zero;
+        Vector2 radial  = toCenter / dist;
+        Vector2 tangent = new(-radial.Y, radial.X);
+        float scale = excess * (1f / 120f) * _cfg.CapFrames;   // matches the sim's per-tick cap model
+        return radial * (_centripetalK * scale) + tangent * (_tangentialK * scale);
+    }
 
     public VortexSystem(Vector2 mapCentre, float worldW, float worldH, VortexConfig cfg)
     {
@@ -283,6 +300,7 @@ public sealed class VortexSystem : ISystem
                              + _cfg.VariationCentripetal * MathF.Sin(_time * MathF.Tau / 5f));
         float tangentialK  = MathF.Max(0f, _cfg.Tangential
                              + _cfg.VariationTangential * MathF.Sin(_time * MathF.Tau / 13f + MathF.PI * 0.5f));
+        _centripetalK = centripetalK; _tangentialK = tangentialK;   // published for FieldVelocity (gust FX)
         float deadzone  = _cfg.Deadzone;
         float capFrames = _cfg.CapFrames;
 
@@ -326,6 +344,7 @@ public sealed class BorderHazardSystem : ISystem
     private readonly float _worldW, _worldH;
     private readonly BorderHazardConfig _cfg;
     private readonly Random _rng;
+    private readonly ParticleEffects _fx;
 
     private struct Exposure { public float Time; public float TickAcc; }
     private readonly Dictionary<Entity, Exposure> _exposure = new();
@@ -336,8 +355,8 @@ public sealed class BorderHazardSystem : ISystem
     private static readonly WeaponProfile StormWeapon = new()
         { Directionality = 0.9f, BlastFraction = 0.15f, Knockback = 0f };
 
-    public BorderHazardSystem(float worldW, float worldH, BorderHazardConfig cfg, Random rng)
-    { _worldW = worldW; _worldH = worldH; _cfg = cfg; _rng = rng; }
+    public BorderHazardSystem(float worldW, float worldH, BorderHazardConfig cfg, Random rng, ParticleEffects fx)
+    { _worldW = worldW; _worldH = worldH; _cfg = cfg; _rng = rng; _fx = fx; }
 
     public void Update(World world, double dt)
     {
@@ -347,9 +366,32 @@ public sealed class BorderHazardSystem : ISystem
         // ── Pass 1: damp outward velocity + inward push (every moving body) ──
         float dampZone = _cfg.DampZone, dampK = _cfg.DampStrength;
         float pushZone = _cfg.PushZone, pushK = _cfg.PushStrength;
-        world.ForEach<Transform, Velocity>((Entity _, ref Transform t, ref Velocity v) =>
+        world.ForEach<Transform, Velocity>((Entity e, ref Transform t, ref Velocity v) =>
         {
             float x = t.Position.X, y = t.Position.Y;
+
+            // Projectiles aren't contained — the rim EATS them: they fly on freely and are destroyed
+            // (with a fizzle) the moment they cross the world edge, instead of being damped/pushed
+            // back and piling up against an invisible wall.
+            if (world.HasComponent<BulletTag>(e) || world.HasComponent<PiercingRoundTag>(e))
+            {
+                if (x < 0f || y < 0f || x > _worldW || y > _worldH)
+                {
+                    _fx.EmitFlash(t.Position, 9000f);
+                    world.DestroyEntity(e);
+                }
+                return;
+            }
+
+            // Inbound wave spawns live in the ring OUTSIDE the field: leave them alone until they
+            // cross in (damping/clamping would teleport them to the edge), then contain them like
+            // everything else. Removal is deferred, so pass 2 still sees the tag this frame.
+            if (world.HasComponent<InboundSpawn>(e))
+            {
+                if (x < 0f || y < 0f || x > _worldW || y > _worldH) return;
+                world.RemoveComponent<InboundSpawn>(e);
+            }
+
             float dL = x, dR = _worldW - x, dT = y, dB = _worldH - y;
 
             if (dampZone > 1f)
@@ -376,6 +418,11 @@ public sealed class BorderHazardSystem : ISystem
         _erode.Clear();
         world.ForEach<Transform, FracturableBody>((Entity e, ref Transform t, ref FracturableBody fb) =>
         {
+            // Inbound spawns sit OUTSIDE the field, where the depth math below reads as "deep in
+            // the rim" and would erode them before they even arrive. Piercing rounds are projectiles
+            // (eaten at the edge in pass 1), not camping bodies — don't erode them either.
+            if (world.HasComponent<InboundSpawn>(e) || world.HasComponent<PiercingRoundTag>(e)) return;
+
             float x = t.Position.X, y = t.Position.Y;
             // margin past each inner boundary (>0 = inside that rim); depth = deepest one
             float mL = hz - x, mR = hz - (_worldW - x), mT = hz - y, mB = hz - (_worldH - y);
