@@ -133,7 +133,7 @@
       "ttlJitter": 0,
       "spreadJitter": 0,
       "drag": 0,
-      "mass": 36
+      "mass": 58
     },
     "shotgun": {
       "fireRate": 0.5,
@@ -1253,7 +1253,7 @@
     "popupRefValue": 200
   },
   "fracture": {
-    "energyScale": 0.0005,
+    "energyScale": 0.0003,
     "reachMin": 0.1,
     "reachMax": 0.96,
     "vaporEff": 0.4,

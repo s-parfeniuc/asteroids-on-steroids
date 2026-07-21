@@ -176,8 +176,14 @@ public sealed class PlayerControlSystem : ISystem
 
         Vector2 muzzle = t.Position + aim.Dir * 24f;
 
+        // Held auto-fire OR a latched click edge, so a quick tap is never dropped by held-only polling
+        // or a 0-step frame. Consume unconditionally (before the ||) so held-fire doesn't leave a stale
+        // latch that would fire a phantom shot after release.
+        bool leftFire  = inp.ConsumeMouseLeftClick()  | inp.IsMouseLeft;
+        bool rightFire = inp.ConsumeMouseRightClick() | inp.IsMouseRight;
+
         // ── Cannon (left-click) ───────────────────────────────────────────────
-        if (inp.IsMouseLeft && wcd.Cannon <= 0f && IsWeaponCellAlive("cannon", world)
+        if (leftFire && wcd.Cannon <= 0f && IsWeaponCellAlive("cannon", world)
             && _ctx.Config.Weapons.TryGetValue("cannon", out var ccfg))
         {
             wcd.Cannon = 1f / MathF.Max(0.001f, ccfg.FireRate);
@@ -186,7 +192,7 @@ public sealed class PlayerControlSystem : ISystem
         }
 
         // ── Shotgun (right-click) ─────────────────────────────────────────────
-        if (inp.IsMouseRight && wcd.Shotgun <= 0f && IsWeaponCellAlive("shotgun", world)
+        if (rightFire && wcd.Shotgun <= 0f && IsWeaponCellAlive("shotgun", world)
             && _ctx.Config.Weapons.TryGetValue("shotgun", out var scfg))
         {
             wcd.Shotgun = 1f / MathF.Max(0.001f, scfg.FireRate);

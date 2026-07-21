@@ -12,7 +12,7 @@ namespace AsteroidsGame.Gameplay;
 public static class WeaponEffects
 {
     /// <summary>Seconds a freshly-fired bullet ignores hits on its owner (to clear the hull).</summary>
-    public const float BulletGrace = 0.1f;
+    public const float BulletGrace = 1.0f;
 
     /// <summary>Spawns one raycast bullet, carrying its per-bullet drag and the owner-grace
     /// window (so it ignores hits on the entity that fired it until it clears the hull).</summary>
@@ -21,7 +21,7 @@ public static class WeaponEffects
         float? massOverride = null)
     {
         var b = world.CreateEntity();
-        world.AddComponent(b, new Transform { Position = pos, PreviousPosition = pos });
+        world.AddComponent(b, new Transform { Position = pos, PreviousPosition = pos - vel });
         world.AddComponent(b, new Velocity { Linear = vel });
         world.AddComponent(b, new BulletTag());
         if (alien) world.AddComponent(b, new AlienBulletTag());

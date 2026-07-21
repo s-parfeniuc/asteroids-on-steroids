@@ -24,6 +24,11 @@ public sealed class InputSystem
     private bool _mouseLeftPending, _mouseLeftCommitted;
     private bool _mouseRightPending, _mouseRightCommitted;
 
+    // Sticky click edges: set on button-DOWN, cleared only when a game step consumes them (not per
+    // render frame). This catches taps that the held-state polling drops — a click whose down→up
+    // both land in one PollEvents batch, or that falls on a render frame running 0 fixed steps.
+    private bool _leftClickLatch, _rightClickLatch;
+
     private string _textPending = "";
     private string _textThisFrame = "";
 
@@ -38,8 +43,8 @@ public sealed class InputSystem
     {
         lock (_lock)
         {
-            if (button == MouseButton.Left)  _mouseLeftPending  = pressed;
-            if (button == MouseButton.Right) _mouseRightPending = pressed;
+            if (button == MouseButton.Left)  { _mouseLeftPending  = pressed; if (pressed) _leftClickLatch  = true; }
+            if (button == MouseButton.Right) { _mouseRightPending = pressed; if (pressed) _rightClickLatch = true; }
         }
     }
 
@@ -128,6 +133,20 @@ public sealed class InputSystem
     public bool IsMouseLeftRaw => _mouseLeftCommitted;
 
     public bool IsMouseRight => _mouseRightCommitted;
+
+    /// <summary>Returns (and clears) a pending left-click edge. Latched at button-down and kept until
+    /// a game step consumes it, so a fast tap or a click on a 0-step frame still fires exactly once.
+    /// Pair with <see cref="IsMouseLeft"/> for held auto-fire: <c>held || ConsumeMouseLeftClick()</c>.</summary>
+    public bool ConsumeMouseLeftClick()
+    {
+        lock (_lock) { bool c = _leftClickLatch; _leftClickLatch = false; return c && !SuppressMouseLeft; }
+    }
+
+    /// <summary>Right-click counterpart of <see cref="ConsumeMouseLeftClick"/>.</summary>
+    public bool ConsumeMouseRightClick()
+    {
+        lock (_lock) { bool c = _rightClickLatch; _rightClickLatch = false; return c; }
+    }
 
     /// <summary>
     /// Set to true before running game systems to prevent mouse-left clicks
