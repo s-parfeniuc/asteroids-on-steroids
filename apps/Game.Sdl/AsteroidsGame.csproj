@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AsteroidsGame</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Shared game logic (states + GameHost loop) lives in AsteroidsGameCore; this exe only adds
+         the SDL/Skia backend and a thin Program.cs that constructs the window. -->
+    <ProjectReference Include="../../src/GameCore/AsteroidsGameCore.csproj" />
+    <ProjectReference Include="../../src/Platform.Sdl/Engine.Platform.Sdl.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="2.88.7" />
+  </ItemGroup>
+
+</Project>

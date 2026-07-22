@@ -10,3 +10,6 @@ obj/
 
 # OS
 .DS_Store
+
+# self-contained publish output (build/*.sh|ps1)
+dist/

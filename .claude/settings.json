@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git mv *)",
+      "Bash(dotnet sln *)",
+      "Bash(sed -i 's/Rectangle<int> usable = default;/Rect usable = default;/g' src/Platform.Sdl/SdlGameWindow.cs)",
+      "Bash(sed -i 's/usable\\\\.Size\\\\.X > 0\\)\\\\n            return \\(usable\\\\.Size\\\\.X, usable\\\\.Size\\\\.Y\\);//' src/Platform.Sdl/SdlGameWindow.cs)",
+      "Bash(sed -i 's/usable\\\\.Size\\\\.X/usable.W/g; s/usable\\\\.Size\\\\.Y/usable.H/g; s/usable\\\\.Origin\\\\.X/usable.X/g; s/usable\\\\.Origin\\\\.Y/usable.Y/g' src/Platform.Sdl/SdlGameWindow.cs)",
+      "Bash(sed -i 's/using Silk.NET.SDL;/using Silk.NET.SDL;\\\\nusing Silk.NET.Maths;/' src/Platform.Sdl/SdlGameWindow.cs)",
+      "Bash(sed -i 's/Rect usable = default;/Rectangle<int> usable = default;/g' src/Platform.Sdl/SdlGameWindow.cs)",
+      "Bash(sed -i 's/usable\\\\.W/usable.Size.X/g; s/usable\\\\.H/usable.Size.Y/g; s/usable\\\\.X/usable.Origin.X/g; s/usable\\\\.Y/usable.Origin.Y/g' src/Platform.Sdl/SdlGameWindow.cs)",
+      "Bash(cd /home/sebastian/ADVANCED/workspace; dotnet build AsteroidsOnSteroids.sln -v q --nologo 2>&1 | grep -E \"error|warning CS|Build succeeded|Build FAILED|Time Elapsed\" | head -12; rm -rf /tmp/refl)"
+    ],
+    "additionalDirectories": [
+      "/tmp/refl"
+    ]
+  }
+}

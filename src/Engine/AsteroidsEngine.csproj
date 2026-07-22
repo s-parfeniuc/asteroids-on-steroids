@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- UI-toolkit-free engine class library (net8.0). Platform backends (SDL+Skia, WinForms+Skia)
+         live in separate assemblies under src/Platform.* and implement the PAL interfaces
+         (IRenderer, IPostEffects, IGameWindow; IAudioBackend is a stub for a future audio sprint).
+         This project's folder holds ONLY engine source, so the default glob needs no excludes. -->
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>AsteroidsEngine</RootNamespace>
+  </PropertyGroup>
+
+</Project>

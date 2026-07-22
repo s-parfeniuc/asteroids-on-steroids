@@ -1,0 +1,2074 @@
+// Vortex on the screen
+=== 10:08:57  ast 218c  parts 13 ===
+FPS 70   frame 14.34 ms
+  PreviousStateSystem           0.016 ms
+  PlayerControlSystem           0.028 ms
+  AlienAiSystem                 0.024 ms
+  BossSystem                    0.008 ms
+  PhysicsSystem                 0.022 ms
+  VortexSystem                  0.027 ms
+  MovementSystem                0.009 ms
+  BorderHazardSystem            0.081 ms
+  RaycastBulletSystem           0.007 ms
+  GrenadeSystem                 0.008 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.009 ms
+  GhostSystem                   0.012 ms
+  CollisionSystem               0.442 ms
+  EventFlushSystem              0.097 ms
+  FractureCrackSystem           0.045 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.022 ms
+  TimeToLiveSystem              0.006 ms
+  FlushDeferred                 0.008 ms
+  Particles.Update              0.001 ms
+  Draw.World                    0.466 ms
+  Draw.VortexWarp               3.632 ms
+
+// slow-mo + grenade shrapnel mostly out of screen
+=== 10:56:33  ast 479c  parts 3909 ===
+FPS 4   frame 252.75 ms
+  PreviousStateSystem           0.127 ms
+  PlayerControlSystem           0.120 ms
+  AlienAiSystem                 0.071 ms
+  BossSystem                    0.028 ms
+  PhysicsSystem                 0.127 ms
+  VortexSystem                  0.136 ms
+  MovementSystem                0.138 ms
+  BorderHazardSystem            0.411 ms
+  RaycastBulletSystem         236.925 ms
+  GrenadeSystem                 0.098 ms
+  ProjectileSystem              0.006 ms
+  BlackHoleSystem               0.096 ms
+  GhostSystem                   0.030 ms
+  CollisionSystem               0.490 ms
+  EventFlushSystem              0.070 ms
+  FractureCrackSystem           0.051 ms
+  FractureGroupSystem           0.013 ms
+  StressRelaxSystem             0.113 ms
+  TimeToLiveSystem              0.190 ms
+  FlushDeferred                 0.063 ms
+  Particles.Update              0.721 ms
+  Draw.World                    0.579 ms
+  Draw.VortexWarp               3.011 ms
+
+// grenade shrapnel mostly out of screen, no slow-mo
+=== 10:59:01  ast 149c  parts 2858 ===
+FPS 41   frame 24.64 ms
+  PreviousStateSystem           0.035 ms
+  PlayerControlSystem           0.030 ms
+  AlienAiSystem                 0.015 ms
+  BossSystem                    0.007 ms
+  PhysicsSystem                 0.026 ms
+  VortexSystem                  0.029 ms
+  MovementSystem                0.032 ms
+  BorderHazardSystem            0.116 ms
+  RaycastBulletSystem          15.997 ms
+  GrenadeSystem                 0.031 ms
+  ProjectileSystem              0.001 ms
+  BlackHoleSystem               0.020 ms
+  GhostSystem                   0.006 ms
+  CollisionSystem               0.115 ms
+  EventFlushSystem              0.265 ms
+  FractureCrackSystem           0.044 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.011 ms
+  TimeToLiveSystem              0.041 ms
+  FlushDeferred                 0.020 ms
+  Particles.Update              0.083 ms
+  Draw.World                    0.640 ms
+  Draw.VortexWarp               0.023 ms
+
+=== 11:34:46  ast 200c  parts 4023 ===
+FPS 70   frame 14.30 ms
+  PreviousStateSystem           0.023 ms
+  PlayerControlSystem           0.023 ms
+  AlienAiSystem                 0.013 ms
+  BossSystem                    0.006 ms
+  PhysicsSystem                 0.018 ms
+  VortexSystem                  0.045 ms
+  MovementSystem                0.023 ms
+  BorderHazardSystem            0.087 ms
+  RaycastBulletSystem           3.373 ms
+  GrenadeSystem                 0.012 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.012 ms
+  GhostSystem                   0.002 ms
+  CollisionSystem               0.066 ms
+  EventFlushSystem              0.001 ms
+  FractureCrackSystem           0.002 ms
+  FractureGroupSystem           0.001 ms
+  StressRelaxSystem             0.010 ms
+  TimeToLiveSystem              0.026 ms
+  FlushDeferred                 0.002 ms
+  Particles.Update              0.100 ms
+  Draw.World                    0.791 ms
+  Draw.VortexWarp               4.072 ms
+
+=== 14:34:49  ast 779c  parts 595  worldDraws 1601 ===
+FPS 50   frame 19.87 ms
+  PreviousStateSystem           0.046 ms
+  PlayerControlSystem           0.030 ms
+  AlienAiSystem                 0.076 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.060 ms
+  VortexSystem                  0.092 ms
+  MovementSystem                0.053 ms
+  BorderHazardSystem            0.283 ms
+  BroadPhaseSystem              0.199 ms
+  RaycastBulletSystem           0.181 ms
+  GrenadeSystem                 0.043 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.033 ms
+  GhostSystem                   0.015 ms
+  CollisionSystem               0.477 ms
+  EventFlushSystem              0.236 ms
+  FractureCrackSystem           0.138 ms
+  FractureGroupSystem           0.004 ms
+  StressRelaxSystem             0.077 ms
+  TimeToLiveSystem              0.065 ms
+  FlushDeferred                 0.048 ms
+  Particles.Update              0.089 ms
+  Draw.World                    2.163 ms
+  Present                       3.747 ms
+  unaccounted                  11.715 ms
+
+=== 14:34:50  ast 716c  parts 190  worldDraws 936 ===
+FPS 85   frame 11.74 ms
+  PreviousStateSystem           0.020 ms
+  PlayerControlSystem           0.026 ms
+  AlienAiSystem                 0.056 ms
+  BossSystem                    0.004 ms
+  PhysicsSystem                 0.031 ms
+  VortexSystem                  0.033 ms
+  MovementSystem                0.017 ms
+  BorderHazardSystem            0.120 ms
+  BroadPhaseSystem              0.122 ms
+  RaycastBulletSystem           0.028 ms
+  GrenadeSystem                 0.015 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.013 ms
+  GhostSystem                   0.011 ms
+  CollisionSystem               0.218 ms
+  EventFlushSystem              0.083 ms
+  FractureCrackSystem           0.049 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.045 ms
+  TimeToLiveSystem              0.016 ms
+  FlushDeferred                 0.015 ms
+  Particles.Update              0.006 ms
+  Draw.World                    1.013 ms
+  Present                       3.316 ms
+  unaccounted                   6.477 ms
+
+=== 14:34:51  ast 702c  parts 134  worldDraws 1027 ===
+FPS 69   frame 14.52 ms
+  PreviousStateSystem           0.024 ms
+  PlayerControlSystem           0.027 ms
+  AlienAiSystem                 0.064 ms
+  BossSystem                    0.008 ms
+  PhysicsSystem                 0.035 ms
+  VortexSystem                  0.043 ms
+  MovementSystem                0.022 ms
+  BorderHazardSystem            0.143 ms
+  BroadPhaseSystem              0.145 ms
+  RaycastBulletSystem           0.074 ms
+  GrenadeSystem                 0.015 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.015 ms
+  GhostSystem                   0.012 ms
+  CollisionSystem               0.328 ms
+  EventFlushSystem              0.061 ms
+  FractureCrackSystem           0.031 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.053 ms
+  TimeToLiveSystem              0.021 ms
+  FlushDeferred                 0.018 ms
+  Particles.Update              0.032 ms
+  Draw.World                    1.536 ms
+  Present                       3.451 ms
+  unaccounted                   8.360 ms
+
+=== 14:35:02  ast 314c  parts 1542  worldDraws 2522 ===
+FPS 62   frame 16.23 ms
+  PreviousStateSystem           0.032 ms
+  PlayerControlSystem           0.027 ms
+  AlienAiSystem                 0.065 ms
+  BossSystem                    0.004 ms
+  PhysicsSystem                 0.036 ms
+  VortexSystem                  0.055 ms
+  MovementSystem                0.030 ms
+  BorderHazardSystem            0.158 ms
+  BroadPhaseSystem              0.118 ms
+  RaycastBulletSystem           0.271 ms
+  GrenadeSystem                 0.021 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.020 ms
+  GhostSystem                   0.011 ms
+  CollisionSystem               0.211 ms
+  EventFlushSystem              0.063 ms
+  FractureCrackSystem           0.043 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.034 ms
+  TimeToLiveSystem              0.036 ms
+  FlushDeferred                 0.043 ms
+  Particles.Update              0.081 ms
+  Draw.World                    2.024 ms
+  Present                       4.015 ms
+  unaccounted                   8.832 ms
+
+=== 14:35:17  ast 410c  parts 3947  worldDraws 5602 ===
+FPS 41   frame 24.45 ms
+  PreviousStateSystem           0.072 ms
+  PlayerControlSystem           0.029 ms
+  AlienAiSystem                 0.086 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.094 ms
+  VortexSystem                  0.108 ms
+  MovementSystem                0.082 ms
+  BorderHazardSystem            0.425 ms
+  BroadPhaseSystem              0.305 ms
+  RaycastBulletSystem           0.541 ms
+  GrenadeSystem                 0.047 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.047 ms
+  GhostSystem                   0.017 ms
+  CollisionSystem               0.485 ms
+  EventFlushSystem              0.118 ms
+  FractureCrackSystem           0.024 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.058 ms
+  TimeToLiveSystem              0.093 ms
+  FlushDeferred                 0.024 ms
+  Particles.Update              0.156 ms
+  Draw.World                    2.706 ms
+  Present                       3.555 ms
+  unaccounted                  15.372 ms
+
+=== 14:35:24  ast 349c  parts 52  worldDraws 694 ===
+FPS 74   frame 13.50 ms
+  PreviousStateSystem           0.025 ms
+  PlayerControlSystem           0.029 ms
+  AlienAiSystem                 0.077 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.042 ms
+  VortexSystem                  0.047 ms
+  MovementSystem                0.021 ms
+  BorderHazardSystem            0.170 ms
+  BroadPhaseSystem              0.167 ms
+  RaycastBulletSystem           0.016 ms
+  GrenadeSystem                 0.018 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.016 ms
+  GhostSystem                   0.015 ms
+  CollisionSystem               0.239 ms
+  EventFlushSystem              0.051 ms
+  FractureCrackSystem           0.022 ms
+  FractureGroupSystem           0.004 ms
+  StressRelaxSystem             0.043 ms
+  TimeToLiveSystem              0.017 ms
+  FlushDeferred                 0.011 ms
+  Particles.Update              0.004 ms
+  Draw.World                    1.280 ms
+  Present                       3.462 ms
+  unaccounted                   7.717 ms
+
+
+// Here I changed shrapnelCount to 1260
+=== 14:36:35  ast 416c  parts 4095  worldDraws 8349 ===
+FPS 33   frame 30.36 ms
+  PreviousStateSystem           0.106 ms
+  PlayerControlSystem           0.023 ms
+  AlienAiSystem                 0.017 ms
+  BossSystem                    0.006 ms
+  PhysicsSystem                 0.081 ms
+  VortexSystem                  0.087 ms
+  MovementSystem                0.130 ms
+  BorderHazardSystem            0.321 ms
+  BroadPhaseSystem              0.109 ms
+  RaycastBulletSystem           1.835 ms
+  GrenadeSystem                 0.088 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.071 ms
+  GhostSystem                   0.003 ms
+  CollisionSystem               0.113 ms
+  EventFlushSystem              0.138 ms
+  FractureCrackSystem           0.002 ms
+  FractureGroupSystem           0.001 ms
+  StressRelaxSystem             0.027 ms
+  TimeToLiveSystem              0.184 ms
+  FlushDeferred                 0.115 ms
+  Particles.Update              0.150 ms
+  Draw.World                    2.534 ms
+  Present                       2.667 ms
+  unaccounted                  21.553 ms
+
+=== 14:36:40  ast 400c  parts 3901  worldDraws 8213 ===
+FPS 32   frame 31.23 ms
+  PreviousStateSystem           0.100 ms
+  PlayerControlSystem           0.026 ms
+  AlienAiSystem                 0.019 ms
+  BossSystem                    0.006 ms
+  PhysicsSystem                 0.080 ms
+  VortexSystem                  0.088 ms
+  MovementSystem                0.125 ms
+  BorderHazardSystem            0.302 ms
+  BroadPhaseSystem              0.118 ms
+  RaycastBulletSystem           1.892 ms
+  GrenadeSystem                 0.073 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.070 ms
+  GhostSystem                   0.005 ms
+  CollisionSystem               0.270 ms
+  EventFlushSystem              0.122 ms
+  FractureCrackSystem           0.014 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.034 ms
+  TimeToLiveSystem              0.191 ms
+  FlushDeferred                 0.005 ms
+  Particles.Update              0.140 ms
+  Draw.World                    2.513 ms
+  Present                       3.698 ms
+  unaccounted                  21.336 ms
+
+=== 14:36:59  ast 89c  parts 4094  worldDraws 8318 ===
+FPS 38   frame 26.41 ms
+  PreviousStateSystem           0.090 ms
+  PlayerControlSystem           0.029 ms
+  AlienAiSystem                 0.025 ms
+  BossSystem                    0.007 ms
+  PhysicsSystem                 0.079 ms
+  VortexSystem                  0.079 ms
+  MovementSystem                0.099 ms
+  BorderHazardSystem            0.295 ms
+  BroadPhaseSystem              0.123 ms
+  RaycastBulletSystem           1.430 ms
+  GrenadeSystem                 0.063 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.060 ms
+  GhostSystem                   0.010 ms
+  CollisionSystem               0.147 ms
+  EventFlushSystem              0.117 ms
+  FractureCrackSystem           0.004 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.015 ms
+  TimeToLiveSystem              0.138 ms
+  FlushDeferred                 0.004 ms
+  Particles.Update              0.099 ms
+  Draw.World                    2.044 ms
+  Present                       3.616 ms
+  unaccounted                  17.838 ms
+
+=== 14:51:25  ast 696c  parts 256  worldDraws 1408 ===
+FPS 56   frame 17.91 ms
+  PreviousStateSystem           0.030 ms
+  PlayerControlSystem           0.023 ms
+  AlienAiSystem                 0.082 ms
+  BossSystem                    0.004 ms
+  PhysicsSystem                 0.045 ms
+  VortexSystem                  0.048 ms
+  MovementSystem                0.033 ms
+  BorderHazardSystem            0.284 ms
+  BroadPhaseSystem              0.160 ms
+  RaycastBulletSystem           0.044 ms
+  GrenadeSystem                 0.019 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.019 ms
+  GhostSystem                   0.012 ms
+  CollisionSystem               0.364 ms
+  EventFlushSystem              0.138 ms
+  FractureCrackSystem           0.106 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.061 ms
+  TimeToLiveSystem              0.030 ms
+  FlushDeferred                 0.021 ms
+  Particles.Update              0.012 ms
+  Draw.World                    1.495 ms
+  Present                       6.358 ms
+  unaccounted                   8.519 ms
+
+=== 14:51:30  ast 313c  parts 3207  worldDraws 1435 ===
+FPS 75   frame 13.36 ms
+  PreviousStateSystem           0.027 ms
+  PlayerControlSystem           0.021 ms
+  AlienAiSystem                 0.060 ms
+  BossSystem                    0.004 ms
+  PhysicsSystem                 0.032 ms
+  VortexSystem                  0.035 ms
+  MovementSystem                0.026 ms
+  BorderHazardSystem            0.192 ms
+  BroadPhaseSystem              0.097 ms
+  RaycastBulletSystem           0.185 ms
+  GrenadeSystem                 0.015 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.014 ms
+  GhostSystem                   0.007 ms
+  CollisionSystem               0.159 ms
+  EventFlushSystem              0.103 ms
+  FractureCrackSystem           0.013 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.024 ms
+  TimeToLiveSystem              0.025 ms
+  FlushDeferred                 0.014 ms
+  Particles.Update              0.032 ms
+  Draw.World                    1.379 ms
+  Present                       3.273 ms
+  unaccounted                   7.621 ms
+
+// 1260 shrapnel, new tests 
+
+=== 15:05:21  ast 1047c  parts 4003  worldDraws 2901 ===
+FPS 27   frame 36.58 ms
+  PreviousStateSystem           0.078 ms
+  PlayerControlSystem           0.036 ms
+  AlienAiSystem                 0.092 ms
+  BossSystem                    0.006 ms
+  PhysicsSystem                 0.087 ms
+  VortexSystem                  0.099 ms
+  MovementSystem                0.088 ms
+  BorderHazardSystem            0.364 ms
+  BroadPhaseSystem              0.253 ms
+  RaycastBulletSystem           1.412 ms
+  GrenadeSystem                 0.059 ms
+  ProjectileSystem              0.001 ms
+  BlackHoleSystem               0.059 ms
+  GhostSystem                   0.017 ms
+  CollisionSystem               0.680 ms
+  EventFlushSystem              0.232 ms
+  FractureCrackSystem           0.032 ms
+  FractureGroupSystem           0.004 ms
+  StressRelaxSystem             0.111 ms
+  TimeToLiveSystem              0.108 ms
+  FlushDeferred                 0.045 ms
+  Particles.Update              0.144 ms
+  Draw.World                    2.348 ms
+  Draw.Overlay                 21.069 ms
+  Draw.Flush                    3.865 ms
+  Present                       4.216 ms
+  unaccounted                   1.078 ms
+
+=== 15:05:22  ast 1128c  parts 891  worldDraws 1281 ===
+FPS 52   frame 19.34 ms
+  PreviousStateSystem           0.038 ms
+  PlayerControlSystem           0.030 ms
+  AlienAiSystem                 0.076 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.046 ms
+  VortexSystem                  0.050 ms
+  MovementSystem                0.035 ms
+  BorderHazardSystem            0.205 ms
+  BroadPhaseSystem              0.161 ms
+  RaycastBulletSystem           0.102 ms
+  GrenadeSystem                 0.024 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.026 ms
+  GhostSystem                   0.010 ms
+  CollisionSystem               0.367 ms
+  EventFlushSystem              0.109 ms
+  FractureCrackSystem           0.034 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.086 ms
+  TimeToLiveSystem              0.042 ms
+  FlushDeferred                 0.011 ms
+  Particles.Update              0.052 ms
+  Draw.World                    1.763 ms
+  Draw.Overlay                  7.450 ms
+  Draw.Flush                    3.480 ms
+  Present                       4.537 ms
+  unaccounted                   0.594 ms
+
+=== 16:02:47  ast 836c  parts 3921  worldDraws 4168 ===
+FPS 29   frame 34.49 ms
+  PreviousStateSystem           0.103 ms
+  PlayerControlSystem           0.033 ms
+  AlienAiSystem                 0.077 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.095 ms
+  VortexSystem                  0.107 ms
+  MovementSystem                0.122 ms
+  BorderHazardSystem            0.431 ms
+  BroadPhaseSystem              0.226 ms
+  RaycastBulletSystem           1.996 ms
+  GrenadeSystem                 0.071 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.071 ms
+  GhostSystem                   0.011 ms
+  CollisionSystem               0.471 ms
+  EventFlushSystem              0.238 ms
+  FractureCrackSystem           0.035 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.072 ms
+  TimeToLiveSystem              0.157 ms
+  FlushDeferred                 0.026 ms
+  Particles.Update              0.120 ms
+  Draw.World                    1.758 ms
+  Draw.Overlay                 18.428 ms
+  Draw.Flush                    3.644 ms
+  Present                       5.657 ms
+  unaccounted                   0.536 ms
+
+=== 16:18:53  ast 1378c  parts 3947  worldDraws 4320 ===
+FPS 27   frame 36.84 ms
+  PreviousStateSystem           0.102 ms
+  PlayerControlSystem           0.029 ms
+  AlienAiSystem                 0.075 ms
+  BossSystem                    0.006 ms
+  PhysicsSystem                 0.099 ms
+  VortexSystem                  0.110 ms
+  MovementSystem                0.123 ms
+  BorderHazardSystem            0.449 ms
+  BroadPhaseSystem              0.230 ms
+  RaycastBulletSystem           1.837 ms
+  GrenadeSystem                 0.071 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.072 ms
+  GhostSystem                   0.011 ms
+  CollisionSystem               0.368 ms
+  EventFlushSystem              0.176 ms
+  FractureCrackSystem           0.036 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.107 ms
+  TimeToLiveSystem              0.164 ms
+  FlushDeferred                 0.032 ms
+  Particles.Update              0.117 ms
+  Draw.World                    2.069 ms
+  Draw.Overlay                 19.410 ms
+  Draw.Flush                    4.036 ms
+  Present                       6.248 ms
+  unaccounted                   0.861 ms
+
+=== 16:18:54  ast 1378c  parts 3944  worldDraws 4292 ===
+FPS 25   frame 40.22 ms
+  PreviousStateSystem           0.080 ms
+  PlayerControlSystem           0.022 ms
+  AlienAiSystem                 0.053 ms
+  BossSystem                    0.004 ms
+  PhysicsSystem                 0.076 ms
+  VortexSystem                  0.084 ms
+  MovementSystem                0.096 ms
+  BorderHazardSystem            0.346 ms
+  BroadPhaseSystem              0.169 ms
+  RaycastBulletSystem           1.417 ms
+  GrenadeSystem                 0.055 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.055 ms
+  GhostSystem                   0.007 ms
+  CollisionSystem               0.258 ms
+  EventFlushSystem              0.112 ms
+  FractureCrackSystem           0.026 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.075 ms
+  TimeToLiveSystem              0.127 ms
+  FlushDeferred                 0.023 ms
+  Particles.Update              0.094 ms
+  Draw.World                    2.462 ms
+  Draw.Overlay                 23.469 ms
+  Draw.Flush                    3.944 ms
+  Present                       5.190 ms
+  unaccounted                   1.970 ms
+
+=== 16:18:54  ast 1378c  parts 3959  worldDraws 4269 ===
+FPS 25   frame 39.85 ms
+  PreviousStateSystem           0.066 ms
+  PlayerControlSystem           0.019 ms
+  AlienAiSystem                 0.041 ms
+  BossSystem                    0.003 ms
+  PhysicsSystem                 0.062 ms
+  VortexSystem                  0.068 ms
+  MovementSystem                0.080 ms
+  BorderHazardSystem            0.279 ms
+  BroadPhaseSystem              0.139 ms
+  RaycastBulletSystem           1.148 ms
+  GrenadeSystem                 0.046 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.047 ms
+  GhostSystem                   0.006 ms
+  CollisionSystem               0.209 ms
+  EventFlushSystem              0.121 ms
+  FractureCrackSystem           0.023 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.056 ms
+  TimeToLiveSystem              0.104 ms
+  FlushDeferred                 0.020 ms
+  Particles.Update              0.077 ms
+  Draw.World                    2.599 ms
+  Draw.Overlay                 25.074 ms
+  Draw.Flush                    3.186 ms
+  Present                       4.715 ms
+  unaccounted                   1.661 ms
+
+=== 16:18:54  ast 1378c  parts 4029  worldDraws 3556 ===
+FPS 23   frame 43.20 ms
+  PreviousStateSystem           0.095 ms
+  PlayerControlSystem           0.021 ms
+  AlienAiSystem                 0.049 ms
+  BossSystem                    0.004 ms
+  PhysicsSystem                 0.087 ms
+  VortexSystem                  0.097 ms
+  MovementSystem                0.116 ms
+  BorderHazardSystem            0.391 ms
+  BroadPhaseSystem              0.179 ms
+  RaycastBulletSystem           1.596 ms
+  GrenadeSystem                 0.069 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.069 ms
+  GhostSystem                   0.008 ms
+  CollisionSystem               0.296 ms
+  EventFlushSystem              0.115 ms
+  FractureCrackSystem           0.024 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.076 ms
+  TimeToLiveSystem              0.156 ms
+  FlushDeferred                 0.037 ms
+  Particles.Update              0.124 ms
+  Draw.World                    3.231 ms
+  Draw.Overlay                 26.781 ms
+  Draw.Flush                    2.747 ms
+  Present                       5.095 ms
+  unaccounted                   1.735 ms
+
+=== 16:28:19  ast 1322c  parts 3  worldDraws 1178 ===
+FPS 74   frame 13.58 ms
+  PreviousStateSystem           0.028 ms
+  PlayerControlSystem           0.000 ms
+  AlienAiSystem                 0.045 ms
+  BossSystem                    0.003 ms
+  PhysicsSystem                 0.029 ms
+  VortexSystem                  0.031 ms
+  MovementSystem                0.022 ms
+  BorderHazardSystem            0.121 ms
+  BroadPhaseSystem              0.098 ms
+  RaycastBulletSystem           0.020 ms
+  GrenadeSystem                 0.015 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.015 ms
+  GhostSystem                   0.007 ms
+  CollisionSystem               0.212 ms
+  EventFlushSystem              0.108 ms
+  FractureCrackSystem           0.071 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.059 ms
+  TimeToLiveSystem              0.028 ms
+  FlushDeferred                 0.023 ms
+  Particles.Update              0.003 ms
+  Draw.World                    1.215 ms
+  Draw.Overlay                  4.700 ms
+  Draw.Flush                    1.754 ms
+  Present                       4.506 ms
+  unaccounted                   0.469 ms
+
+=== 16:28:34  ast 710c  parts 4036  worldDraws 709 ===
+FPS 36   frame 27.63 ms
+  PreviousStateSystem           0.050 ms
+  PlayerControlSystem           0.026 ms
+  AlienAiSystem                 0.121 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.051 ms
+  VortexSystem                  0.056 ms
+  MovementSystem                0.057 ms
+  BorderHazardSystem            0.225 ms
+  BroadPhaseSystem              0.141 ms
+  RaycastBulletSystem           1.008 ms
+  GrenadeSystem                 0.034 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.034 ms
+  GhostSystem                   0.009 ms
+  CollisionSystem               0.273 ms
+  EventFlushSystem              0.180 ms
+  FractureCrackSystem           0.032 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.058 ms
+  TimeToLiveSystem              0.080 ms
+  FlushDeferred                 0.054 ms
+  Particles.Update              0.135 ms
+  Draw.World                    2.286 ms
+  Draw.Overlay                 11.691 ms
+  Draw.Flush                    3.529 ms
+  Present                       6.884 ms
+  unaccounted                   0.604 ms
+
+=== 16:28:38  ast 858c  parts 4095  worldDraws 676 ===
+FPS 40   frame 24.76 ms
+  PreviousStateSystem           0.037 ms
+  PlayerControlSystem           0.029 ms
+  AlienAiSystem                 0.081 ms
+  BossSystem                    0.006 ms
+  PhysicsSystem                 0.041 ms
+  VortexSystem                  0.045 ms
+  MovementSystem                0.040 ms
+  BorderHazardSystem            0.169 ms
+  BroadPhaseSystem              0.153 ms
+  RaycastBulletSystem           0.893 ms
+  GrenadeSystem                 0.027 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.025 ms
+  GhostSystem                   0.009 ms
+  CollisionSystem               0.437 ms
+  EventFlushSystem              0.229 ms
+  FractureCrackSystem           0.032 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.064 ms
+  TimeToLiveSystem              0.061 ms
+  FlushDeferred                 0.068 ms
+  Particles.Update              0.040 ms
+  Draw.World                    1.457 ms
+  Draw.Overlay                  9.878 ms
+  Draw.Flush                    4.101 ms
+  Present                       5.872 ms
+  unaccounted                   0.969 ms
+
+=== 16:28:38  ast 876c  parts 4040  worldDraws 693 ===
+FPS 39   frame 25.85 ms
+  PreviousStateSystem           0.043 ms
+  PlayerControlSystem           0.025 ms
+  AlienAiSystem                 0.065 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.043 ms
+  VortexSystem                  0.046 ms
+  MovementSystem                0.046 ms
+  BorderHazardSystem            0.172 ms
+  BroadPhaseSystem              0.127 ms
+  RaycastBulletSystem           0.782 ms
+  GrenadeSystem                 0.029 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.028 ms
+  GhostSystem                   0.008 ms
+  CollisionSystem               0.379 ms
+  EventFlushSystem              0.118 ms
+  FractureCrackSystem           0.015 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.061 ms
+  TimeToLiveSystem              0.066 ms
+  FlushDeferred                 0.054 ms
+  Particles.Update              0.110 ms
+  Draw.World                    1.813 ms
+  Draw.Overlay                 11.212 ms
+  Draw.Flush                    3.516 ms
+  Present                       6.086 ms
+  unaccounted                   0.998 ms
+
+=== 16:28:38  ast 915c  parts 4048  worldDraws 740 ===
+FPS 35   frame 28.53 ms
+  PreviousStateSystem           0.052 ms
+  PlayerControlSystem           0.028 ms
+  AlienAiSystem                 0.075 ms
+  BossSystem                    0.006 ms
+  PhysicsSystem                 0.057 ms
+  VortexSystem                  0.062 ms
+  MovementSystem                0.061 ms
+  BorderHazardSystem            0.243 ms
+  BroadPhaseSystem              0.159 ms
+  RaycastBulletSystem           0.912 ms
+  GrenadeSystem                 0.040 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.037 ms
+  GhostSystem                   0.009 ms
+  CollisionSystem               0.527 ms
+  EventFlushSystem              0.106 ms
+  FractureCrackSystem           0.031 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.076 ms
+  TimeToLiveSystem              0.084 ms
+  FlushDeferred                 0.056 ms
+  Particles.Update              0.205 ms
+  Draw.World                    2.161 ms
+  Draw.Overlay                 11.458 ms
+  Draw.Flush                    3.628 ms
+  Present                       6.727 ms
+  unaccounted                   1.728 ms
+
+=== 16:28:44  ast 889c  parts 24  worldDraws 975 ===
+FPS 56   frame 17.80 ms
+  PreviousStateSystem           0.026 ms
+  PlayerControlSystem           0.026 ms
+  AlienAiSystem                 0.092 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.035 ms
+  VortexSystem                  0.039 ms
+  MovementSystem                0.022 ms
+  BorderHazardSystem            0.144 ms
+  BroadPhaseSystem              0.137 ms
+  RaycastBulletSystem           0.036 ms
+  GrenadeSystem                 0.022 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.018 ms
+  GhostSystem                   0.009 ms
+  CollisionSystem               0.328 ms
+  EventFlushSystem              0.063 ms
+  FractureCrackSystem           0.127 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.061 ms
+  TimeToLiveSystem              0.025 ms
+  FlushDeferred                 0.022 ms
+  Particles.Update              0.002 ms
+  Draw.World                    1.107 ms
+  Draw.Overlay                  5.543 ms
+  Draw.Flush                    3.707 ms
+  Present                       5.283 ms
+  unaccounted                   0.918 ms
+
+=== 16:28:45  ast 880c  parts 16  worldDraws 1116 ===
+FPS 55   frame 18.12 ms
+  PreviousStateSystem           0.023 ms
+  PlayerControlSystem           0.025 ms
+  AlienAiSystem                 0.093 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.032 ms
+  VortexSystem                  0.038 ms
+  MovementSystem                0.019 ms
+  BorderHazardSystem            0.138 ms
+  BroadPhaseSystem              0.140 ms
+  RaycastBulletSystem           0.035 ms
+  GrenadeSystem                 0.019 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.017 ms
+  GhostSystem                   0.010 ms
+  CollisionSystem               0.290 ms
+  EventFlushSystem              0.071 ms
+  FractureCrackSystem           0.131 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.064 ms
+  TimeToLiveSystem              0.022 ms
+  FlushDeferred                 0.024 ms
+  Particles.Update              0.002 ms
+  Draw.World                    1.267 ms
+  Draw.Overlay                  4.685 ms
+  Draw.Flush                    4.318 ms
+  Present                       5.737 ms
+  unaccounted                   0.909 ms
+
+=== 16:28:45  ast 877c  parts 3439  worldDraws 1197 ===
+FPS 41   frame 24.63 ms
+  PreviousStateSystem           0.065 ms
+  PlayerControlSystem           0.027 ms
+  AlienAiSystem                 0.104 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.063 ms
+  VortexSystem                  0.073 ms
+  MovementSystem                0.071 ms
+  BorderHazardSystem            0.267 ms
+  BroadPhaseSystem              0.183 ms
+  RaycastBulletSystem           1.062 ms
+  GrenadeSystem                 0.046 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.043 ms
+  GhostSystem                   0.011 ms
+  CollisionSystem               0.303 ms
+  EventFlushSystem              0.221 ms
+  FractureCrackSystem           0.163 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.074 ms
+  TimeToLiveSystem              0.098 ms
+  FlushDeferred                 0.035 ms
+  Particles.Update              0.050 ms
+  Draw.World                    2.368 ms
+  Draw.Overlay                  9.364 ms
+  Draw.Flush                    3.685 ms
+  Present                       5.310 ms
+  unaccounted                   0.940 ms
+
+=== 16:28:45  ast 820c  parts 3002  worldDraws 1290 ===
+FPS 40   frame 24.90 ms
+  PreviousStateSystem           0.065 ms
+  PlayerControlSystem           0.025 ms
+  AlienAiSystem                 0.087 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.064 ms
+  VortexSystem                  0.068 ms
+  MovementSystem                0.073 ms
+  BorderHazardSystem            0.265 ms
+  BroadPhaseSystem              0.162 ms
+  RaycastBulletSystem           1.019 ms
+  GrenadeSystem                 0.047 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.045 ms
+  GhostSystem                   0.008 ms
+  CollisionSystem               0.234 ms
+  EventFlushSystem              0.146 ms
+  FractureCrackSystem           0.140 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.060 ms
+  TimeToLiveSystem              0.106 ms
+  FlushDeferred                 0.113 ms
+  Particles.Update              0.086 ms
+  Draw.World                    2.541 ms
+  Draw.Overlay                 10.529 ms
+  Draw.Flush                    3.428 ms
+  Present                       4.607 ms
+  unaccounted                   0.974 ms
+
+=== 16:30:29  ast 1145c  parts 2261  worldDraws 887 ===
+FPS 49   frame 20.47 ms
+  PreviousStateSystem           0.084 ms
+  PlayerControlSystem           0.005 ms
+  AlienAiSystem                 0.043 ms
+  BossSystem                    0.006 ms
+  PhysicsSystem                 0.096 ms
+  VortexSystem                  0.108 ms
+  MovementSystem                0.091 ms
+  BorderHazardSystem            0.380 ms
+  BroadPhaseSystem              0.261 ms
+  RaycastBulletSystem           0.738 ms
+  GrenadeSystem                 0.050 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.050 ms
+  GhostSystem                   0.008 ms
+  CollisionSystem               0.548 ms
+  EventFlushSystem              0.142 ms
+  FractureCrackSystem           0.033 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.067 ms
+  TimeToLiveSystem              0.089 ms
+  FlushDeferred                 0.075 ms
+  Particles.Update              0.090 ms
+  Draw.World                    3.038 ms
+  Draw.Overlay                  0.251 ms
+  Draw.Flush                    8.083 ms
+  Present                       5.381 ms
+  unaccounted                   0.746 ms
+
+=== 16:36:05  ast 1461c  parts 4096  worldDraws 333 ===
+FPS 41   frame 24.59 ms
+  PreviousStateSystem           0.041 ms
+  PlayerControlSystem           0.026 ms
+  AlienAiSystem                 0.063 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.038 ms
+  VortexSystem                  0.047 ms
+  MovementSystem                0.042 ms
+  BorderHazardSystem            0.162 ms
+  BroadPhaseSystem              0.140 ms
+  RaycastBulletSystem           0.845 ms
+  GrenadeSystem                 0.028 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.027 ms
+  GhostSystem                   0.007 ms
+  CollisionSystem               0.264 ms
+  EventFlushSystem              0.254 ms
+  FractureCrackSystem           0.062 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.085 ms
+  TimeToLiveSystem              0.066 ms
+  FlushDeferred                 0.021 ms
+  Particles.Update              0.039 ms
+  Draw.World                    1.407 ms
+  Draw.Overlay                 10.495 ms
+  Draw.Flush                    4.487 ms
+  Present                       5.432 ms
+  unaccounted                   0.504 ms
+
+=== 16:36:05  ast 1450c  parts 3890  worldDraws 329 ===
+FPS 34   frame 29.28 ms
+  PreviousStateSystem           0.081 ms
+  PlayerControlSystem           0.028 ms
+  AlienAiSystem                 0.066 ms
+  BossSystem                    0.006 ms
+  PhysicsSystem                 0.078 ms
+  VortexSystem                  0.087 ms
+  MovementSystem                0.102 ms
+  BorderHazardSystem            0.321 ms
+  BroadPhaseSystem              0.194 ms
+  RaycastBulletSystem           1.509 ms
+  GrenadeSystem                 0.058 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.058 ms
+  GhostSystem                   0.008 ms
+  CollisionSystem               0.312 ms
+  EventFlushSystem              0.240 ms
+  FractureCrackSystem           0.099 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.096 ms
+  TimeToLiveSystem              0.130 ms
+  FlushDeferred                 0.018 ms
+  Particles.Update              0.114 ms
+  Draw.World                    2.599 ms
+  Draw.Overlay                 13.310 ms
+  Draw.Flush                    3.634 ms
+  Present                       4.589 ms
+  unaccounted                   1.542 ms
+
+=== 16:36:06  ast 1435c  parts 3975  worldDraws 329 ===
+FPS 35   frame 28.55 ms
+  PreviousStateSystem           0.100 ms
+  PlayerControlSystem           0.028 ms
+  AlienAiSystem                 0.063 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.086 ms
+  VortexSystem                  0.095 ms
+  MovementSystem                0.119 ms
+  BorderHazardSystem            0.360 ms
+  BroadPhaseSystem              0.197 ms
+  RaycastBulletSystem           1.633 ms
+  GrenadeSystem                 0.068 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.068 ms
+  GhostSystem                   0.009 ms
+  CollisionSystem               0.349 ms
+  EventFlushSystem              0.206 ms
+  FractureCrackSystem           0.099 ms
+  FractureGroupSystem           0.004 ms
+  StressRelaxSystem             0.103 ms
+  TimeToLiveSystem              0.160 ms
+  FlushDeferred                 0.060 ms
+  Particles.Update              0.156 ms
+  Draw.World                    3.085 ms
+  Draw.Overlay                 13.018 ms
+  Draw.Flush                    3.149 ms
+  Present                       4.231 ms
+  unaccounted                   1.099 ms
+
+=== 16:36:28  ast 2279c  parts 748  worldDraws 771 ===
+FPS 41   frame 24.48 ms
+  PreviousStateSystem           0.169 ms
+  PlayerControlSystem           0.036 ms
+  AlienAiSystem                 0.268 ms
+  BossSystem                    0.007 ms
+  PhysicsSystem                 0.257 ms
+  VortexSystem                  0.300 ms
+  MovementSystem                0.208 ms
+  BorderHazardSystem            1.199 ms
+  BroadPhaseSystem              0.832 ms
+  RaycastBulletSystem           0.248 ms
+  GrenadeSystem                 0.120 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.120 ms
+  GhostSystem                   0.036 ms
+  CollisionSystem               2.793 ms
+  EventFlushSystem              0.175 ms
+  FractureCrackSystem           0.089 ms
+  FractureGroupSystem           0.004 ms
+  StressRelaxSystem             0.226 ms
+  TimeToLiveSystem              0.206 ms
+  FlushDeferred                 0.041 ms
+  Particles.Update              0.036 ms
+  Draw.World                    1.422 ms
+  Draw.Overlay                  5.921 ms
+  Draw.Flush                    2.214 ms
+  Present                       4.819 ms
+  unaccounted                   2.731 ms
+
+=== 16:36:29  ast 2155c  parts 497  worldDraws 731 ===
+FPS 56   frame 17.96 ms
+  PreviousStateSystem           0.097 ms
+  PlayerControlSystem           0.028 ms
+  AlienAiSystem                 0.177 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.143 ms
+  VortexSystem                  0.162 ms
+  MovementSystem                0.121 ms
+  BorderHazardSystem            0.639 ms
+  BroadPhaseSystem              0.535 ms
+  RaycastBulletSystem           0.119 ms
+  GrenadeSystem                 0.066 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.068 ms
+  GhostSystem                   0.022 ms
+  CollisionSystem               1.439 ms
+  EventFlushSystem              0.123 ms
+  FractureCrackSystem           0.044 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.135 ms
+  TimeToLiveSystem              0.116 ms
+  FlushDeferred                 0.030 ms
+  Particles.Update              0.016 ms
+  Draw.World                    1.216 ms
+  Draw.Overlay                  5.584 ms
+  Draw.Flush                    2.144 ms
+  Present                       4.452 ms
+  unaccounted                   0.477 ms
+
+// Toggled particles off 
+=== 17:09:29  ast 1155c  parts 4092  worldDraws 318 ===
+FPS 37   frame 26.79 ms
+  PreviousStateSystem           0.070 ms
+  PlayerControlSystem           0.029 ms
+  AlienAiSystem                 0.070 ms
+  BossSystem                    0.006 ms
+  PhysicsSystem                 0.065 ms
+  VortexSystem                  0.074 ms
+  MovementSystem                0.082 ms
+  BorderHazardSystem            0.261 ms
+  BroadPhaseSystem              0.172 ms
+  RaycastBulletSystem           1.496 ms
+  GrenadeSystem                 0.041 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.040 ms
+  GhostSystem                   0.009 ms
+  CollisionSystem               0.302 ms
+  EventFlushSystem              0.314 ms
+  FractureCrackSystem           0.050 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.068 ms
+  TimeToLiveSystem              0.091 ms
+  FlushDeferred                 0.016 ms
+  Particles.Update              0.067 ms
+  Draw.World                    1.658 ms
+  Draw.Overlay                 12.264 ms
+  Draw.Flush                    3.502 ms
+  Present                       5.502 ms
+  unaccounted                   0.544 ms
+
+=== 17:09:29  ast 1154c  parts 3991  worldDraws 295 ===
+FPS 32   frame 31.72 ms
+  PreviousStateSystem           0.099 ms
+  PlayerControlSystem           0.029 ms
+  AlienAiSystem                 0.066 ms
+  BossSystem                    0.006 ms
+  PhysicsSystem                 0.087 ms
+  VortexSystem                  0.098 ms
+  MovementSystem                0.119 ms
+  BorderHazardSystem            0.346 ms
+  BroadPhaseSystem              0.193 ms
+  RaycastBulletSystem           1.833 ms
+  GrenadeSystem                 0.064 ms
+  ProjectileSystem              0.001 ms
+  BlackHoleSystem               0.064 ms
+  GhostSystem                   0.010 ms
+  CollisionSystem               0.295 ms
+  EventFlushSystem              0.204 ms
+  FractureCrackSystem           0.059 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.075 ms
+  TimeToLiveSystem              0.163 ms
+  FlushDeferred                 0.022 ms
+  Particles.Update              0.129 ms
+  Draw.World                    2.868 ms
+  Draw.Overlay                 14.771 ms
+  Draw.Flush                    3.160 ms
+  Present                       5.558 ms
+  unaccounted                   1.399 ms
+
+=== 17:09:29  ast 1145c  parts 4033  worldDraws 309 ===
+FPS 31   frame 32.11 ms
+  PreviousStateSystem           0.077 ms
+  PlayerControlSystem           0.023 ms
+  AlienAiSystem                 0.052 ms
+  BossSystem                    0.004 ms
+  PhysicsSystem                 0.067 ms
+  VortexSystem                  0.076 ms
+  MovementSystem                0.093 ms
+  BorderHazardSystem            0.280 ms
+  BroadPhaseSystem              0.151 ms
+  RaycastBulletSystem           1.358 ms
+  GrenadeSystem                 0.052 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.052 ms
+  GhostSystem                   0.010 ms
+  CollisionSystem               0.223 ms
+  EventFlushSystem              0.179 ms
+  FractureCrackSystem           0.074 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.058 ms
+  TimeToLiveSystem              0.125 ms
+  FlushDeferred                 0.036 ms
+  Particles.Update              0.111 ms
+  Draw.World                    3.468 ms
+  Draw.Overlay                 15.766 ms
+  Draw.Flush                    2.979 ms
+  Present                       5.659 ms
+  unaccounted                   1.132 ms
+
+=== 17:09:29  ast 1142c  parts 3938  worldDraws 319 ===
+FPS 31   frame 32.00 ms
+  PreviousStateSystem           0.071 ms
+  PlayerControlSystem           0.022 ms
+  AlienAiSystem                 0.052 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.065 ms
+  VortexSystem                  0.071 ms
+  MovementSystem                0.084 ms
+  BorderHazardSystem            0.258 ms
+  BroadPhaseSystem              0.143 ms
+  RaycastBulletSystem           1.170 ms
+  GrenadeSystem                 0.048 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.048 ms
+  GhostSystem                   0.009 ms
+  CollisionSystem               0.210 ms
+  EventFlushSystem              0.246 ms
+  FractureCrackSystem           0.093 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.056 ms
+  TimeToLiveSystem              0.107 ms
+  FlushDeferred                 0.067 ms
+  Particles.Update              0.116 ms
+  Draw.World                    3.340 ms
+  Draw.Overlay                 14.395 ms
+  Draw.Flush                    3.400 ms
+  Present                       6.802 ms
+  unaccounted                   1.115 ms
+// Toggled everything off (C / V / B)
+=== 17:22:37  ast 655c  parts 4091  worldDraws 223  overlayDraws 157 (streaks 0) ===
+FPS 43   frame 23.03 ms
+  PreviousStateSystem           0.037 ms
+  PlayerControlSystem           0.024 ms
+  AlienAiSystem                 0.068 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.039 ms
+  VortexSystem                  0.045 ms
+  MovementSystem                0.041 ms
+  BorderHazardSystem            0.175 ms
+  BroadPhaseSystem              0.123 ms
+  RaycastBulletSystem           0.807 ms
+  GrenadeSystem                 0.024 ms
+  ProjectileSystem              0.001 ms
+  BlackHoleSystem               0.023 ms
+  GhostSystem                   0.008 ms
+  CollisionSystem               0.501 ms
+  EventFlushSystem              0.220 ms
+  FractureCrackSystem           0.039 ms
+  FractureGroupSystem           0.001 ms
+  StressRelaxSystem             0.047 ms
+  TimeToLiveSystem              0.061 ms
+  FlushDeferred                 0.029 ms
+  Particles.Update              0.037 ms
+  Draw.World                    1.066 ms
+  Draw.Overlay                  7.639 ms
+  Draw.Flush                    3.625 ms
+  Present                       7.786 ms
+  unaccounted                   0.561 ms
+
+=== 17:22:38  ast 649c  parts 4093  worldDraws 221  overlayDraws 159 (streaks 0) ===
+FPS 30   frame 33.24 ms
+  PreviousStateSystem           0.110 ms
+  PlayerControlSystem           0.031 ms
+  AlienAiSystem                 0.091 ms
+  BossSystem                    0.006 ms
+  PhysicsSystem                 0.099 ms
+  VortexSystem                  0.114 ms
+  MovementSystem                0.136 ms
+  BorderHazardSystem            0.452 ms
+  BroadPhaseSystem              0.214 ms
+  RaycastBulletSystem           2.141 ms
+  GrenadeSystem                 0.077 ms
+  ProjectileSystem              0.001 ms
+  BlackHoleSystem               0.075 ms
+  GhostSystem                   0.013 ms
+  CollisionSystem               0.795 ms
+  EventFlushSystem              0.226 ms
+  FractureCrackSystem           0.056 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.067 ms
+  TimeToLiveSystem              0.196 ms
+  FlushDeferred                 0.027 ms
+  Particles.Update              0.169 ms
+  Draw.World                    2.458 ms
+  Draw.Overlay                 13.650 ms
+  Draw.Flush                    3.272 ms
+  Present                       6.943 ms
+  unaccounted                   1.820 ms
+
+=== 17:22:38  ast 647c  parts 4042  worldDraws 217  overlayDraws 157 (streaks 0) ===
+FPS 27   frame 37.15 ms
+  PreviousStateSystem           0.167 ms
+  PlayerControlSystem           0.037 ms
+  AlienAiSystem                 0.106 ms
+  BossSystem                    0.007 ms
+  PhysicsSystem                 0.140 ms
+  VortexSystem                  0.161 ms
+  MovementSystem                0.200 ms
+  BorderHazardSystem            0.635 ms
+  BroadPhaseSystem              0.274 ms
+  RaycastBulletSystem           2.682 ms
+  GrenadeSystem                 0.112 ms
+  ProjectileSystem              0.001 ms
+  BlackHoleSystem               0.110 ms
+  GhostSystem                   0.016 ms
+  CollisionSystem               1.002 ms
+  EventFlushSystem              0.181 ms
+  FractureCrackSystem           0.058 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.082 ms
+  TimeToLiveSystem              0.284 ms
+  FlushDeferred                 0.036 ms
+  Particles.Update              0.253 ms
+  Draw.World                    3.266 ms
+  Draw.Overlay                 15.871 ms
+  Draw.Flush                    3.163 ms
+  Present                       6.390 ms
+  unaccounted                   1.920 ms
+
+=== 17:22:38  ast 647c  parts 3988  worldDraws 222  overlayDraws 158 (streaks 0) ===
+FPS 27   frame 36.41 ms
+  PreviousStateSystem           0.145 ms
+  PlayerControlSystem           0.033 ms
+  AlienAiSystem                 0.096 ms
+  BossSystem                    0.006 ms
+  PhysicsSystem                 0.124 ms
+  VortexSystem                  0.142 ms
+  MovementSystem                0.176 ms
+  BorderHazardSystem            0.548 ms
+  BroadPhaseSystem              0.242 ms
+  RaycastBulletSystem           2.296 ms
+  GrenadeSystem                 0.100 ms
+  ProjectileSystem              0.001 ms
+  BlackHoleSystem               0.099 ms
+  GhostSystem                   0.014 ms
+  CollisionSystem               0.880 ms
+  EventFlushSystem              0.140 ms
+  FractureCrackSystem           0.047 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.073 ms
+  TimeToLiveSystem              0.246 ms
+  FlushDeferred                 0.072 ms
+  Particles.Update              0.229 ms
+  Draw.World                    3.106 ms
+  Draw.Overlay                 16.243 ms
+  Draw.Flush                    3.295 ms
+  Present                       6.367 ms
+  unaccounted                   1.682 ms
+
+=== 17:28:50  ast 1118c  parts 4083  worldDraws 170  overlayDraws 120 (streaks 0) ===
+FPS 46   frame 21.52 ms
+  PreviousStateSystem           0.071 ms
+  PlayerControlSystem           0.025 ms
+  AlienAiSystem                 0.045 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.057 ms
+  VortexSystem                  0.064 ms
+  MovementSystem                0.080 ms
+  BorderHazardSystem            0.242 ms
+  BroadPhaseSystem              0.111 ms
+  RaycastBulletSystem           1.242 ms
+  GrenadeSystem                 0.046 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.045 ms
+  GhostSystem                   0.006 ms
+  CollisionSystem               0.243 ms
+  EventFlushSystem              0.216 ms
+  FractureCrackSystem           0.008 ms
+  FractureGroupSystem           0.001 ms
+  StressRelaxSystem             0.057 ms
+  TimeToLiveSystem              0.110 ms
+  FlushDeferred                 0.042 ms
+  Particles.Update              0.118 ms
+  Draw.World                    2.097 ms
+  Draw.Overlay                  0.308 ms
+  Draw.Flush                    7.571 ms
+  Present                       8.100 ms
+  unaccounted                   0.606 ms
+
+=== 17:28:51  ast 1159c  parts 4035  worldDraws 222  overlayDraws 121 (streaks 0) ===
+FPS 41   frame 24.19 ms
+  PreviousStateSystem           0.086 ms
+  PlayerControlSystem           0.026 ms
+  AlienAiSystem                 0.047 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.071 ms
+  VortexSystem                  0.080 ms
+  MovementSystem                0.099 ms
+  BorderHazardSystem            0.298 ms
+  BroadPhaseSystem              0.135 ms
+  RaycastBulletSystem           1.394 ms
+  GrenadeSystem                 0.059 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.058 ms
+  GhostSystem                   0.007 ms
+  CollisionSystem               0.249 ms
+  EventFlushSystem              0.125 ms
+  FractureCrackSystem           0.006 ms
+  FractureGroupSystem           0.001 ms
+  StressRelaxSystem             0.072 ms
+  TimeToLiveSystem              0.145 ms
+  FlushDeferred                 0.062 ms
+  Particles.Update              0.186 ms
+  Draw.World                    2.241 ms
+  Draw.Overlay                  0.289 ms
+  Draw.Flush                    8.578 ms
+  Present                       7.459 ms
+  unaccounted                   2.410 ms
+
+=== 17:28:51  ast 1171c  parts 3899  worldDraws 222  overlayDraws 122 (streaks 0) ===
+FPS 42   frame 23.57 ms
+  PreviousStateSystem           0.084 ms
+  PlayerControlSystem           0.030 ms
+  AlienAiSystem                 0.053 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.073 ms
+  VortexSystem                  0.082 ms
+  MovementSystem                0.093 ms
+  BorderHazardSystem            0.293 ms
+  BroadPhaseSystem              0.153 ms
+  RaycastBulletSystem           1.274 ms
+  GrenadeSystem                 0.059 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.058 ms
+  GhostSystem                   0.008 ms
+  CollisionSystem               0.265 ms
+  EventFlushSystem              0.094 ms
+  FractureCrackSystem           0.015 ms
+  FractureGroupSystem           0.001 ms
+  StressRelaxSystem             0.085 ms
+  TimeToLiveSystem              0.142 ms
+  FlushDeferred                 0.093 ms
+  Particles.Update              0.243 ms
+  Draw.World                    2.519 ms
+  Draw.Overlay                  0.304 ms
+  Draw.Flush                    8.719 ms
+  Present                       7.128 ms
+  unaccounted                   1.694 ms
+
+// Low resolution (everything on)
+=== 17:53:37  ast 796c  parts 0  worldDraws 87  overlayDraws 129 (streaks 0) ===
+FPS 113   frame 8.86 ms
+  PreviousStateSystem           0.010 ms
+  PlayerControlSystem           0.027 ms
+  AlienAiSystem                 0.045 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.010 ms
+  VortexSystem                  0.012 ms
+  MovementSystem                0.004 ms
+  BorderHazardSystem            0.033 ms
+  BroadPhaseSystem              0.049 ms
+  RaycastBulletSystem           0.004 ms
+  GrenadeSystem                 0.003 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.004 ms
+  GhostSystem                   0.004 ms
+  CollisionSystem               0.045 ms
+  EventFlushSystem              0.001 ms
+  FractureCrackSystem           0.002 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.032 ms
+  TimeToLiveSystem              0.002 ms
+  FlushDeferred                 0.001 ms
+  Particles.Update              0.000 ms
+  Draw.World                    0.218 ms
+  Draw.Overlay                  0.540 ms
+  Draw.Flush                    4.170 ms
+  Present                       1.996 ms
+  unaccounted                   1.640 ms
+
+=== 17:56:28  ast 83c  parts 0  worldDraws 21  overlayDraws 146 (streaks 21) ===
+FPS 129   frame 7.76 ms
+  PreviousStateSystem           0.006 ms
+  PlayerControlSystem           0.023 ms
+  AlienAiSystem                 0.013 ms
+  BossSystem                    0.007 ms
+  PhysicsSystem                 0.008 ms
+  VortexSystem                  0.008 ms
+  MovementSystem                0.002 ms
+  BorderHazardSystem            0.193 ms
+  BroadPhaseSystem              0.019 ms
+  RaycastBulletSystem           0.003 ms
+  GrenadeSystem                 0.002 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.002 ms
+  GhostSystem                   0.002 ms
+  CollisionSystem               0.011 ms
+  EventFlushSystem              0.002 ms
+  FractureCrackSystem           0.003 ms
+  FractureGroupSystem           0.001 ms
+  StressRelaxSystem             0.008 ms
+  TimeToLiveSystem              0.002 ms
+  FlushDeferred                 0.024 ms
+  Particles.Update              0.001 ms
+  Draw.World                    0.242 ms
+  Draw.Overlay                  0.646 ms
+  Draw.Flush                    3.519 ms
+  Present                       1.981 ms
+  unaccounted                   1.036 ms
+
+=== 17:56:41  ast 542c  parts 3900  worldDraws 40  overlayDraws 136 (streaks 2) ===
+FPS 41   frame 24.29 ms
+  PreviousStateSystem           0.112 ms
+  PlayerControlSystem           0.029 ms
+  AlienAiSystem                 0.020 ms
+  BossSystem                    0.007 ms
+  PhysicsSystem                 0.090 ms
+  VortexSystem                  0.106 ms
+  MovementSystem                0.135 ms
+  BorderHazardSystem            0.354 ms
+  BroadPhaseSystem              0.129 ms
+  RaycastBulletSystem           1.750 ms
+  GrenadeSystem                 0.103 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.081 ms
+  GhostSystem                   0.008 ms
+  CollisionSystem               0.149 ms
+  EventFlushSystem              0.298 ms
+  FractureCrackSystem           0.003 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.035 ms
+  TimeToLiveSystem              0.172 ms
+  FlushDeferred                 0.003 ms
+  Particles.Update              0.137 ms
+  Draw.World                    2.653 ms
+  Draw.Overlay                  0.335 ms
+  Draw.Flush                   13.662 ms
+  Present                       3.279 ms
+  unaccounted                   0.635 ms
+
+// Low resolution (everything on) 
+=== 17:57:54  ast 749c  parts 3966  worldDraws 301  overlayDraws 168 (streaks 0) ===
+FPS 41   frame 24.19 ms
+  PreviousStateSystem           0.096 ms
+  PlayerControlSystem           0.026 ms
+  AlienAiSystem                 0.088 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.082 ms
+  VortexSystem                  0.095 ms
+  MovementSystem                0.103 ms
+  BorderHazardSystem            0.337 ms
+  BroadPhaseSystem              0.191 ms
+  RaycastBulletSystem           1.953 ms
+  GrenadeSystem                 0.059 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.059 ms
+  GhostSystem                   0.010 ms
+  CollisionSystem               0.434 ms
+  EventFlushSystem              0.250 ms
+  FractureCrackSystem           0.063 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.050 ms
+  TimeToLiveSystem              0.135 ms
+  FlushDeferred                 0.023 ms
+  Particles.Update              0.098 ms
+  Draw.World                    2.864 ms
+  Draw.Overlay                  0.371 ms
+  Draw.Flush                    8.524 ms
+  Present                       7.193 ms
+  unaccounted                   1.079 ms
+
+=== 17:57:58  ast 675c  parts 4085  worldDraws 224  overlayDraws 137 (streaks 0) ===
+FPS 50   frame 20.15 ms
+  PreviousStateSystem           0.073 ms
+  PlayerControlSystem           0.024 ms
+  AlienAiSystem                 0.070 ms
+  BossSystem                    0.004 ms
+  PhysicsSystem                 0.066 ms
+  VortexSystem                  0.075 ms
+  MovementSystem                0.077 ms
+  BorderHazardSystem            0.277 ms
+  BroadPhaseSystem              0.166 ms
+  RaycastBulletSystem           1.249 ms
+  GrenadeSystem                 0.046 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.044 ms
+  GhostSystem                   0.010 ms
+  CollisionSystem               0.248 ms
+  EventFlushSystem              0.114 ms
+  FractureCrackSystem           0.032 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.040 ms
+  TimeToLiveSystem              0.098 ms
+  FlushDeferred                 0.018 ms
+  Particles.Update              0.070 ms
+  Draw.World                    1.804 ms
+  Draw.Overlay                  0.448 ms
+  Draw.Flush                    9.240 ms
+  Present                       4.331 ms
+  unaccounted                   1.516 ms
+
+// Full resolution (everything on)
+=== 17:59:15  ast 912c  parts 292  worldDraws 160  overlayDraws 119 (streaks 2) ===
+FPS 90   frame 11.09 ms
+  PreviousStateSystem           0.011 ms
+  PlayerControlSystem           0.024 ms
+  AlienAiSystem                 0.039 ms
+  BossSystem                    0.004 ms
+  PhysicsSystem                 0.013 ms
+  VortexSystem                  0.014 ms
+  MovementSystem                0.006 ms
+  BorderHazardSystem            0.044 ms
+  BroadPhaseSystem              0.063 ms
+  RaycastBulletSystem           0.027 ms
+  GrenadeSystem                 0.005 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.005 ms
+  GhostSystem                   0.005 ms
+  CollisionSystem               0.102 ms
+  EventFlushSystem              0.035 ms
+  FractureCrackSystem           0.008 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.039 ms
+  TimeToLiveSystem              0.006 ms
+  FlushDeferred                 0.002 ms
+  Particles.Update              0.010 ms
+  Draw.World                    0.399 ms
+  Draw.Overlay                  0.320 ms
+  Draw.Flush                    2.940 ms
+  Present                       6.329 ms
+  unaccounted                   0.637 ms
+
+=== 17:59:15  ast 1039c  parts 210  worldDraws 137  overlayDraws 122 (streaks 2) ===
+FPS 75   frame 13.39 ms
+  PreviousStateSystem           0.012 ms
+  PlayerControlSystem           0.025 ms
+  AlienAiSystem                 0.038 ms
+  BossSystem                    0.004 ms
+  PhysicsSystem                 0.013 ms
+  VortexSystem                  0.015 ms
+  MovementSystem                0.007 ms
+  BorderHazardSystem            0.046 ms
+  BroadPhaseSystem              0.067 ms
+  RaycastBulletSystem           0.026 ms
+  GrenadeSystem                 0.006 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.005 ms
+  GhostSystem                   0.005 ms
+  CollisionSystem               0.132 ms
+  EventFlushSystem              0.004 ms
+  FractureCrackSystem           0.003 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.044 ms
+  TimeToLiveSystem              0.006 ms
+  FlushDeferred                 0.005 ms
+  Particles.Update              0.008 ms
+  Draw.World                    0.371 ms
+  Draw.Overlay                  0.384 ms
+  Draw.Flush                    3.610 ms
+  Present                       7.745 ms
+  unaccounted                   0.813 ms
+
+=== 17:59:16  ast 1043c  parts 40  worldDraws 134  overlayDraws 123 (streaks 2) ===
+FPS 72   frame 13.81 ms
+  PreviousStateSystem           0.012 ms
+  PlayerControlSystem           0.024 ms
+  AlienAiSystem                 0.041 ms
+  BossSystem                    0.004 ms
+  PhysicsSystem                 0.015 ms
+  VortexSystem                  0.019 ms
+  MovementSystem                0.008 ms
+  BorderHazardSystem            0.055 ms
+  BroadPhaseSystem              0.078 ms
+  RaycastBulletSystem           0.021 ms
+  GrenadeSystem                 0.006 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.006 ms
+  GhostSystem                   0.006 ms
+  CollisionSystem               0.110 ms
+  EventFlushSystem              0.068 ms
+  FractureCrackSystem           0.050 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.052 ms
+  TimeToLiveSystem              0.007 ms
+  FlushDeferred                 0.004 ms
+  Particles.Update              0.003 ms
+  Draw.World                    0.320 ms
+  Draw.Overlay                  0.375 ms
+  Draw.Flush                    7.138 ms
+  Present                       4.861 ms
+  unaccounted                   0.527 ms
+
+=== 17:59:17  ast 1038c  parts 3952  worldDraws 121  overlayDraws 124 (streaks 3) ===
+FPS 38   frame 25.99 ms
+  PreviousStateSystem           0.109 ms
+  PlayerControlSystem           0.028 ms
+  AlienAiSystem                 0.053 ms
+  BossSystem                    0.005 ms
+  PhysicsSystem                 0.091 ms
+  VortexSystem                  0.102 ms
+  MovementSystem                0.136 ms
+  BorderHazardSystem            0.374 ms
+  BroadPhaseSystem              0.181 ms
+  RaycastBulletSystem           1.800 ms
+  GrenadeSystem                 0.081 ms
+  ProjectileSystem              0.001 ms
+  BlackHoleSystem               0.076 ms
+  GhostSystem                   0.008 ms
+  CollisionSystem               0.301 ms
+  EventFlushSystem              0.052 ms
+  FractureCrackSystem           0.081 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.076 ms
+  TimeToLiveSystem              0.184 ms
+  FlushDeferred                 0.058 ms
+  Particles.Update              0.173 ms
+  Draw.World                    3.405 ms
+  Draw.Overlay                  0.260 ms
+  Draw.Flush                   14.296 ms
+  Present                       3.529 ms
+  unaccounted                   0.531 ms
+
+// Everything on, 2 grenades detonating
+
+=== 18:28:06  ast 144c  parts 3743  worldDraws 161  overlayDraws 180 (streaks 56) ===
+FPS 35   frame 28.63 ms
+  PreviousStateSystem           0.140 ms
+  PlayerControlSystem           0.027 ms
+  AlienAiSystem                 0.015 ms
+  BossSystem                    0.007 ms
+  PhysicsSystem                 0.103 ms
+  VortexSystem                  0.117 ms
+  MovementSystem                0.174 ms
+  BorderHazardSystem            0.397 ms
+  BroadPhaseSystem              0.121 ms
+  RaycastBulletSystem           2.555 ms
+  GrenadeSystem                 0.164 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.096 ms
+  GhostSystem                   0.021 ms
+  CollisionSystem               0.108 ms
+  EventFlushSystem              1.508 ms
+  FractureCrackSystem           0.681 ms
+  FractureGroupSystem           0.012 ms
+  StressRelaxSystem             0.013 ms
+  TimeToLiveSystem              0.258 ms
+  FlushDeferred                 0.202 ms
+  Particles.Update              0.140 ms
+  Draw.World                    3.449 ms
+  Draw.Overlay                  0.428 ms
+  Draw.Flush                   10.871 ms
+  Present                       6.505 ms
+  unaccounted                   0.524 ms
+
+=== 18:28:15  ast 311c  parts 3692  worldDraws 37  overlayDraws 154 (streaks 34) ===
+FPS 36   frame 27.93 ms
+  PreviousStateSystem           0.140 ms
+  PlayerControlSystem           0.032 ms
+  AlienAiSystem                 0.016 ms
+  BossSystem                    0.007 ms
+  PhysicsSystem                 0.106 ms
+  VortexSystem                  0.117 ms
+  MovementSystem                0.169 ms
+  BorderHazardSystem            0.398 ms
+  BroadPhaseSystem              0.124 ms
+  RaycastBulletSystem           2.488 ms
+  GrenadeSystem                 0.102 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.100 ms
+  GhostSystem                   0.004 ms
+  CollisionSystem               0.120 ms
+  EventFlushSystem              0.125 ms
+  FractureCrackSystem           0.007 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.019 ms
+  TimeToLiveSystem              0.252 ms
+  FlushDeferred                 0.009 ms
+  Particles.Update              0.130 ms
+  Draw.World                    3.862 ms
+  Draw.Overlay                  0.381 ms
+  Draw.Flush                   11.892 ms
+  Present                       6.678 ms
+  unaccounted                   0.650 ms
+
+=== 18:28:15  ast 340c  parts 3758  worldDraws 37  overlayDraws 154 (streaks 32) ===
+FPS 34   frame 29.14 ms
+  PreviousStateSystem           0.189 ms
+  PlayerControlSystem           0.043 ms
+  AlienAiSystem                 0.017 ms
+  BossSystem                    0.007 ms
+  PhysicsSystem                 0.135 ms
+  VortexSystem                  0.147 ms
+  MovementSystem                0.216 ms
+  BorderHazardSystem            0.506 ms
+  BroadPhaseSystem              0.151 ms
+  RaycastBulletSystem           3.164 ms
+  GrenadeSystem                 0.128 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.126 ms
+  GhostSystem                   0.004 ms
+  CollisionSystem               0.143 ms
+  EventFlushSystem              0.138 ms
+  FractureCrackSystem           0.027 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.020 ms
+  TimeToLiveSystem              0.312 ms
+  FlushDeferred                 0.037 ms
+  Particles.Update              0.157 ms
+  Draw.World                    4.080 ms
+  Draw.Overlay                  0.320 ms
+  Draw.Flush                   12.777 ms
+  Present                       5.123 ms
+  unaccounted                   1.173 ms
+
+=== 18:28:23  ast 431c  parts 3780  worldDraws 25  overlayDraws 184 (streaks 63) ===
+FPS 42   frame 23.88 ms
+  PreviousStateSystem           0.109 ms
+  PlayerControlSystem           0.026 ms
+  AlienAiSystem                 0.022 ms
+  BossSystem                    0.013 ms
+  PhysicsSystem                 0.088 ms
+  VortexSystem                  0.099 ms
+  MovementSystem                0.135 ms
+  BorderHazardSystem            0.353 ms
+  BroadPhaseSystem              0.117 ms
+  RaycastBulletSystem           1.714 ms
+  GrenadeSystem                 0.078 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.078 ms
+  GhostSystem                   0.007 ms
+  CollisionSystem               0.197 ms
+  EventFlushSystem              0.116 ms
+  FractureCrackSystem           0.117 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.026 ms
+  TimeToLiveSystem              0.177 ms
+  FlushDeferred                 0.011 ms
+  Particles.Update              0.120 ms
+  Draw.World                    3.009 ms
+  Draw.Overlay                  0.379 ms
+  Draw.Flush                   13.725 ms
+  Present                       2.644 ms
+  unaccounted                   0.512 ms
+
+=== 18:28:24  ast 360c  parts 3787  worldDraws 94  overlayDraws 196 (streaks 75) ===
+FPS 48   frame 20.68 ms
+  PreviousStateSystem           0.146 ms
+  PlayerControlSystem           0.028 ms
+  AlienAiSystem                 0.022 ms
+  BossSystem                    0.008 ms
+  PhysicsSystem                 0.113 ms
+  VortexSystem                  0.128 ms
+  MovementSystem                0.168 ms
+  BorderHazardSystem            0.473 ms
+  BroadPhaseSystem              0.142 ms
+  RaycastBulletSystem           2.156 ms
+  GrenadeSystem                 0.095 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.096 ms
+  GhostSystem                   0.007 ms
+  CollisionSystem               0.204 ms
+  EventFlushSystem              0.119 ms
+  FractureCrackSystem           0.158 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.022 ms
+  TimeToLiveSystem              0.232 ms
+  FlushDeferred                 0.133 ms
+  Particles.Update              0.150 ms
+  Draw.World                    2.788 ms
+  Draw.Overlay                  0.324 ms
+  Draw.Flush                    9.364 ms
+  Present                       3.048 ms
+  unaccounted                   0.546 ms
+
+=== 18:28:31  ast 317c  parts 3752  worldDraws 427  overlayDraws 119 (streaks 0) ===
+FPS 39   frame 25.79 ms
+  PreviousStateSystem           0.114 ms
+  PlayerControlSystem           0.025 ms
+  AlienAiSystem                 0.020 ms
+  BossSystem                    0.007 ms
+  PhysicsSystem                 0.089 ms
+  VortexSystem                  0.097 ms
+  MovementSystem                0.131 ms
+  BorderHazardSystem            0.331 ms
+  BroadPhaseSystem              0.115 ms
+  RaycastBulletSystem           2.273 ms
+  GrenadeSystem                 0.087 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.086 ms
+  GhostSystem                   0.007 ms
+  CollisionSystem               0.302 ms
+  EventFlushSystem              0.152 ms
+  FractureCrackSystem           0.002 ms
+  FractureGroupSystem           0.001 ms
+  StressRelaxSystem             0.022 ms
+  TimeToLiveSystem              0.205 ms
+  FlushDeferred                 0.003 ms
+  Particles.Update              0.115 ms
+  Draw.World                    3.829 ms
+  Draw.Overlay                  0.289 ms
+  Draw.Flush                   11.527 ms
+  Present                       4.868 ms
+  unaccounted                   1.089 ms
+
+=== 18:28:37  ast 940c  parts 3958  worldDraws 610  overlayDraws 163 (streaks 0) ===
+FPS 52   frame 19.30 ms
+  PreviousStateSystem           0.084 ms
+  PlayerControlSystem           0.027 ms
+  AlienAiSystem                 0.044 ms
+  BossSystem                    0.008 ms
+  PhysicsSystem                 0.095 ms
+  VortexSystem                  0.111 ms
+  MovementSystem                0.094 ms
+  BorderHazardSystem            0.376 ms
+  BroadPhaseSystem              0.267 ms
+  RaycastBulletSystem           1.019 ms
+  GrenadeSystem                 0.059 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.060 ms
+  GhostSystem                   0.011 ms
+  CollisionSystem               0.659 ms
+  EventFlushSystem              0.253 ms
+  FractureCrackSystem           0.082 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.064 ms
+  TimeToLiveSystem              0.106 ms
+  FlushDeferred                 0.033 ms
+  Particles.Update              0.070 ms
+  Draw.World                    2.370 ms
+  Draw.Overlay                  0.423 ms
+  Draw.Flush                    7.385 ms
+  Present                       4.729 ms
+  unaccounted                   0.869 ms
+
+=== 18:31:07  ast 594c  parts 3830  worldDraws 142  overlayDraws 192 (streaks 63)  [particles:on fills:on streaks:on] ===
+FPS 38   frame 26.55 ms
+  PreviousStateSystem           0.132 ms
+  PlayerControlSystem           0.032 ms
+  AlienAiSystem                 0.020 ms
+  BossSystem                    0.008 ms
+  PhysicsSystem                 0.097 ms
+  VortexSystem                  0.109 ms
+  MovementSystem                0.154 ms
+  BorderHazardSystem            0.381 ms
+  BroadPhaseSystem              0.135 ms
+  RaycastBulletSystem           2.365 ms
+  GrenadeSystem                 0.116 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.086 ms
+  GhostSystem                   0.008 ms
+  CollisionSystem               0.149 ms
+  EventFlushSystem              0.434 ms
+  FractureCrackSystem           0.040 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.037 ms
+  TimeToLiveSystem              0.221 ms
+  FlushDeferred                 0.015 ms
+  Particles.Update              0.119 ms
+  Draw.World                    3.368 ms
+  Draw.Overlay                  0.415 ms
+  Draw.Flush                   12.467 ms
+  Present                       4.921 ms
+  unaccounted                   0.722 ms
+
+=== 18:31:11  ast 526c  parts 3532  worldDraws 52  overlayDraws 173 (streaks 44)  [particles:OFF fills:on streaks:on] ===
+FPS 43   frame 23.09 ms
+  PreviousStateSystem           0.130 ms
+  PlayerControlSystem           0.026 ms
+  AlienAiSystem                 0.019 ms
+  BossSystem                    0.007 ms
+  PhysicsSystem                 0.104 ms
+  VortexSystem                  0.118 ms
+  MovementSystem                0.162 ms
+  BorderHazardSystem            0.445 ms
+  BroadPhaseSystem              0.139 ms
+  RaycastBulletSystem           2.214 ms
+  GrenadeSystem                 0.093 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.092 ms
+  GhostSystem                   0.008 ms
+  CollisionSystem               0.182 ms
+  EventFlushSystem              0.135 ms
+  FractureCrackSystem           0.049 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.031 ms
+  TimeToLiveSystem              0.237 ms
+  FlushDeferred                 0.010 ms
+  Particles.Update              0.155 ms
+  Draw.World                    3.098 ms
+  Draw.Overlay                  0.449 ms
+  Draw.Flush                    9.683 ms
+  Present                       4.918 ms
+  unaccounted                   0.580 ms
+
+=== 18:31:16  ast 476c  parts 3452  worldDraws 177  overlayDraws 150 (streaks 22)  [particles:on fills:OFF streaks:on] ===
+FPS 55   frame 18.33 ms
+  PreviousStateSystem           0.071 ms
+  PlayerControlSystem           0.030 ms
+  AlienAiSystem                 0.021 ms
+  BossSystem                    0.007 ms
+  PhysicsSystem                 0.064 ms
+  VortexSystem                  0.076 ms
+  MovementSystem                0.082 ms
+  BorderHazardSystem            0.255 ms
+  BroadPhaseSystem              0.097 ms
+  RaycastBulletSystem           1.136 ms
+  GrenadeSystem                 0.052 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.052 ms
+  GhostSystem                   0.009 ms
+  CollisionSystem               0.242 ms
+  EventFlushSystem              0.209 ms
+  FractureCrackSystem           0.124 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.030 ms
+  TimeToLiveSystem              0.123 ms
+  FlushDeferred                 0.016 ms
+  Particles.Update              0.086 ms
+  Draw.World                    2.284 ms
+  Draw.Overlay                  0.538 ms
+  Draw.Flush                    7.642 ms
+  Present                       4.367 ms
+  unaccounted                   0.713 ms
+
+=== 18:31:21  ast 1051c  parts 3957  worldDraws 433  overlayDraws 158 (streaks 0)  [particles:on fills:on streaks:OFF] ===
+FPS 48   frame 20.95 ms
+  PreviousStateSystem           0.113 ms
+  PlayerControlSystem           0.027 ms
+  AlienAiSystem                 0.048 ms
+  BossSystem                    0.007 ms
+  PhysicsSystem                 0.124 ms
+  VortexSystem                  0.139 ms
+  MovementSystem                0.134 ms
+  BorderHazardSystem            0.514 ms
+  BroadPhaseSystem              0.298 ms
+  RaycastBulletSystem           1.116 ms
+  GrenadeSystem                 0.074 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.072 ms
+  GhostSystem                   0.014 ms
+  CollisionSystem               0.773 ms
+  EventFlushSystem              0.304 ms
+  FractureCrackSystem           0.154 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.068 ms
+  TimeToLiveSystem              0.154 ms
+  FlushDeferred                 0.035 ms
+  Particles.Update              0.070 ms
+  Draw.World                    2.607 ms
+  Draw.Overlay                  0.400 ms
+  Draw.Flush                    6.943 ms
+  Present                       5.800 ms
+  unaccounted                   0.956 ms
+
+=== 18:31:29  ast 297c  parts 3805  worldDraws 252  overlayDraws 111 (streaks 0)  [particles:OFF fills:OFF streaks:OFF] ===
+FPS 80   frame 12.48 ms
+  PreviousStateSystem           0.043 ms
+  PlayerControlSystem           0.025 ms
+  AlienAiSystem                 0.027 ms
+  BossSystem                    0.006 ms
+  PhysicsSystem                 0.048 ms
+  VortexSystem                  0.056 ms
+  MovementSystem                0.039 ms
+  BorderHazardSystem            0.227 ms
+  BroadPhaseSystem              0.110 ms
+  RaycastBulletSystem           0.348 ms
+  GrenadeSystem                 0.034 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.031 ms
+  GhostSystem                   0.009 ms
+  CollisionSystem               0.221 ms
+  EventFlushSystem              0.148 ms
+  FractureCrackSystem           0.036 ms
+  FractureGroupSystem           0.002 ms
+  StressRelaxSystem             0.022 ms
+  TimeToLiveSystem              0.065 ms
+  FlushDeferred                 0.020 ms
+  Particles.Update              0.017 ms
+  Draw.World                    0.925 ms
+  Draw.Overlay                  0.421 ms
+  Draw.Flush                    4.096 ms
+  Present                       4.727 ms
+  unaccounted                   0.775 ms
+
+=== 18:31:29  ast 214c  parts 3787  worldDraws 126  overlayDraws 111 (streaks 0)  [particles:OFF fills:OFF streaks:OFF] ===
+FPS 53   frame 18.82 ms
+  PreviousStateSystem           0.128 ms
+  PlayerControlSystem           0.028 ms
+  AlienAiSystem                 0.027 ms
+  BossSystem                    0.007 ms
+  PhysicsSystem                 0.112 ms
+  VortexSystem                  0.128 ms
+  MovementSystem                0.148 ms
+  BorderHazardSystem            0.494 ms
+  BroadPhaseSystem              0.165 ms
+  RaycastBulletSystem           1.757 ms
+  GrenadeSystem                 0.088 ms
+  ProjectileSystem              0.000 ms
+  BlackHoleSystem               0.089 ms
+  GhostSystem                   0.010 ms
+  CollisionSystem               0.210 ms
+  EventFlushSystem              0.060 ms
+  FractureCrackSystem           0.064 ms
+  FractureGroupSystem           0.003 ms
+  StressRelaxSystem             0.022 ms
+  TimeToLiveSystem              0.209 ms
+  FlushDeferred                 0.173 ms
+  Particles.Update              0.148 ms
+  Draw.World                    2.564 ms
+  Draw.Overlay                  0.297 ms
+  Draw.Flush                    7.766 ms
+  Present                       3.457 ms
+  unaccounted                   0.667 ms

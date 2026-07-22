@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AsteroidsGame.Gameplay</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Engine/AsteroidsEngine.csproj" />
+    <ProjectReference Include="../GameConfig/GameConfig.csproj" />
+  </ItemGroup>
+
+</Project>

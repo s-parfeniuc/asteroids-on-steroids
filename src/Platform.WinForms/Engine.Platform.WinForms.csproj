@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- WinForms + SkiaSharp (GPU) backend of the PAL. Windows-only (net8.0-windows + the Windows
+         Desktop SDK) so it CANNOT build on Linux — keep it out of any Linux build invocation and out
+         of the cross-platform solution. Reuses the shared SkiaRenderer (Platform.Skia); the only
+         Windows-specific piece is the window + the SKGLControl that hosts the GL surface. -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AsteroidsEngine.Platform.WinForms</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Engine/AsteroidsEngine.csproj" />
+    <ProjectReference Include="../Platform.Skia/Engine.Platform.Skia.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" Version="2.88.7" />
+    <!-- Provides SKGLControl (a GL surface hosted in a WinForms control) + the Win32 native libSkiaSharp. -->
+    <PackageReference Include="SkiaSharp.Views.WindowsForms" Version="2.88.7" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="2.88.7" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Backend-neutral SkiaSharp renderer, shared by every windowing backend (SDL, WinForms). It
+         implements the engine's IRenderer over an SKSurface handed in by the window; it knows nothing
+         about SDL or WinForms, so it can build on any platform (net8.0, no OS-specific TFM). -->
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AsteroidsEngine.Platform.Skia</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Engine/AsteroidsEngine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" Version="2.88.7" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Windows entry point. WinExe = no console window. net8.0-windows + WinForms → Windows-only;
+         do NOT build this on Linux (the Windows Desktop SDK is unavailable there). It carries no
+         SDL/Skia: it references only the shared game library + the WinForms backend. -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AsteroidsGame</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/GameCore/AsteroidsGameCore.csproj" />
+    <ProjectReference Include="../../src/Platform.WinForms/Engine.Platform.WinForms.csproj" />
+  </ItemGroup>
+
+</Project>
