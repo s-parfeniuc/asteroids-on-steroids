@@ -44,14 +44,30 @@ The two WinForms projects (`src/Platform.WinForms`, `apps/Game.WinForms`) are `n
 
 ### Produce a distributable
 
+A single-folder self-contained build (runnable in place, for testing):
+
 ```bash
 build/linux.sh                 # → dist/linux-x64/     (or: build/linux.sh linux-arm64)
 build/macos.sh                 # → dist/osx-arm64/     (or: build/macos.sh osx-x64  for Intel)
-build/windows.ps1              # → dist/win-x64\       (Windows only; WinForms build)
+build/windows.ps1              # → dist/AsteroidsGame-win-x64\  (Windows only; also zips)
 ```
 
-Each script runs `dotnet publish -c Release -r <rid> --self-contained` and copies `Assets/` beside the
-executable. Output goes to `dist/` (gitignored).
+### Package for a GitHub release
+
+`build/package.sh` publishes **and zips** the shippable builds, dropping a `RUN.txt` (per-OS launch
+instructions) into each — the zips are ready to drag into a GitHub Release as assets:
+
+```bash
+build/package.sh                       # → dist/AsteroidsGame-{linux-x64,osx-arm64}.zip
+build/package.sh linux-x64 osx-x64     # pick RIDs explicitly
+build/windows.ps1                      # → dist/AsteroidsGame-win-x64.zip   (run on Windows)
+```
+
+Each zip unpacks to a self-descriptive `AsteroidsGame-<rid>/` folder containing the launcher, the bundled
+runtime + natives, `Assets/`, and `RUN.txt`. **Don't commit the folders/zips** — `dist/` is gitignored;
+distribute the zips as **Release assets** (not in the repo), so users download only their platform.
+`dotnet publish -c Release -r <rid> --self-contained` does the heavy lifting; the Windows (WinForms) zip
+must be produced on Windows.
 
 > **Platform verification status:** the **Linux** build is the tested source of truth. The **Windows**
 > (WinForms) and **macOS** (SDL) targets are written correct-by-construction but are **unverified** —
