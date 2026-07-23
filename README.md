@@ -69,15 +69,14 @@ distribute the zips as **Release assets** (not in the repo), so users download o
 `dotnet publish -c Release -r <rid> --self-contained` does the heavy lifting; the Windows (WinForms) zip
 must be produced on Windows.
 
-> **Platform verification status:** the **Linux** build is the tested source of truth. The **Windows**
-> (WinForms) and **macOS** (SDL) targets are written correct-by-construction but are **unverified** —
-> compile and run them on that hardware and use the first-run checklists (`apps/Game.WinForms/README.md`
-> for Windows; below for macOS) to confirm.
+> **Platform verification status:** **Linux** (SDL) and **Windows** (WinForms) builds are **tested and
+> working**. **macOS** (SDL) is written correct-by-construction but **not yet run on hardware** — build it
+> on a Mac and use the first-run checklist below to confirm.
 
-**macOS / Windows first-run checklist:** window opens fullscreen; WASD + mouse-aim + click-fire + Q/E/R/G
-+ Esc respond; menu → play → game-over → menu; HUD (timer/score, cooldown bars, ship widget, minimap)
-renders; asteroids fracture per-cell; tracers/particles/starfield draw; `Z` toggles the profiler overlay;
-the window closes cleanly.
+**macOS first-run checklist:** window opens fullscreen; WASD + mouse-aim + click-fire + Q/E/R/G + Esc
+respond; menu → play → game-over → menu; HUD (timer/score, cooldown bars, ship widget, minimap) renders;
+asteroids fracture per-cell; tracers/particles/starfield draw; `Z` toggles the profiler overlay; the
+window closes cleanly.
 
 ---
 

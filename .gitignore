@@ -13,3 +13,7 @@ obj/
 
 # self-contained publish output (build/*.sh|ps1)
 dist/
+
+report/
+prompts/
+build/

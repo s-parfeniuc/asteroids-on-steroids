@@ -311,8 +311,14 @@ public sealed class VortexSystem : ISystem
         float capFrames = _cfg.CapFrames;
 
         world.ForEach<Transform, Velocity, RigidBody, VortexResponse>(
-            (Entity _, ref Transform t, ref Velocity v, ref RigidBody _, ref VortexResponse vr) =>
+            (Entity e, ref Transform t, ref Velocity v, ref RigidBody _, ref VortexResponse vr) =>
         {
+            // Inbound wave spawns sit far out in the ring, where the pull (∝ distance from the eye) is
+            // huge — it would yank them into the map. Leave them to drift in on their gentle spawn
+            // velocity; once they cross the edge the border hazard drops InboundSpawn and the vortex
+            // takes over normally.
+            if (world.HasComponent<InboundSpawn>(e)) return;
+
             Vector2 toCenter = centre - t.Position;
             float dist = toCenter.Length();
             if (dist < 1e-3f) return;

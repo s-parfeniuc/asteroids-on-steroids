@@ -435,6 +435,11 @@ public sealed class PlayingState : IGameState
 
     public void Draw(IRenderer r, float alpha)
     {
+        // When the simulation is frozen (pause / hitstop), the loop keeps calling Draw with a drifting
+        // interpolation alpha — which jitters every body between its (now static) Previous and Current
+        // positions. Pin alpha to the settled current state so a paused world holds perfectly still.
+        if (_paused || _hitstop > 0f) alpha = 1f;
+
         // Fold the frame that just elapsed (systems ran before this Draw) into the profiler EMAs.
         _prof.CommitFrame(_frameSw.Elapsed.TotalMilliseconds);
         _frameSw.Restart();
@@ -603,35 +608,37 @@ public sealed class PlayingState : IGameState
         if (outer <= 1f) return;
 
         Vector2 p = _world.GetComponent<Transform>(_player).Position;
-        // Each world edge maps to one fixed screen coordinate (a full-span vertical/horizontal line).
-        Vector2 tl = _camera.WorldToScreen(Vector2.Zero);
-        Vector2 br = _camera.WorldToScreen(new Vector2(wc.Width, wc.Height));
 
-        // (distance to edge, screen coordinate, vertical?)
-        Edge(p.X,              tl.X, true);    // left
-        Edge(wc.Width  - p.X,  br.X, true);    // right
-        Edge(p.Y,              tl.Y, false);   // top
-        Edge(wc.Height - p.Y,  br.Y, false);   // bottom
+        // Draw the danger boundary that sits TOWARD THE CENTRE (the line to cross to reach safety),
+        // not the outer wall — so the player sees which way to flee and, by their distance to it, how
+        // deep into the zone they are. One line per edge the player is within, at `outer` px in from the
+        // wall; colour = which band they're in (red erosion rim / amber hunter band), brightness = depth.
+        Edge(p.X,              0f,        +1f, true);    // left
+        Edge(wc.Width  - p.X,  wc.Width,  -1f, true);    // right
+        Edge(p.Y,              0f,        +1f, false);   // top
+        Edge(wc.Height - p.Y,  wc.Height, -1f, false);   // bottom
 
-        void Edge(float dist, float screenCoord, bool vertical)
+        void Edge(float dist, float wallWorld, float inwardSign, bool vertical)
         {
             if (dist >= outer) return;
-            // Colour + depth by which band the player is in (erosion inner rim wins).
-            Color col; float depth;
-            if (dist < erosion) { depth = (erosion - dist) / erosion; col = new Color(230, 60, 55); }
-            else if (dist < camp) { depth = (camp - dist) / MathF.Max(1f, camp); col = new Color(235, 180, 70); }
-            else return;
-            byte a = (byte)Math.Clamp(70f + 160f * depth, 0f, 255f);
-            float w = 2f + 4f * depth;
+            Color col   = dist < erosion ? new Color(230, 60, 55) : new Color(235, 180, 70);
+            float depth = Math.Clamp((outer - dist) / outer, 0f, 1f);   // 0 at the line → 1 at the wall
+            byte  a     = (byte)Math.Clamp(70f + 160f * depth, 0f, 255f);
+            float w     = 2f + 4f * depth;
+
+            // The boundary line is `outer` px in from the wall, toward the centre.
+            float boundaryWorld = wallWorld + inwardSign * outer;
+            float sc = vertical ? _camera.WorldToScreen(new Vector2(boundaryWorld, p.Y)).X
+                                : _camera.WorldToScreen(new Vector2(p.X, boundaryWorld)).Y;
             if (vertical)
             {
-                if (screenCoord < -w || screenCoord > _ctx.ScreenW + w) return;   // edge off-screen
-                r.DrawLine(new Vector2(screenCoord, 0f), new Vector2(screenCoord, _ctx.ScreenH), col.WithAlpha(a), w);
+                if (sc < -w || sc > _ctx.ScreenW + w) return;   // boundary off-screen
+                r.DrawLine(new Vector2(sc, 0f), new Vector2(sc, _ctx.ScreenH), col.WithAlpha(a), w);
             }
             else
             {
-                if (screenCoord < -w || screenCoord > _ctx.ScreenH + w) return;
-                r.DrawLine(new Vector2(0f, screenCoord), new Vector2(_ctx.ScreenW, screenCoord), col.WithAlpha(a), w);
+                if (sc < -w || sc > _ctx.ScreenH + w) return;
+                r.DrawLine(new Vector2(0f, sc), new Vector2(_ctx.ScreenW, sc), col.WithAlpha(a), w);
             }
         }
     }

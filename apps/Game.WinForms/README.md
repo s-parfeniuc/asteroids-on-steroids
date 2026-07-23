@@ -56,14 +56,9 @@ exes are a thin `Program.cs` that constructs their window and calls `GameHost.Ru
 - **Input**: `KeyCode`/`MouseButton` values equal `System.Windows.Forms.Keys`/`MouseButtons`, so keys map
   with a direct cast (no lookup table). Events are wired on the `SKGLControl` (which holds focus), not the
   form.
-- **Not yet verified on hardware** — authored on Linux where net8.0-windows can't compile. First-run
-  checklist on Windows:
-  - window opens fullscreen; WASD + mouse-aim + left-click fire + Q/E/R/G/F + Esc all respond;
-  - menu → play → game-over → menu transitions work;
-  - HUD renders (timer/score, named+keyed cooldown bars, ship-damage widget, minimap);
-  - asteroids fracture and render per-cell; bullet tracers + particles + starfield draw;
-  - the border red-depth tint appears near edges (the heat-haze warp was removed for performance);
-  - `Z` toggles the profiler overlay; the window closes cleanly.
+- **Verified on Windows** — authored on Linux (where net8.0-windows can't compile) and confirmed working
+  on a Windows machine: the self-contained build runs, renders, and plays correctly. The
+  `SKGLControl`-hosted GPU path and the self-contained publish are both good.
   - **If the screen is blank or GL init throws:** the likely culprit is the `SKGLControl` GL-context
     setup — confirm `MakeCurrent()` runs after `Show()`/`DoEvents()` (so the handle exists) and that
     `GRGlInterface.Create()` returns non-null. As a documented fallback, a CPU surface via `SKControl`
