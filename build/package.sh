@@ -43,7 +43,7 @@ EOF
 Asteroids on Steroids — macOS
 =============================
 
-macOS blocks unsigned downloaded apps (Gatekeeper). In a terminal in this folder:
+In a terminal in this folder:
 
 1. Clear the "downloaded from the internet" quarantine flag:
        xattr -dr com.apple.quarantine .
@@ -52,10 +52,17 @@ macOS blocks unsigned downloaded apps (Gatekeeper). In a terminal in this folder
 3. Run it:
        ./AsteroidsGame
 
-(First launch alternative: right-click AsteroidsGame in Finder -> Open -> Open.)
-
 Nothing to install: SDL2, Skia and the .NET runtime are all bundled in this folder.
 Keep the Assets/ folder next to AsteroidsGame.
+
+--- If it exits instantly with NO output (exit code 137) ---
+That is NOT quarantine — it is code signing. Apple Silicon kills any unsigned or altered binary
+the moment it loads, silently. Re-sign the launcher and the bundled libraries in place:
+
+       codesign --force --sign - AsteroidsGame
+       find . -name '*.dylib' -exec codesign --force --sign - {} \;
+
+then run ./AsteroidsGame again. (A build packaged on a Mac is already signed and skips this.)
 
 Controls: WASD thrust · mouse aim · left-click fire · Q/E/R skills · G grenade · Esc pause/quit.
 EOF
@@ -65,6 +72,28 @@ EOF
   esac
 }
 
+# Apple Silicon SIGKILLs any unsigned or signature-mismatched Mach-O at page-in (a silent exit 137, no
+# output). Cross-publishing from Linux leaves the launcher unsigned and can leave stale dylib signatures,
+# so ad-hoc re-sign the launcher + every dylib to match their on-disk bytes, then verify. codesign is
+# macOS-only, so this can ONLY run on a Mac — on Linux we warn loudly that the osx build must be signed
+# on a Mac before it will run.
+sign_macos() {
+  local dir="$1"
+  if ! command -v codesign >/dev/null 2>&1; then
+    echo "    !! NOT on macOS — this osx build is UNSIGNED and will be SIGKILLed on Apple Silicon."
+    echo "       Re-run 'build/package.sh $RID' (or build/macos.sh) ON A MAC to sign it before shipping."
+    return
+  fi
+  find "$dir" \( -name '*.dylib' -o -name AsteroidsGame -o -name createdump \) -type f \
+    -exec codesign --force --sign - {} \; 2>/dev/null
+  if find "$dir" \( -name '*.dylib' -o -name AsteroidsGame \) -type f -print0 \
+       | xargs -0 -n1 codesign --verify >/dev/null 2>&1; then
+    echo "    ad-hoc signed + verified"
+  else
+    echo "    !! signature verification FAILED — a binary may be corrupt (re-download / re-publish)"; exit 1
+  fi
+}
+
 for RID in "${RIDS[@]}"; do
   NAME="AsteroidsGame-$RID"          # the folder the user sees after unzipping
   OUT="dist/$NAME"
@@ -72,6 +101,7 @@ for RID in "${RIDS[@]}"; do
   rm -rf "$OUT"
   dotnet publish apps/Game.Sdl/AsteroidsGame.csproj -c Release -r "$RID" --self-contained -o "$OUT" >/dev/null
   cp -r Assets "$OUT/Assets"
+  case "$RID" in osx-*) sign_macos "$OUT" ;; esac
   write_runtxt "$RID" "$OUT"
   ( cd dist && rm -f "$NAME.zip" && zip -rq "$NAME.zip" "$NAME" )
   echo "    -> dist/$NAME.zip"

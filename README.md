@@ -25,6 +25,11 @@ The Linux and macOS builds **bundle** their native libraries (`libSDL2`, `libSki
 nothing to install. If a build ever fails to find SDL2 at runtime, install it system-wide as a fallback:
 `sudo apt install libsdl2-2.0-0` (Debian/Ubuntu) or `brew install sdl2` (macOS).
 
+> **macOS (Apple Silicon):** binaries must be code-signed or the kernel silently kills them at launch
+> (instant exit `137`, no output — this is *not* Gatekeeper quarantine). A build **packaged on a Mac**
+> (`build/macos.sh`) is already ad-hoc signed and just runs. If you got an unsigned build, the `RUN.txt`
+> in the folder has the two-line `codesign` fix.
+
 ---
 
 ## Build from source
@@ -98,8 +103,9 @@ distribute the zips as **Release assets** (not in the repo), so users download o
 must be produced on Windows.
 
 > **Platform verification status:** **Linux** (SDL) and **Windows** (WinForms) builds are **tested and
-> working**. **macOS** (SDL) is written correct-by-construction but **not yet run on hardware** — build it
-> on a Mac and use the first-run checklist below to confirm.
+> working**. The **macOS** (SDL, Apple Silicon) build **launches and runs** once ad-hoc signed —
+> `build/macos.sh` now does this automatically. Full playthrough / visual rendering on macOS is worth an
+> eyeball with the checklist below.
 
 **macOS first-run checklist:** window opens fullscreen; WASD + mouse-aim + click-fire + Q/E/R/G + Esc
 respond; menu → play → game-over → menu; HUD (timer/score, cooldown bars, ship widget, minimap) renders;
