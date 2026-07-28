@@ -13,7 +13,7 @@ map border erodes anything that camps the edge.
 ## Play a packaged build
 
 Each OS gets a **self-contained** folder — no .NET install required. Download (or build, below), unzip,
-and run the executable. Keep the `Assets/` folder next to the executable (the scripts place it there).
+and run the executable. Keep the `Assets/` folder next to the executable (the scripts place it there). The self-contained folders are in the release section on GitHub (https://github.com/s-parfeniuc/asteroids-on-steroids). 
 
 | OS | Executable | Renderer |
 |----|-----------|----------|
@@ -29,18 +29,46 @@ nothing to install. If a build ever fails to find SDL2 at runtime, install it sy
 
 ## Build from source
 
-Requires the **.NET 8 SDK**. From the repo root:
+You need the **.NET 8 SDK** (`dotnet --version` should print `8.x`). Everything else — SDL2, Skia — is
+pulled in as NuGet packages, so there is nothing else to install for the SDL build. Per OS:
+
+### Linux
 
 ```bash
-# Everything cross-platform (Linux/macOS + Windows) — the source of truth:
-dotnet build AsteroidsOnSteroids.sln
-
-# Run it (SDL2 + Skia):
-cd apps/Game.Sdl && dotnet run
+sudo apt install dotnet-sdk-8.0            # or your distro's package / https://dotnet.microsoft.com
+dotnet build AsteroidsOnSteroids.sln       # build everything
+cd apps/Game.Sdl && dotnet run             # run (SDL2 + Skia)
 ```
 
-The two WinForms projects (`src/Platform.WinForms`, `apps/Game.WinForms`) are `net8.0-windows` and are
-**not** in the solution — they need the Windows Desktop SDK and build only on Windows.
+### macOS
+
+```bash
+brew install dotnet-sdk                     # or the installer from https://dotnet.microsoft.com
+dotnet build AsteroidsOnSteroids.sln
+cd apps/Game.Sdl && dotnet run              # SDL2 + Skia; forces a GL 3.3 core context (needed on macOS)
+```
+
+Runs on both Apple-Silicon and Intel. (If a bare run ever has focus/menubar quirks, that's a
+consequence of not being a signed `.app` bundle — packaging polish, not a code issue.)
+
+### Windows
+
+```powershell
+# Install the .NET 8 SDK from https://dotnet.microsoft.com (or: winget install Microsoft.DotNet.SDK.8)
+dotnet build AsteroidsOnSteroids.sln        # the cross-platform projects
+cd apps\Game.Sdl; dotnet run                # SDL2 + Skia build, OR:
+
+# The native Windows build (WinForms + GPU Skia) — needs the Windows Desktop SDK, which the
+# Windows .NET 8 SDK includes. Not in the solution, so build it explicitly:
+dotnet run --project apps\Game.WinForms
+```
+
+Windows can run **either** backend: the cross-platform **SDL** build (`apps/Game.Sdl`) or the native
+**WinForms** build (`apps/Game.WinForms`, the shipped Windows target). Both render with GPU Skia.
+
+> The two WinForms projects (`src/Platform.WinForms`, `apps/Game.WinForms`) are `net8.0-windows`, need the
+> Windows Desktop SDK, and are deliberately **not** in `AsteroidsOnSteroids.sln` — so a Linux/macOS build
+> never trips over them.
 
 ### Produce a distributable
 

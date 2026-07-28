@@ -92,7 +92,7 @@
     },
     "piercing_material": {
       "brittleness": 0.08,
-      "toughness": 330,
+      "toughness": 110,
       "restitution": 0,
       "relaxRate": 400,
       "crackDirectionality": 0.9,
@@ -100,7 +100,7 @@
       "grainArea": 5000,
       "minFragmentArea": 0,
       "density": 5,
-      "cellToughness": 15.0,
+      "cellToughness": 4.5,
       "spinPreStress": 0.04,
       "detachCellScale": 0.94,
       "detachCellJitter": 0.005
@@ -182,14 +182,14 @@
       "fireRate": 1.0,
       "projectileSpeed": 1900,
       "timeToLive": 2,
-      "directionality": 0.9,
-      "blastFraction": 0.08,
+      "directionality": 1.0,
+      "blastFraction": 0.06,
       "knockback": 0,
       "speedJitter": 0,
       "ttlJitter": 0,
       "spreadJitter": 0,
       "drag": 0,
-      "mass": 50,
+      "mass": 25,
       "lateralImpulseClamp": 1000,
       "penetrationPower": 5600000,
       "penetrationCostScale": 140.0,
@@ -199,7 +199,7 @@
       "shapeScale": 0.5
     },
     "grenade": {
-      "fireRate": 0,
+      "fireRate": 1.0,
       "projectileSpeed": 1500,
       "timeToLive": 0.20,
       "directionality": 0.05,
@@ -397,7 +397,7 @@
       "baseCost": 2,
       "speedRange": [
         40,
-        110
+        60
       ],
       "unlockWave": 1,
       "vortexResponse": {
@@ -443,7 +443,7 @@
       "baseCost": 1,
       "speedRange": [
         60,
-        150
+        85
       ],
       "unlockWave": 1,
       "vortexResponse": {
@@ -489,7 +489,7 @@
       "baseCost": 0,
       "speedRange": [
         60,
-        150
+        85
       ],
       "unlockWave": 1,
       "vortexResponse": {
@@ -535,7 +535,7 @@
       "baseCost": 2,
       "speedRange": [
         60,
-        150
+        85
       ],
       "unlockWave": 1,
       "vortexResponse": {
@@ -581,7 +581,7 @@
       "baseCost": 3,
       "speedRange": [
         30,
-        90
+        55
       ],
       "unlockWave": 1,
       "vortexResponse": {
@@ -627,7 +627,7 @@
       "baseCost": 4,
       "speedRange": [
         25,
-        75
+        50
       ],
       "unlockWave": 2,
       "vortexResponse": {
@@ -673,7 +673,7 @@
       "baseCost": 6,
       "speedRange": [
         20,
-        55
+        45
       ],
       "unlockWave": 3,
       "vortexResponse": {
@@ -719,7 +719,7 @@
       "baseCost": 8,
       "speedRange": [
         25,
-        60
+        45
       ],
       "unlockWave": 5,
       "vortexResponse": {
@@ -765,7 +765,7 @@
       "baseCost": 5,
       "speedRange": [
         40,
-        110
+        60
       ],
       "unlockWave": 6,
       "vortexResponse": {
@@ -1060,8 +1060,8 @@
     "tangential": 0.007,
     "deadzone": 0,
     "capFrames": 180,
-    "variationCentripetal": 0.1,
-    "variationTangential": 0.06,
+    "variationCentripetal": 0.03,
+    "variationTangential": 0.02,
     "moveAmpX": 1400,
     "moveAmpY": 700,
     "movePeriodX": 40,
@@ -1099,9 +1099,9 @@
     "margin": 16,
     "corner": "topRight",
     "dotScale": 0.02,
-    "dotMin": 1.2,
+    "dotMin": 0.3,
     "dotMax": 5,
-    "minArea": 4000,
+    "minArea": 1000,
     "bgAlpha": 110
   },
   "waveSystem": {
@@ -1320,7 +1320,7 @@
     "vaporEff": 0.4,
     "breakPerp": 1,
     "flingScale": 140,
-    "alignExponent": 15.0,
+    "alignExponent": 1.0,
     "spinCap": 4,
     "fragmentSpeedMax": 400,
     "tumbleScale": 220,

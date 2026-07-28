@@ -82,6 +82,11 @@ public sealed unsafe class SdlGameWindow : IGameWindow
         _sdl.GLSetAttribute(GLattr.ContextProfileMask, (int)GLprofile.Core);
         _sdl.GLSetAttribute(GLattr.StencilSize, 8);
         _sdl.GLSetAttribute(GLattr.Doublebuffer, 1);
+        // macOS only grants a 3.2+ CORE context when the forward-compatible flag is set; without it
+        // it silently hands back a legacy 2.1 context and Skia's GL bind fails. (0x2 =
+        // SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG.) Harmless on Windows/Linux, so gated to macOS.
+        if (OperatingSystem.IsMacOS())
+            _sdl.GLSetAttribute(GLattr.ContextFlags, 0x0002);
 
         var winFlags = WindowFlags.Shown | WindowFlags.Opengl;
         if (fullscreen) winFlags |= WindowFlags.FullscreenDesktop;
@@ -97,11 +102,9 @@ public sealed unsafe class SdlGameWindow : IGameWindow
         _sdl.GLMakeCurrent(_window, _glContext);
         _sdl.GLSetSwapInterval(0); // Game loop does its own frame cap; disable driver vsync.
 
-        // GRGlInterface.CreateOpenGl() uses GLX and crashes on Wayland/EGL contexts.
-        // eglGetProcAddress works for both desktop GL and GLES and covers both backends.
-        // Fall back to GLX (X11) if EGL is not available.
+        // Bind Skia to the current GL context (WGL on Windows, CGL on macOS, EGL/GLX on Linux).
         var glInterface = CreateGlInterface()
-            ?? throw new InvalidOperationException("Could not create GRGlInterface (EGL/GLX)");
+            ?? throw new InvalidOperationException("Could not create GRGlInterface for the SDL GL context");
 
         _grContext = GRContext.CreateGl(glInterface)
             ?? throw new InvalidOperationException("GRContext.CreateGl returned null");
@@ -207,24 +210,26 @@ public sealed unsafe class SdlGameWindow : IGameWindow
         _                => null
     };
 
-    // Proc-address getters for EGL (Wayland) and GLX (X11).
-    // GRGlInterface.CreateOpenGl() uses GLX internally and crashes on EGL/Wayland contexts,
-    // so we load the platform proc-getter ourselves and route through GRGlInterface.Create().
+    // Bind Skia's GL interface to the current SDL GL context, per platform.
     private static GRGlInterface? CreateGlInterface()
     {
-        // EGL — Wayland and modern X11 with EGL.
-        if (NativeLibrary.TryLoad("libEGL.so.1", out var egl) &&
-            NativeLibrary.TryGetExport(egl, "eglGetProcAddress", out var eglFn))
+        // Linux: the default GRGlInterface.Create() uses GLX internally and crashes on EGL/Wayland
+        // contexts, so we load the proc-getter ourselves — EGL first (Wayland/modern X11), then GLX.
+        if (OperatingSystem.IsLinux())
+            return FromProcLib("libEGL.so.1", "eglGetProcAddress")
+                ?? FromProcLib("libGL.so.1", "glXGetProcAddressARB");
+
+        // Windows (WGL) and macOS (CGL): the default interface binds the current context fine.
+        var def = GRGlInterface.Create();
+        return def?.Validate() == true ? def : null;
+    }
+
+    private static GRGlInterface? FromProcLib(string lib, string procGetter)
+    {
+        if (NativeLibrary.TryLoad(lib, out var handle) &&
+            NativeLibrary.TryGetExport(handle, procGetter, out var fn))
         {
-            var getter = Marshal.GetDelegateForFunctionPointer<ProcGetter>(eglFn);
-            var iface  = GRGlInterface.Create(name => getter(name));
-            if (iface?.Validate() == true) return iface;
-        }
-        // GLX — classic X11.
-        if (NativeLibrary.TryLoad("libGL.so.1", out var gl) &&
-            NativeLibrary.TryGetExport(gl, "glXGetProcAddressARB", out var glxFn))
-        {
-            var getter = Marshal.GetDelegateForFunctionPointer<ProcGetter>(glxFn);
+            var getter = Marshal.GetDelegateForFunctionPointer<ProcGetter>(fn);
             var iface  = GRGlInterface.Create(name => getter(name));
             if (iface?.Validate() == true) return iface;
         }
