@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>AsteroidsSim.Tools.SpikePhysicsBaseline</RootNamespace>
+    <AssemblyName>SpikePhysicsBaseline</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <DefineConstants>$(DefineConstants);LEGACY_DIFF</DefineConstants>
+    <!-- The legacy engine predates our warning settings. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS0618</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../AsteroidsSim/AsteroidsSim.csproj" />
+  </ItemGroup>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       TEMPORARY — the one sanctioned reference outside ported/.
+       PORT_PLAN.md §11: this measures the EXISTING engine's solver on the
+       identical Spike B scenario, so the "port our own solver" decision rests
+       on a measurement rather than an assumption.
+       Delete at the Phase 5 gate along with the rest of the LEGACY_DIFF scaffold.
+       ══════════════════════════════════════════════════════════════════════ -->
+  <ItemGroup>
+    <ProjectReference Include="../../../src/Engine/AsteroidsEngine.csproj" />
+  </ItemGroup>
+
+</Project>

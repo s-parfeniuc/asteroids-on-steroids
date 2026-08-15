@@ -1,0 +1,59 @@
+; Banned APIs for AsteroidsSim — the deterministic simulation core.
+; Format: <DocumentationCommentId>;<message>
+; See PORT_PLAN.md §6 (Determinism contract) and PHASE0.md Deliverable 2.
+;
+; NOT banned, deliberately:
+;   MathF.Sqrt/Abs/Min/Max/Floor/Ceiling/Round — IEEE-exact or exactly specified.
+;   Dictionary — safe to BUILD, dangerous to ITERATE. An analyzer cannot cleanly
+;   distinguish the two; this stays a review rule backed by the fingerprint test.
+
+; ── RNG ────────────────────────────────────────────────────────────────────
+T:System.Random;Not reproducible across runtimes or versions — use DetRng.
+
+; ── Transcendentals: platform libm, differs in the last ulp across OSes ─────
+M:System.MathF.Sin(System.Single);Use SimMath.Sin
+M:System.MathF.Cos(System.Single);Use SimMath.Cos
+M:System.MathF.Tan(System.Single);Use SimMath.Tan
+M:System.MathF.Asin(System.Single);Not implemented in SimMath yet — add it there
+M:System.MathF.Acos(System.Single);Not implemented in SimMath yet — add it there
+M:System.MathF.Atan(System.Single);Use SimMath.Atan
+M:System.MathF.Atan2(System.Single,System.Single);Use SimMath.Atan2
+M:System.MathF.Exp(System.Single);Use SimMath.Exp
+M:System.MathF.Log(System.Single);Use SimMath.Log
+M:System.MathF.Log2(System.Single);Use SimMath.Log2
+M:System.MathF.Log10(System.Single);Not implemented in SimMath yet — add it there
+M:System.MathF.Pow(System.Single,System.Single);Use SimMath.Pow
+M:System.MathF.Cbrt(System.Single);Not implemented in SimMath yet — add it there
+M:System.MathF.Sinh(System.Single);Not implemented in SimMath yet — add it there
+M:System.MathF.Cosh(System.Single);Not implemented in SimMath yet — add it there
+M:System.MathF.Tanh(System.Single);Not implemented in SimMath yet — add it there
+
+M:System.Math.Sin(System.Double);Use SimMath.Sin (float) — the sim is single-precision
+M:System.Math.Cos(System.Double);Use SimMath.Cos (float)
+M:System.Math.Tan(System.Double);Use SimMath.Tan (float)
+M:System.Math.Atan(System.Double);Use SimMath.Atan (float)
+M:System.Math.Atan2(System.Double,System.Double);Use SimMath.Atan2 (float)
+M:System.Math.Exp(System.Double);Use SimMath.Exp (float)
+M:System.Math.Log(System.Double);Use SimMath.Log (float)
+M:System.Math.Pow(System.Double,System.Double);Use SimMath.Pow (float)
+
+; ── FMA: contraction differs; only use it if BOTH sides agree explicitly ────
+M:System.MathF.FusedMultiplyAdd(System.Single,System.Single,System.Single);Explicit FMA changes results vs the scalar form — do not introduce it into ported code.
+M:System.Math.FusedMultiplyAdd(System.Double,System.Double,System.Double);As above.
+
+; ── Wall clock ─────────────────────────────────────────────────────────────
+T:System.DateTime;No wall clock in the simulation — time is the tick counter.
+T:System.DateTimeOffset;No wall clock in the simulation.
+T:System.Diagnostics.Stopwatch;No wall clock in the simulation.
+P:System.Environment.TickCount;No wall clock in the simulation.
+P:System.Environment.TickCount64;No wall clock in the simulation.
+
+; ── Threading: reorders work, and the deterministic path is single-threaded ─
+T:System.Threading.Tasks.Parallel;No threading in the deterministic path.
+T:System.Threading.Tasks.Task;No threading in the deterministic path.
+T:System.Threading.Thread;No threading in the deterministic path.
+
+; ── Unstable ordering ──────────────────────────────────────────────────────
+M:System.Array.Sort``1(``0[]);Array.Sort is introsort and UNSTABLE — use SimSort.
+M:System.Array.Sort``1(``0[],System.Collections.Generic.IComparer{``0});Unstable — use SimSort.
+M:System.Array.Sort``1(``0[],System.Comparison{``0});Unstable — use SimSort.

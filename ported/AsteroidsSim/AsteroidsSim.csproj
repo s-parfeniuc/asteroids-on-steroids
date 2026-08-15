@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>AsteroidsSim</RootNamespace>
+    <AssemblyName>AsteroidsSim</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       BOUNDARY ENFORCEMENT — PORT_PLAN.md §2.2, PHASE0.md Deliverable 2
+       This assembly is the deterministic simulation core. It must never
+       reference Godot, and must never call a non-deterministic API.
+       ══════════════════════════════════════════════════════════════════════ -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="3.3.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)../BannedSymbols.txt" />
+  </ItemGroup>
+
+  <!-- Hard guard: fail the build if Godot ever enters the reference graph. -->
+  <Target Name="AssertNoGodotReference" AfterTargets="ResolveReferences">
+    <Error Condition="'%(ReferencePath.Filename)' == 'GodotSharp'"
+           Text="AsteroidsSim must not reference Godot. The simulation core is engine-free by design — see PORT_PLAN.md §2.2." />
+    <Error Condition="'%(ReferencePath.Filename)' == 'GodotSharpEditor'"
+           Text="AsteroidsSim must not reference Godot. See PORT_PLAN.md §2.2." />
+  </Target>
+
+</Project>

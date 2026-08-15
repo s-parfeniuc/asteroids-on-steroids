@@ -1,0 +1,17 @@
+<Project Sdk="Godot.NET.Sdk/4.7.1">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RootNamespace>AsteroidsGame</RootNamespace>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <!-- The Godot layer is presentation: it is NOT in the deterministic path, so
+         the banned-API list does not apply here. See PORT_PLAN.md §3.4. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../AsteroidsSim/AsteroidsSim.csproj" />
+  </ItemGroup>
+
+</Project>

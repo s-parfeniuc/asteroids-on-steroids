@@ -1,0 +1,133 @@
+# CI for the standalone repository, once ported/ has been extracted
+# (PORT_PLAN.md §11). While ported/ is still a subdirectory of the parent repo,
+# GitHub cannot see this file — the live workflow is .github/workflows/ported-ci.yml
+# at the PARENT repo root. Keep the two in sync.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # Build + test on every target platform, and emit the determinism fingerprint.
+  # ────────────────────────────────────────────────────────────────────────────
+  build:
+    name: build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  name: linux-x64 }
+          - { os: windows-latest, name: windows-x64 }
+          - { os: macos-14,       name: macos-arm64 }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore AsteroidsOnSteroids.sln
+
+      - name: Build
+        run: dotnet build AsteroidsOnSteroids.sln -c Release --no-restore -p:ContinuousIntegrationBuild=true
+
+      - name: Test
+        run: dotnet test AsteroidsOnSteroids.sln -c Release --no-build --verbosity normal
+
+      - name: Fingerprint
+        shell: bash
+        run: |
+          dotnet run --project tools/MathFingerprint -c Release --no-build -- --verbose \
+            > "fingerprint-${{ matrix.name }}.txt" 2> "fingerprint-${{ matrix.name }}-detail.txt"
+          echo "── ${{ matrix.name }} ──"
+          cat "fingerprint-${{ matrix.name }}-detail.txt"
+          echo "combined: $(cat fingerprint-${{ matrix.name }}.txt)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fingerprint-${{ matrix.name }}
+          path: fingerprint-${{ matrix.name }}*.txt
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # THE DETERMINISM GATE.
+  # SimMath must produce bit-identical results on every platform. This is the
+  # only mechanism that catches a stray MathF.Sin entering the sim years from now.
+  # See PORT_PLAN.md §6 and PHASE0.md Deliverable 4.
+  # ────────────────────────────────────────────────────────────────────────────
+  determinism:
+    name: determinism gate
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: fingerprint-*
+          merge-multiple: true
+
+      - name: Compare fingerprints across platforms
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Per-platform combined fingerprints:"
+          for f in fingerprint-*[!l].txt; do
+            case "$f" in *-detail.txt) continue;; esac
+            printf '  %-24s %s\n' "$f" "$(cat "$f")"
+          done
+
+          uniq_count=$(cat fingerprint-linux-x64.txt fingerprint-windows-x64.txt \
+                           fingerprint-macos-arm64.txt | sort -u | wc -l)
+          if [ "$uniq_count" -ne 1 ]; then
+            echo ""
+            echo "::error::DETERMINISM GATE FAILED — SimMath differs across platforms."
+            echo "Per-function detail (find the first function whose hash differs):"
+            for f in fingerprint-*-detail.txt; do
+              echo "── $f"; cat "$f"
+            done
+            exit 1
+          fi
+          echo ""
+          echo "✅ All platforms agree: $(cat fingerprint-linux-x64.txt)"
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # INDEPENDENCE GATE — PORT_PLAN.md §11.
+  # ported/ must be extractable at any moment. Copy it alone into a clean
+  # directory and prove it builds, tests and runs with nothing else present.
+  # ────────────────────────────────────────────────────────────────────────────
+  independence:
+    name: independence gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Assert no reference escapes this directory
+        shell: bash
+        run: python3 scripts/check_independence.py
+
+      - name: Build and test from a clean extraction
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/extracted
+          cp -r . /tmp/extracted/asteroids
+          cd /tmp/extracted/asteroids
+          rm -rf .git
+          dotnet build AsteroidsOnSteroids.sln -c Release
+          dotnet test AsteroidsOnSteroids.sln -c Release --no-build
+          dotnet run --project tools/MathFingerprint -c Release --no-build
+          echo "✅ ported/ builds, tests and runs standalone."

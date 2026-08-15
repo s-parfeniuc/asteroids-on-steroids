@@ -1,0 +1,30 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+artifacts/
+
+# Godot
+.godot/
+
+# Downloaded Godot addons — dependencies, not sources. 148 MB of per-platform
+# binaries. Reinstall instructions in PHASE0.md.
+AsteroidsGame/addons/
+.mono/
+data_*/
+exports/
+*.translation
+
+# Rider / IDE
+.idea/
+*.DotSettings.user
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Phase 0 spike output
+fingerprint-*.txt
+spike-results/
