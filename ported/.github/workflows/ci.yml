@@ -83,11 +83,13 @@ jobs:
           echo "Per-platform combined fingerprints:"
           for f in fingerprint-*[!l].txt; do
             case "$f" in *-detail.txt) continue;; esac
-            printf '  %-24s %s\n' "$f" "$(cat "$f")"
+            printf '  %-24s %s\n' "$f" "$(tr -d '\r' < "$f")"
           done
 
+          # Strip CR: the Windows runner writes CRLF, so a byte-identical hash
+          # would otherwise count as a second unique line.
           uniq_count=$(cat fingerprint-linux-x64.txt fingerprint-windows-x64.txt \
-                           fingerprint-macos-arm64.txt | sort -u | wc -l)
+                           fingerprint-macos-arm64.txt | tr -d '\r' | sort -u | wc -l)
           if [ "$uniq_count" -ne 1 ]; then
             echo ""
             echo "::error::DETERMINISM GATE FAILED — SimMath differs across platforms."
@@ -98,7 +100,7 @@ jobs:
             exit 1
           fi
           echo ""
-          echo "✅ All platforms agree: $(cat fingerprint-linux-x64.txt)"
+          echo "✅ All platforms agree: $(tr -d '\r' < fingerprint-linux-x64.txt)"
 
   # ────────────────────────────────────────────────────────────────────────────
   # INDEPENDENCE GATE — PORT_PLAN.md §11.

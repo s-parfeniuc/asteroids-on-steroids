@@ -105,13 +105,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # NOTE: strip CR before comparing. The Windows runner's .NET writes CRLF,
+          # so a byte-identical hash still differs from the Linux/macOS files by a
+          # trailing \r — which `sort -u` counts as a second unique line while
+          # printf renders both identically. This cost one confusing red build.
           echo "Per-platform combined fingerprints:"
           for p in linux-x64 windows-x64 macos-arm64; do
-            printf '  %-14s %s\n' "$p" "$(cat "fingerprint-$p.txt")"
+            printf '  %-14s %s\n' "$p" "$(tr -d '\r' < "fingerprint-$p.txt")"
           done
 
           uniq_count=$(cat fingerprint-linux-x64.txt fingerprint-windows-x64.txt \
-                           fingerprint-macos-arm64.txt | sort -u | wc -l)
+                           fingerprint-macos-arm64.txt | tr -d '\r' | sort -u | wc -l)
           if [ "$uniq_count" -ne 1 ]; then
             echo ""
             echo "::error::DETERMINISM GATE FAILED — SimMath differs across platforms."
@@ -122,7 +126,7 @@ jobs:
             exit 1
           fi
           echo ""
-          echo "✅ All platforms agree: $(cat fingerprint-linux-x64.txt)"
+          echo "✅ All platforms agree: $(tr -d '\r' < fingerprint-linux-x64.txt)"
 
   # ────────────────────────────────────────────────────────────────────────────
   # INDEPENDENCE GATE — ported/PORT_PLAN.md §11.
