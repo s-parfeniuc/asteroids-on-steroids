@@ -11,7 +11,7 @@ change later, and produces **numbers** for the two questions the rest of the pla
 | # | Criterion | Status |
 |---|---|---|
 | 1 | `AsteroidsSim` compiles with **zero Godot references**, enforced by the build | ✅ **done** — MSBuild guard + banned-API analyzer, both verified to fire |
-| 2 | **`SimMath` bit-identical on Linux x64 / Windows x64 / macOS arm64** | 🟡 **one platform verified** — CI job written; needs a real 3-platform run |
+| 2 | **`SimMath` bit-identical on Linux x64 / Windows x64 / macOS arm64** | 🟡 **gate is live and caught a real bug on its first run** — fixed; awaiting the confirming green run |
 | 3 | **Spike A has numbers** — rendering throughput, marshalling isolated | ✅ **done** — see below |
 | 4 | **Spike B has numbers** — physics path decided | ✅ **done — decision: port our own solver** |
 | 5 | **Independence gate** passes | ✅ **done** — verified locally by clean extraction |
@@ -45,17 +45,63 @@ zeros, subnormals, NaN propagation, and `DetRng` substream independence.
 ### Fingerprint stability
 
 `MathFingerprint` hashes ~251k inputs per unary function, ~382k pairs per binary function, and 64 seeds
-× 512 RNG draws. On this machine:
+× 512 RNG draws. Current value (post-fix, see below):
 
 ```
-ab816f84937c3e1b5473aca6fcc4dfcc
+7513035a81fe26663489e2bc2be77c41
 ```
 
 **Identical under every JIT configuration tested** — default, `TieredCompilation=0`, `TieredPGO=0`,
 `ReadyToRun=0`, `QuickJitForLoops=1`. That rules out JIT tiering as a divergence source, which was one of
 the named risks.
 
-### One real bug the tests caught
+### The determinism gate caught a real bug on its first CI run
+
+This is the headline result of Phase 0. The first three-platform run came back:
+
+```
+linux-x64      ab816f84937c3e1b5473aca6fcc4dfcc
+windows-x64    ab816f84937c3e1b5473aca6fcc4dfcc
+macos-arm64    4e8450bd87b8596f89d7ea951e68acdb   ← diverged
+```
+
+The per-function breakdown localised it immediately: **`Cos`, `Tan` and `Sqrt` differed; `Sin`, `Atan`,
+`Exp`, `Log`, `Log2`, `Atan2`, `Pow` and `DetRng` did not.**
+
+`Sqrt` was the tell. It is a passthrough to `MathF.Sqrt`, which IEEE 754 requires to be *correctly
+rounded* — it cannot differ for any real input. So the divergence had to involve **NaN**, which pointed
+at the input vector rather than the algorithm. Two distinct causes, one benign and one serious:
+
+**Cause 1 (serious) — an unspecified `double`→`int` cast in `ReducePio2`.**
+
+```csharp
+double fn = x * InvPio2;
+int n = (int)(fn >= 0 ? fn + 0.5 : fn - 0.5);   // undefined when fn exceeds int range
+```
+
+C# leaves out-of-range float→int conversion unspecified, and the architectures genuinely disagree:
+x86-64's `cvttsd2si` yields `int.MinValue`; **ARM64's `fcvtzs` saturates to `int.MaxValue`.** So `n & 3`
+selected quadrant **0** on x86 and quadrant **3** on ARM — a different kernel entirely. The fingerprint's
+input vector reaches `float.MaxValue` and every binade to 2¹²⁷, which trips it. (`Sin` happened not to
+diverge because its quadrant-0 and quadrant-3 branches coincided on those garbage inputs; `Cos` and `Tan`
+did not. A neat illustration of why a broad input vector matters — a narrower sweep would have missed it.)
+
+**Fix:** guard at |x| ≥ 2²⁶ and return a fixed result. This is principled rather than arbitrary: above
+2²⁶ a float's ulp exceeds 2π, so consecutive representable inputs differ by more than a full period and
+the argument carries *no phase information at all*. Every answer is equally defensible; what matters is
+that it is the same answer everywhere. Regression-tested in `Trig_HugeArguments_AreDefined`.
+
+**Cause 2 (benign) — NaN payload bits in the hash.** IEEE 754 leaves the sign and payload of a NaN
+unspecified, and x86-64 and ARM64 produce different bit patterns for e.g. `sqrt(-1)`. Hashing them raw
+reported a divergence with no semantic content. The fingerprint now canonicalises every NaN to one value
+— a NaN where another platform produced a *number* still differs, which is the case that matters.
+
+**Post-fix fingerprint: `7513035a81fe26663489e2bc2be77c41`.**
+
+The lesson worth keeping: this bug would have shipped, and would have surfaced as an unreproducible
+mid-match desync between a Mac player and everyone else, months from now. It cost one CI run to find.
+
+### One real bug the unit tests caught
 
 `Sin(-0f)` returned `+0f`. In the FDLIBM kernel `x + v*(S1 + …)` with `S1` negative turns `-0.0` into
 `+0.0`, and `-0.0 + 0.0` is `+0.0`. Fixed with FDLIBM's tiny-argument early-out (`|x| < 2⁻²⁷ → return x`).

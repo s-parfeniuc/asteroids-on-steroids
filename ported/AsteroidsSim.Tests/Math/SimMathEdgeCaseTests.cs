@@ -162,6 +162,62 @@ public sealed class SimMathEdgeCaseTests
         Assert.True(float.IsNaN(SimMath.Tan(float.NaN)));
     }
 
+    /// <summary>
+    /// Regression: huge arguments must produce a *defined* result on every architecture.
+    /// </summary>
+    /// <remarks>
+    /// The determinism gate caught this on its first CI run — Cos and Tan diverged on
+    /// macos-arm64 while Sin did not. Root cause: <c>ReducePio2</c> cast an out-of-range
+    /// double to int, which C# leaves unspecified and the architectures answer differently
+    /// (x86-64 `cvttsd2si` → int.MinValue; ARM64 `fcvtzs` saturates → int.MaxValue), so
+    /// `n &amp; 3` selected quadrant 0 on one and quadrant 3 on the other.
+    ///
+    /// Above |x| = 2^26 a float's ulp exceeds 2*pi, so the input carries no phase
+    /// information and any fixed answer is as defensible as another. What matters is that
+    /// it is the *same* answer everywhere.
+    /// </remarks>
+    [Theory]
+    [InlineData(67108864f)]        // exactly 2^26
+    [InlineData(1e10f)]
+    [InlineData(3.4e38f)]          // near float.MaxValue
+    [InlineData(-67108864f)]
+    [InlineData(-3.4e38f)]
+    public void Trig_HugeArguments_AreDefined(float x)
+    {
+        AssertSameBits(0f, SimMath.Sin(x), $"Sin({x:R})");
+        AssertSameBits(1f, SimMath.Cos(x), $"Cos({x:R})");
+        AssertSameBits(0f, SimMath.Tan(x), $"Tan({x:R})");
+    }
+
+    /// <summary>The guard must not swallow the range where we do claim accuracy (|x| &lt; 2^20).</summary>
+    [Fact]
+    public void Trig_BelowExactReductionLimit_IsAccurate()
+    {
+        foreach (float x in new[] { 1048575f, -1048575f, 1000000f, 65536.5f })
+        {
+            Assert.True(Ulp.Distance(SimMath.Sin(x), MathF.Sin(x)) <= 2, $"Sin({x:R})");
+            Assert.True(Ulp.Distance(SimMath.Cos(x), MathF.Cos(x)) <= 2, $"Cos({x:R})");
+        }
+    }
+
+    /// <summary>
+    /// Between 2^20 and 2^26 the two-stage Cody–Waite reduction loses accuracy, which the
+    /// class documents. It must still return an in-range, finite, deterministic value —
+    /// accuracy is not promised there, definedness is.
+    /// </summary>
+    [Fact]
+    public void Trig_BetweenLimits_StaysInRangeAndFinite()
+    {
+        foreach (float x in new[] { 2097152f, 16777216f, 67108863f, -33554432f })
+        {
+            float s = SimMath.Sin(x), c = SimMath.Cos(x);
+            Assert.True(float.IsFinite(s) && s >= -1f && s <= 1f, $"Sin({x:R}) = {s:R}");
+            Assert.True(float.IsFinite(c) && c >= -1f && c <= 1f, $"Cos({x:R}) = {c:R}");
+            // And it must be reproducible within this process, at minimum.
+            AssertSameBits(s, SimMath.Sin(x), $"Sin({x:R}) repeatability");
+        }
+    }
+
     [Fact]
     public void Sin_Zero_PreservesSign()
     {

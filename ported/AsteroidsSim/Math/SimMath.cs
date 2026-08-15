@@ -86,9 +86,26 @@ public static class SimMath
             return 0;
         }
 
+        // Beyond |x| = 2^26 a float's ulp exceeds 2*pi, so consecutive representable
+        // inputs differ by more than a full period and the argument carries no phase
+        // information at all — every answer is equally defensible. Return a fixed one.
+        //
+        // This guard is NOT cosmetic. Without it the conversion below is an
+        // out-of-range double->int cast, which C# leaves unspecified and which the
+        // architectures genuinely disagree on: x86-64 `cvttsd2si` yields int.MinValue,
+        // ARM64 `fcvtzs` SATURATES to int.MaxValue. `n & 3` is then 0 on x86 and 3 on
+        // ARM, selecting a different quadrant — which is exactly how the determinism
+        // gate first caught this (Cos and Tan diverged on macos-arm64, Sin did not).
+        if (ax >= 67108864.0)   // 2^26
+        {
+            r = 0.0;
+            return 0;           // => Sin -> 0, Cos -> 1, Tan -> 0
+        }
+
         double fn = x * InvPio2;
         // Round half away from zero, written explicitly so it does not depend on
-        // Math.Round's midpoint mode.
+        // Math.Round's midpoint mode. |fn| < 2^26 * (2/pi) here, comfortably inside
+        // int range, so the cast is well-defined on every architecture.
         int n = (int)(fn >= 0 ? fn + 0.5 : fn - 0.5);
         double dn = n;
 

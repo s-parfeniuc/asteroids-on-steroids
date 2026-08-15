@@ -113,11 +113,25 @@ internal static class Program
 
     // ── hashing ───────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Bit pattern of a result, with NaN payloads canonicalised.
+    /// </summary>
+    /// <remarks>
+    /// IEEE 754 leaves the sign and payload bits of a NaN unspecified, and the
+    /// architectures genuinely differ: x86-64 and ARM64 produce different bit
+    /// patterns for e.g. <c>sqrt(-1)</c>. Hashing those raw reports a divergence
+    /// that has no semantic content. Collapsing every NaN to one value keeps the
+    /// gate honest about what matters — a NaN where another platform produced a
+    /// number still differs, which is the case we must catch.
+    /// </remarks>
+    private static int ResultBits(float v) =>
+        float.IsNaN(v) ? unchecked((int)0x7FC00000) : BitConverter.SingleToInt32Bits(v);
+
     private static void HashUnary(ref Fnv128 h, string name, Func<float, float> f, bool verbose)
     {
         var local = new Fnv128();
         foreach (float x in Inputs)
-            local.Add(BitConverter.SingleToInt32Bits(f(x)));
+            local.Add(ResultBits(f(x)));
 
         if (verbose) Console.Error.WriteLine($"{name,-8} {local.ToHex()}  ({Inputs.Length} inputs)");
         h.Add(local);
@@ -128,7 +142,7 @@ internal static class Program
         var local = new Fnv128();
         foreach (float a in PairInputs)
             foreach (float b in PairInputs)
-                local.Add(BitConverter.SingleToInt32Bits(f(a, b)));
+                local.Add(ResultBits(f(a, b)));
 
         if (verbose)
             Console.Error.WriteLine(
@@ -145,9 +159,9 @@ internal static class Program
             for (int i = 0; i < 512; i++)
             {
                 local.Add((int)r.NextUInt(RngStream.Tessellation));
-                local.Add(BitConverter.SingleToInt32Bits(r.NextFloat(RngStream.Waves)));
+                local.Add(ResultBits(r.NextFloat(RngStream.Waves)));
                 local.Add(r.NextInt(RngStream.Loot, 1000));
-                local.Add(BitConverter.SingleToInt32Bits(r.NextFloat(RngStream.Ai, -5f, 5f)));
+                local.Add(ResultBits(r.NextFloat(RngStream.Ai, -5f, 5f)));
             }
         }
 
