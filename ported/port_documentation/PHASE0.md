@@ -1,7 +1,7 @@
 # Phase 0 — Foundations, Determinism, and Profiling
 
 **Duration:** ~2 weeks · **Prerequisite for:** everything
-**Parent:** [PORT_PLAN.md](PORT_PLAN.md)
+**Parent:** [PORT_PLAN.md](port_documentation/PORT_PLAN.md)
 
 Phase 0 writes no game code. It builds the skeleton, settles the decisions that are expensive to
 change later, and produces **numbers** for the two questions the rest of the plan depends on.
@@ -11,7 +11,7 @@ change later, and produces **numbers** for the two questions the rest of the pla
 | # | Criterion | Status |
 |---|---|---|
 | 1 | `AsteroidsSim` compiles with **zero Godot references**, enforced by the build | ✅ **done** — MSBuild guard + banned-API analyzer, both verified to fire |
-| 2 | **`SimMath` bit-identical on Linux x64 / Windows x64 / macOS arm64** | 🟡 **gate is live and caught a real bug on its first run** — fixed; awaiting the confirming green run |
+| 2 | **`SimMath` bit-identical on Linux x64 / Windows x64 / macOS arm64** | ✅ **done** — all three agree on `7513035a81fe26663489e2bc2be77c41`. The gate caught a real bug on its first run (below) |
 | 3 | **Spike A has numbers** — rendering throughput, marshalling isolated | ✅ **done** — see below |
 | 4 | **Spike B has numbers** — physics path decided | ✅ **done — decision: port our own solver** |
 | 5 | **Independence gate** passes | ✅ **done** — verified locally by clean extraction |
@@ -96,7 +96,15 @@ unspecified, and x86-64 and ARM64 produce different bit patterns for e.g. `sqrt(
 reported a divergence with no semantic content. The fingerprint now canonicalises every NaN to one value
 — a NaN where another platform produced a *number* still differs, which is the case that matters.
 
-**Post-fix fingerprint: `7513035a81fe26663489e2bc2be77c41`.**
+**Post-fix fingerprint: `7513035a81fe26663489e2bc2be77c41`** — confirmed identical on Linux x64,
+Windows x64 and macOS arm64.
+
+**A third, purely-CI bug surfaced on the confirming run:** all three platforms reported the same hash, yet
+the gate still failed. The Windows runner's .NET writes **CRLF**, so a byte-identical hash differs from
+the Linux/macOS files by a trailing `\r` — `sort -u` counted two unique lines while `printf` rendered
+both identically, which made the failure look impossible. Fixed with `tr -d '\r'` before comparison.
+Worth remembering the shape of it: when a comparison fails but the displayed values match, suspect
+invisible bytes.
 
 The lesson worth keeping: this bug would have shipped, and would have surfaced as an unreproducible
 mid-match desync between a Mac player and everyone else, months from now. It cost one CI run to find.
@@ -233,10 +241,9 @@ own rather than vendor promises.
 
 ## Remaining work
 
-1. **Run the CI matrix for real** (criterion 2) — the last open exit criterion. The workflow is written
-   and green locally on Linux; it needs a push to a repo with Actions enabled, or manual runs on Windows
-   and macOS arm64.
-2. **Visual check for 8-bit vertex colour banding** — run `Spikes/SpikeRender.tscn` windowed with `G`
+**Phase 0 is complete — all five exit criteria met.** Carried into later phases:
+
+1. **Visual check for 8-bit vertex colour banding** — run `Spikes/SpikeRender.tscn` windowed with `G`
    on a machine that has working GPU acceleration.
 3. **Optional: re-run Spike A on real hardware** to get a GPU-side number. The CPU-side conclusion does
    not depend on it.

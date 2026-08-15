@@ -8,7 +8,7 @@ the unit of loot.
 **Godot 4.7 · C# / .NET 8 · deterministic simulation core**
 
 > **Status: Phase 0.** Foundations and determinism infrastructure are in place. No gameplay yet.
-> See [PORT_PLAN.md](PORT_PLAN.md) for the architecture and roadmap, [PHASE0.md](PHASE0.md) for the
+> See [PORT_PLAN.md](port_documentation/PORT_PLAN.md) for the architecture and roadmap, [PHASE0.md](port_documentation/PHASE0.md) for the
 > current phase.
 
 ---
@@ -52,11 +52,11 @@ desyncs on a last-ulp difference. That means:
 - No wall clock, no threading, no unstable sorts, no `Dictionary` iteration in simulation code.
 
 These are enforced by a banned-API analyzer at build time and by a CI job that compares the fingerprint
-hash across Linux, Windows and macOS. Full contract: [PORT_PLAN.md §6](PORT_PLAN.md).
+hash across Linux, Windows and macOS. Full contract: [PORT_PLAN.md §6](port_documentation/PORT_PLAN.md).
 
 ## Contributing
 
-Read [PORT_PLAN.md](PORT_PLAN.md) first — particularly §2 (decisions and why) and §6 (the determinism
+Read [PORT_PLAN.md](port_documentation/PORT_PLAN.md) first — particularly §2 (decisions and why) and §6 (the determinism
 contract). The rules there are not style preferences; breaking one produces a desync that is very
 expensive to find later.
 

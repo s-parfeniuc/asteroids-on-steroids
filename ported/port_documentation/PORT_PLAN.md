@@ -1,6 +1,6 @@
 # Asteroids on Steroids — Port Plan
 
-**Status:** planning. No code written yet.
+**Status:** Phase 0 complete. Phase 1 in progress.
 **Target:** Godot 4 + C# (.NET), replacing the bespoke C# engine in `../src/`.
 **This directory is temporary.** `ported/` lives inside the current repo only for the duration of the
 port. It must build, run and test with no reference to anything outside itself, and will be extracted
