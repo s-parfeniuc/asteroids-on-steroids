@@ -7,7 +7,7 @@
       "relaxRate": 200,
       "crackDirectionality": 0.75,
       "crackSpeed": 240,
-      "grainArea": 1500,
+      "grainArea": 300,
       "minFragmentArea": 1500,
       "density": 1.4,
       "cellToughness": 0.5,
@@ -22,7 +22,7 @@
       "relaxRate": 150,
       "crackDirectionality": 0.90,
       "crackSpeed": 300,
-      "grainArea": 900,
+      "grainArea": 180,
       "minFragmentArea": 900,
       "density": 0.9,
       "cellToughness": 0.35,
@@ -37,7 +37,7 @@
       "relaxRate": 120,
       "crackDirectionality": 0.0,
       "crackSpeed": 80,
-      "grainArea": 300,
+      "grainArea": 60,
       "minFragmentArea": 800,
       "density": 1.1,
       "cellToughness": 1.25,
@@ -52,7 +52,7 @@
       "relaxRate": 350,
       "crackDirectionality": 0.55,
       "crackSpeed": 180,
-      "grainArea": 3000,
+      "grainArea": 600,
       "minFragmentArea": 3000,
       "density": 2,
       "cellToughness": 1,
@@ -67,7 +67,7 @@
       "relaxRate": 100,
       "crackDirectionality": 1.0,
       "crackSpeed": 400,
-      "grainArea": 600,
+      "grainArea": 120,
       "minFragmentArea": 600,
       "density": 1,
       "cellToughness": 0.3,
@@ -82,7 +82,7 @@
       "relaxRate": 100,
       "crackDirectionality": 0.40,
       "crackSpeed": 150,
-      "grainArea": 5000,
+      "grainArea": 1000,
       "minFragmentArea": 100,
       "density": 3.5,
       "cellToughness": 2.3,
@@ -97,7 +97,7 @@
       "relaxRate": 400,
       "crackDirectionality": 0.9,
       "crackSpeed": 150,
-      "grainArea": 5000,
+      "grainArea": 1000,
       "minFragmentArea": 0,
       "density": 5,
       "cellToughness": 4.5,
@@ -112,7 +112,7 @@
       "relaxRate": 4000,
       "crackDirectionality": 0.40,
       "crackSpeed": 150,
-      "grainArea": 5000,
+      "grainArea": 1000,
       "minFragmentArea": 5000,
       "density": 7.5,
       "cellToughness": 4.5,
@@ -365,6 +365,52 @@
     }
   },
   "asteroids": {
+    "giant": {
+      "procedural": {
+        "baseRadius": 400,
+        "vertexCount": [
+          40,
+          56
+        ],
+        "roughness": 0.22,
+        "noiseFrequency": 3,
+        "concavityBias": 0.0,
+        "clusterCount": 15,
+        "clusterCentrality": 0.2,
+        "clusterSpread": [
+          0.8,
+          1.0
+        ],
+        "bondGain": 30.0,
+        "densityGain": 15.0
+      },
+      "material": "rock",
+      "sizeRange": [
+        0.8,
+        2
+      ],
+      "spinRange": [
+        0,
+        1.5
+      ],
+      "densityMult": 1,
+      "baseCost": 6,
+      "speedRange": [
+        30,
+        55
+      ],
+      "unlockWave": 1,
+      "vortexResponse": {
+        "centripetalRange": [
+          0.1,
+          0.3
+        ],
+        "tangentialRange": [
+          0.3,
+          0.5
+        ]
+      }
+    },
     "dune": {
       "procedural": {
         "baseRadius": 70,
@@ -1105,9 +1151,9 @@
     "bgAlpha": 110
   },
   "waveSystem": {
-    "baseCellCap": 300,
-    "maxCellCap": 2000,
-    "cellCapGrowthAmount": 20,
+    "baseCellCap": 3000,
+    "maxCellCap": 20000,
+    "cellCapGrowthAmount": 200,
     "growthIntervalSeconds": 30,
     "baseBudget": 60,
     "budgetGrowthPerInterval": 7,
@@ -1155,6 +1201,12 @@
       }
     },
     "spawnBias": {
+      "giant": {
+        "w0": 0.90,
+        "w1": 0.06,
+        "t0": 0,
+        "t1": 600
+      },
       "dune": {
         "w0": 0.10,
         "w1": 0.06,

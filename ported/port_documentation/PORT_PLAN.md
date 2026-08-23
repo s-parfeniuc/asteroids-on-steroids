@@ -107,7 +107,7 @@ rollback deletes body 47, the view layer notices next frame and recycles its vis
 |---|---|
 | **We own the physics** ✅ *measured, not assumed* | Port `CollisionSystem.cs` (395) + `CompoundShape.cs` (355) + `SpatialGrid.cs` (155) ≈ 900 LOC we already wrote and tuned. Required for determinism *and* for snapshot/restore — **and it is also the fastest of the three contenders measured: 4.73 ms/tick at representative density, unoptimised, vs Rapier 16.6 ms and Godot DEFAULT 34.4 ms.** |
 | **Godot Physics is not used for the sim** | Not deterministic (order-dependent solver fed by pointer-hashed containers; different platform builds are different compilations), no state snapshotting, no promise of stability across patch releases — **and measured 7.3× slower than ours** on the identical scenario. |
-| **`godot-rapier-physics` evaluated and rejected** | 2–3.3× faster than Godot DEFAULT, but **3.5× slower than our existing solver**, and at representative density its median already consumes the entire 16.7 ms frame budget. Decisively: the cross-platform-deterministic flavour disables SIMD and parallel solving, so it is *slower* still. Full numbers in [PHASE0.md](PHASE0.md). |
+| **`godot-rapier-physics` evaluated and rejected** | 2–3.3× faster than Godot DEFAULT, but **3.5× slower than our existing solver**, and at representative density its median already consumes the entire 16.7 ms frame budget. Decisively: the cross-platform-deterministic flavour disables SIMD and parallel solving, so it is *slower* still. Full numbers in [PHASE0.md](PHASE0.md); why it also fails as a *utility* library in §2.8. |
 
 ### 2.4 Netcode
 | Decision | Rationale |
@@ -142,6 +142,69 @@ rollback deletes body 47, the view layer notices next frame and recycles its vis
 | **60 Hz fixed tick** (down from 120) | Exactly 2× on every sim cost. Under lockstep the tick rate is a protocol parameter — fix it before the wire format exists. |
 | **Shell states in Godot; match phases in `SimState`** | Match phases must be snapshotted and must agree across peers. Shell flow (menu, lobby, loading) must not be. |
 | **Overlay stack, not sibling states** | Pause / upgrade-pick / scoreboard are overlays on `InMatch`. Avoids state explosion. |
+
+### 2.8 Third-party libraries
+
+Owning the solver (§2.3) does **not** mean writing every geometry routine by hand. The rule below decides
+each case, and it exists because "should we just use a library for this?" will otherwise be re-litigated
+every few months.
+
+**The boundary is not performance-critical vs not. It is inside the deterministic path vs outside it.**
+
+| Where the code runs | Constraint | Library policy |
+|---|---|---|
+| Inside `step()` | must be bit-identical on every platform | Pure C#, all math through `SimMath`, audited for `Math.*` calls, `Dictionary` iteration and unstable sorts. **Prefer writing it** — these algorithms are 30–150 lines each and auditing a dependency usually costs more than implementing one |
+| **Content / load time, producing baked data** | none | **Use anything.** The *output* is serialised data, and data is identical on every machine. A non-deterministic library may freely *produce* state; it may not *compute during a tick* |
+| Presentation only (render, VFX, UI, tooling) | none | Use anything |
+
+**Never reach the simulation through Godot's `PhysicsServer2D`.** Not for a utility, not for a one-off
+query. `AsteroidsSim` has zero Godot references, enforced by the build (§2.2) — that is what makes it
+headless-testable, snapshot-able, and runnable on a dedicated server with no engine installed. One
+utility call through the server and the server needs Godot *and* a physics plugin.
+
+#### Why `godot-rapier-physics` cannot be a utility library
+
+Beyond being rejected on performance (§2.3), it is the wrong *shape*: it is a `PhysicsServer2D`
+implementation, not a geometry library. There is no `RapierGeometry.Distance(polyA, polyB)` — every
+capability is reachable only by creating a space, shapes and bodies as RIDs, querying, and tearing them
+down. Using it for utilities would puncture the boundary above, make part of the simulation's output
+depend on a vendor's determinism promise we deliberately declined, and put state outside `SimState`
+where it cannot snapshot or roll back.
+
+**It remains useful as an oracle, not a dependency** — a second implementation to cross-check our solver
+on a scenario when something looks wrong. That is a testing tool outside the shipped build.
+
+#### What we have, and what we don't
+
+Already covered by `PolygonUtils` / `PolygonShape` / `SpatialGrid`: area, centroid, inertia, convex hull
+(monotone chain), half-plane clipping, SAT overlap with penetration, nearest point on boundary,
+ray/segment vs polygon (Cyrus–Beck), uniform spatial indexing.
+
+Genuinely missing — and **none of it is needed today**:
+
+| Gap | When it would matter | Where it would live |
+|---|---|---|
+| GJK distance / closest points | only if a feature demands it | sim → write it (~150 lines) |
+| CCD / time-of-impact | only if small fast bodies start tunnelling; bullets are already raycasts | sim → write it |
+| Convex decomposition | free-form hull assembly (§3.7) | **content time** → library |
+| Polygon booleans / offsetting | rendering, tooling | **presentation** → library |
+| Robust triangulation of concave polygons | authored outlines; cells are convex by invariant | **content time** → library |
+
+Note the pattern: the routines that are genuinely hard to get right — robust convex decomposition,
+polygon booleans with exact predicates — are exactly the ones that land at content time, where a library
+is free to use. The ones inside `step()` are the textbook ones we should write.
+
+Candidates for the content/presentation slots, when needed: **Clipper2** (Boost licence) for polygon
+booleans and offsetting, **LibTessDotNet** for robust triangulation, **nkast.Aether.Physics2D** (MIT, a
+C# port of Box2D) for GJK / TOI / convex decomposition. All pure managed C#, so none of them require
+touching the engine boundary. Verify licences before adopting.
+
+#### A note on baking
+
+Because content-time work is exempt, **baking authored shape tessellation at content build time** is
+worth considering: `player_ship.tres` would carry final cells and bonds rather than seeds, removing the
+tessellator from the load path for authored bodies and making them immune to tessellator changes.
+Procedurally generated asteroids still tessellate at runtime and stay inside the deterministic path.
 
 ---
 
