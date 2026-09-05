@@ -59,6 +59,40 @@ public static class SimMath
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static float Round(float x) => MathF.Round(x);
 
+    /// <summary>
+    /// Euclidean length of (x, y). Built from multiply and <see cref="Sqrt"/> only, so it is
+    /// exactly specified and needs no kernel.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately NOT the scaled libm <c>hypot</c>. That algorithm exists to avoid overflow when
+    /// x*x would exceed the exponent range, and it costs a branch plus a division on every call.
+    /// The simulation's magnitudes are bounded (positions, velocities and stretches all live well
+    /// inside 1e18, where the naive form cannot overflow), and every fracture hot path calls this,
+    /// so the naive form is both faster and — because it uses only exactly-specified operations —
+    /// trivially deterministic. Callers that genuinely need the full float range must not use this.
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float Hypot(float x, float y) => MathF.Sqrt(x * x + y * y);
+
+    /// <summary>
+    /// Sign of <paramref name="x"/> as -1, 0 or +1. Returns 0 for both zeros and for NaN, so it
+    /// never propagates a NaN into a magnitude.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float Sign(float x) => x > 0f ? 1f : x < 0f ? -1f : 0f;
+
+    /// <summary>Clamp to [min, max]. Comparison-only, so exactly specified.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float Clamp(float x, float min, float max) => x < min ? min : x > max ? max : x;
+
+    /// <summary>
+    /// Linear interpolation, written as <c>a + (b - a) * t</c> to match the form used throughout
+    /// the ported code. Not the fused <c>a*(1-t) + b*t</c> form — the two differ in the last ulp
+    /// and only one of them can be the contract.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float Lerp(float a, float b, float t) => a + (b - a) * t;
+
     public const float PI = 3.14159265358979323846f;
     public const float TwoPI = 6.28318530717958647692f;
     public const float HalfPI = 1.57079632679489661923f;
