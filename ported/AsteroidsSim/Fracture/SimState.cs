@@ -1,7 +1,33 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace AsteroidsSim.Fracture;
+
+/// <summary>
+/// Per-cell boolean state, packed into one byte.
+/// </summary>
+/// <remarks>
+/// <para>These were four separate <c>bool[]</c>, which is four cache lines to answer a question that
+/// usually needs two of them at once — <c>Surf || Cracked</c> is the surface predicate and is read
+/// together on every damage evaluation. One byte array answers it with a single load.</para>
+///
+/// <para>Room is deliberately left in the high bits: carve state and the runtime per-cell properties
+/// that follow it belong here rather than as yet more parallel arrays.</para>
+/// </remarks>
+[Flags]
+public enum CellFlag : byte
+{
+    None = 0,
+    /// <summary>Removed from the simulation. The hottest early-out in the solver.</summary>
+    Dead = 1 << 0,
+    /// <summary>Built as a single cell: a legitimate pebble, never dust.</summary>
+    Solo = 1 << 1,
+    /// <summary>Free boundary at build — cracks may separate here.</summary>
+    Surf = 1 << 2,
+    /// <summary>A break has opened this cell to a surface.</summary>
+    Cracked = 1 << 3,
+}
 
 /// <summary>
 /// The destruction simulation's entire mutable state, as parallel flat arrays.
@@ -36,8 +62,20 @@ public sealed class SimState
     public float[] CellArea = Array.Empty<float>();
     public float[] CellPerim = Array.Empty<float>();
     public float[] CellRad = Array.Empty<float>();    // max vertex distance from the cell centre
-    public bool[] CellSolo = Array.Empty<bool>();     // built as a single cell: a pebble, never dust
-    public bool[] CellSurf = Array.Empty<bool>();     // free boundary at build: cracks may separate here
+
+    /// <summary>
+    /// Material identity, one byte indexing <see cref="Material.ById"/>.
+    /// </summary>
+    /// <remarks>
+    /// A static TAG, not a per-cell property set. Density is not live — carving holds it constant and
+    /// sheds mass — so <c>BodyRho</c>/<c>BodyCpx</c> stay as they are and the contact compliance is
+    /// untouched. Only the comminution parameters read the table, which is a few hundred bytes and
+    /// permanently cache-resident. This is what lets one body hold cells of different materials.
+    /// </remarks>
+    public byte[] CellMat = Array.Empty<byte>();
+
+    /// <summary>Area at build. Carving is measured against it — see the material's shed limit.</summary>
+    public float[] CellArea0 = Array.Empty<float>();
 
     // live
     public float[] CellRx = Array.Empty<float>();     // rest offset in the body frame
@@ -54,18 +92,60 @@ public sealed class SimState
     public float[] CellDvy = Array.Empty<float>();
     public float[] CellDw = Array.Empty<float>();
     public int[] CellBody = Array.Empty<int>();
-    public bool[] CellDead = Array.Empty<bool>();
-    public bool[] CellCracked = Array.Empty<bool>();  // a break has opened this cell to a surface
+    public CellFlag[] CellFlags = Array.Empty<CellFlag>();
     public int[] CellTouch = Array.Empty<int>();      // last tick this cell was in a contact
     public int[] CellBorn = Array.Empty<int>();       // tick it became a lone single, or -1
+
+    // Flag accessors. Aggressively inlined because Dead is tested in the innermost loop of the
+    // narrow phase, the bond passes and every topology walk — a call there would be a real cost.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Dead(int c) => (CellFlags[c] & CellFlag.Dead) != 0;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Solo(int c) => (CellFlags[c] & CellFlag.Solo) != 0;
+
+    /// <summary>
+    /// Free boundary, whether baked at build or opened by a break. One load instead of two, and it
+    /// removes the standing risk of a caller testing <c>Surf</c> and forgetting <c>Cracked</c>.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool AtSurface(int c) => (CellFlags[c] & (CellFlag.Surf | CellFlag.Cracked)) != 0;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetFlag(int c, CellFlag f, bool on)
+    {
+        if (on) CellFlags[c] |= f;
+        else CellFlags[c] &= ~f;
+    }
 
     // scratch, rebuilt every substep — never snapshotted
     public float[] CellPx = Array.Empty<float>();
     public float[] CellPy = Array.Empty<float>();
 
-    // cell polygons, cell-local and centroid-relative (baked)
+    // ── cell polygons, cell-local and centroid-relative ──────────────────────
+    //
+    // NO LONGER BAKED: carving clips these in place, so they are live state and are snapshotted and
+    // fingerprinted like anything else that changes.
+    //
+    // PACKED WITH SLACK, not a uniform stride. Clipping a convex polygon by a half-plane can ADD a
+    // vertex — cut off exactly one corner and you drop 1 but gain 2 crossings — and because this is
+    // one flat array shared by every cell, a cell that outgrows its span would write into its
+    // NEIGHBOUR's vertices. Silently: no crash, just another cell's collider quietly becoming wrong.
+    //
+    // A uniform stride would fix that too, but measured build counts run 3..9 vertices with a mode
+    // of 6, so a stride sized for the worst case wastes about half of every cache line the narrow
+    // phase pulls in — and the narrow phase is the most expensive stage in the tick. Per-cell slack
+    // keeps cells adjacent and costs PolySlack vertices each instead.
+    //
+    // Growth is rarer than it looks: re-carving in the SAME direction is vertex-neutral, because the
+    // deeper cut removes the two endpoints of the face the previous cut left and adds two crossings.
+    // Only a genuinely new carve direction can grow a cell, and then by at most one.
+    public const int PolySlack = 4;
+
     public int[] PolyOff = Array.Empty<int>();
     public int[] PolyLen = Array.Empty<int>();
+    /// <summary>Slots reserved for this cell at <see cref="PolyOff"/>: its build length plus slack.</summary>
+    public int[] PolyCap = Array.Empty<int>();
     public float[] PolyX = Array.Empty<float>();
     public float[] PolyY = Array.Empty<float>();
     public int PolyCount;
@@ -180,13 +260,13 @@ public sealed class SimState
     {
         Grow(ref CellM, n); Grow(ref CellIm, n); Grow(ref CellIc, n); Grow(ref CellIic, n);
         Grow(ref CellArea, n); Grow(ref CellPerim, n); Grow(ref CellRad, n);
-        Grow(ref CellSolo, n); Grow(ref CellSurf, n);
+        Grow(ref CellMat, n); Grow(ref CellArea0, n);
         Grow(ref CellRx, n); Grow(ref CellRy, n);
         Grow(ref CellCrush, n); Grow(ref CellDvx, n); Grow(ref CellDvy, n); Grow(ref CellDw, n);
-        Grow(ref CellBody, n); Grow(ref CellDead, n); Grow(ref CellCracked, n);
+        Grow(ref CellBody, n); Grow(ref CellFlags, n);
         Grow(ref CellTouch, n); Grow(ref CellBorn, n);
         Grow(ref CellPx, n); Grow(ref CellPy, n);
-        Grow(ref PolyOff, n); Grow(ref PolyLen, n);
+        Grow(ref PolyOff, n); Grow(ref PolyLen, n); Grow(ref PolyCap, n);
         Grow(ref AdjOff, n); Grow(ref AdjLen, n);
     }
 
@@ -257,7 +337,7 @@ public sealed class SimState
         {
             if (BondBroken[k]) continue;
             int a = BondA[k];
-            if (CellDead[a]) continue;
+            if (Dead(a)) continue;
             int body = CellBody[a];
             if (body < 0 || body >= BodyCount) continue;
             BodyBondLen[body]++;
@@ -283,7 +363,7 @@ public sealed class SimState
         {
             if (BondBroken[k]) continue;
             int a = BondA[k], bb = BondB[k];
-            if (CellDead[a]) continue;
+            if (Dead(a)) continue;
             int body = CellBody[a];
             if (body < 0 || body >= BodyCount) continue;
             BodyBonds[BodyBondOff[body] + BodyBondLen[body]++] = k;
@@ -296,7 +376,7 @@ public sealed class SimState
     public int LiveCellCount()
     {
         int n = 0;
-        for (int c = 0; c < CellCount; c++) if (!CellDead[c]) n++;
+        for (int c = 0; c < CellCount; c++) if (!Dead(c)) n++;
         return n;
     }
 }

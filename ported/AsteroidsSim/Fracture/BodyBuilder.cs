@@ -178,15 +178,17 @@ public static class BodyBuilder
             }
 
             int ci = cellStart + i;
-            s.EnsurePoly(s.PolyCount + poly.Count);
+            int cap = poly.Count + SimState.PolySlack;
+            s.EnsurePoly(s.PolyCount + cap);
             s.PolyOff[ci] = s.PolyCount;
             s.PolyLen[ci] = poly.Count;
+            s.PolyCap[ci] = cap;
             for (int v = 0; v < poly.Count; v++)
             {
-                s.PolyX[s.PolyCount] = (float)(poly[v].X - cent.X);
-                s.PolyY[s.PolyCount] = (float)(poly[v].Y - cent.Y);
-                s.PolyCount++;
+                s.PolyX[s.PolyCount + v] = (float)(poly[v].X - cent.X);
+                s.PolyY[s.PolyCount + v] = (float)(poly[v].Y - cent.Y);
             }
+            s.PolyCount += cap;          // the slack is reserved, not written
 
             s.CellRx[ci] = (float)rx; s.CellRy[ci] = (float)ry;
             s.CellCrush[ci] = 0f;
@@ -197,9 +199,11 @@ public static class BodyBuilder
             s.CellPerim[ci] = (float)Geometry2D.Perimeter(poly);
             s.CellRad[ci] = (float)System.Math.Sqrt(rad2);
             s.CellBody[ci] = bi;
-            s.CellDead[ci] = false; s.CellCracked[ci] = false;
-            s.CellSolo[ci] = solo; s.CellSurf[ci] = false;
+            s.SetFlag(ci, CellFlag.Dead, false); s.SetFlag(ci, CellFlag.Cracked, false);
+            s.SetFlag(ci, CellFlag.Solo, solo); s.SetFlag(ci, CellFlag.Surf, false);
             s.CellTouch[ci] = int.MinValue; s.CellBorn[ci] = int.MinValue;
+            s.CellMat[ci] = Material.IdOf(material);
+            s.CellArea0[ci] = s.CellArea[ci];
         }
         s.CellCount = cellStart + rawPoly.Count;
         s.BodyI[bi] = (float)bodyI;
@@ -295,7 +299,7 @@ public static class BodyBuilder
                 acc[s.BondB[k] - cellStart] += s.BondLen[k];
             }
             for (int i = 0; i < rawPoly.Count; i++)
-                s.CellSurf[cellStart + i] = acc[i] < s.CellPerim[cellStart + i] * 0.75;
+                s.SetFlag(cellStart + i, CellFlag.Surf, acc[i] < s.CellPerim[cellStart + i] * 0.75);
         }
 
         RebuildMembership(s);
@@ -385,7 +389,7 @@ public static class BodyBuilder
         for (int b = 0; b < s.BodyCount; b++) s.BodyCellLen[b] = 0;
         for (int c = 0; c < s.CellCount; c++)
         {
-            if (s.CellDead[c]) continue;
+            if (s.Dead(c)) continue;
             int b = s.CellBody[c];
             if (b >= 0 && b < s.BodyCount) s.BodyCellLen[b]++;
         }
@@ -397,7 +401,7 @@ public static class BodyBuilder
         for (int b = 0; b < s.BodyCount; b++) s.BodyCellLen[b] = 0;
         for (int c = 0; c < s.CellCount; c++)
         {
-            if (s.CellDead[c]) continue;
+            if (s.Dead(c)) continue;
             int b = s.CellBody[c];
             if (b < 0 || b >= s.BodyCount) continue;
             s.BodyCells[s.BodyCellOff[b] + s.BodyCellLen[b]++] = c;

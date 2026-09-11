@@ -13,7 +13,7 @@ public sealed partial class Solver
         {
             int m = 0;
             for (int c = 0; c < _s.CellCount; c++)
-                if (!_s.CellDead[c] && _s.PolyLen[c] > m) m = _s.PolyLen[c];
+                if (!_s.Dead(c) && _s.PolyLen[c] > m) m = _s.PolyLen[c];
             return m;
         }
     }
@@ -33,7 +33,7 @@ public sealed partial class Solver
     /// <returns>Vertex count written, or 0 for a dead cell.</returns>
     public int CellLocalPolygon(int cell, Span<float> outX, Span<float> outY)
     {
-        if (_s.CellDead[cell]) return 0;
+        if (_s.Dead(cell)) return 0;
         int off = _s.PolyOff[cell], len = _s.PolyLen[cell];
         if (len > outX.Length || len > outY.Length) return 0;
 

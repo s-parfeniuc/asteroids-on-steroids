@@ -109,7 +109,7 @@ public sealed partial class Solver
             for (int i = 0; i < len; i++)
             {
                 int seed = _s.BodyCells[off + i];
-                if (_s.CellDead[seed] || _comp[seed] >= 0) continue;
+                if (_s.Dead(seed) || _comp[seed] >= 0) continue;
 
                 // The component containing the lowest-indexed cell keeps the parent's index;
                 // later ones are appended.
@@ -136,7 +136,7 @@ public sealed partial class Solver
                         int k = _s.AdjBond[aoff + j];
                         if (_s.BondBroken[k]) continue;
                         int v = _s.BondA[k] == u ? _s.BondB[k] : _s.BondA[k];
-                        if (_s.CellDead[v] || _comp[v] >= 0) continue;
+                        if (_s.Dead(v) || _comp[v] >= 0) continue;
                         _comp[v] = target;
                         _stack[sp++] = v;
                     }
@@ -330,7 +330,7 @@ public sealed partial class Solver
     {
         if (_s.BondBroken[k]) return;
         int a = _s.BondA[k], b = _s.BondB[k];
-        if (_s.CellDead[a] || _s.CellDead[b]) return;
+        if (_s.Dead(a) || _s.Dead(b)) return;
         float mx = (_s.CellRx[a] + _s.CellRx[b]) * 0.5f;
         float my = (_s.CellRy[a] + _s.CellRy[b]) * 0.5f;
         _s.BondRax[k] = mx - _s.CellRx[a];
@@ -411,7 +411,7 @@ public sealed partial class Solver
         {
             int c = _crushList[i];
             _crushMark[c] = false;
-            if (_s.CellDead[c]) continue;
+            if (_s.Dead(c)) continue;
             C.DustSinglesSeen++;
             int bi = _s.CellBody[c];
             float vx = _crushVx[c], vy = _crushVy[c];
@@ -426,7 +426,7 @@ public sealed partial class Solver
                 _s.BondBroken[k] = true;
                 _s.BondSn[k] = 0f; _s.BondSt[k] = 0f; _s.BondSa[k] = 0f;
                 int other = _s.BondA[k] == c ? _s.BondB[k] : _s.BondA[k];
-                if (other >= 0 && other < _s.CellCount) _s.CellCracked[other] = true;
+                if (other >= 0 && other < _s.CellCount) _s.SetFlag(other, CellFlag.Cracked, true);
             }
 
             // Whatever the partners could not take. With no partners at all this is the cell's whole
@@ -440,7 +440,7 @@ public sealed partial class Solver
             ExportedKe += 0.5f * _s.CellM[c] * (vx * vx + vy * vy)
                           + 0.5f * _s.CellIc[c] * cw * cw - _crushGain[c];
             Dust++; Crushed++; C.DustConverted++; DustMass += _s.CellM[c];
-            _s.CellDead[c] = true;
+            _s.SetFlag(c, CellFlag.Dead, true);
             MarkDirty(bi);
             did = true;
         }
@@ -457,7 +457,7 @@ public sealed partial class Solver
         {
             if (_s.BodyCellLen[bi] != 1) continue;
             int c = _s.BodyCells[_s.BodyCellOff[bi]];
-            if (_s.CellDead[c] || _s.CellSolo[c]) continue;
+            if (_s.Dead(c) || _s.Solo(c)) continue;
 
             SimMath.SinCos(_s.BodyRot[bi], out float si, out float co);
             float vx = _s.BodyVx[bi] + _s.CellDvx[c] * co - _s.CellDvy[c] * si;
@@ -471,7 +471,7 @@ public sealed partial class Solver
             ExportedKe += 0.5f * _s.CellM[c] * (vx * vx + vy * vy)
                           + 0.5f * _s.BodyI[bi] * _s.BodyW[bi] * _s.BodyW[bi];
             Dust++; C.DustConverted++; DustMass += _s.CellM[c];
-            _s.CellDead[c] = true;
+            _s.SetFlag(c, CellFlag.Dead, true);
             MarkDirty(bi);
             did = true;
         }

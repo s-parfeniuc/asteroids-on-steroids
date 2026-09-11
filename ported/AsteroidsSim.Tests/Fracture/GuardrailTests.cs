@@ -88,7 +88,7 @@ public class GuardrailTests
 
         for (int c = 0; c < s.CellCount; c++)
         {
-            if (s.CellDead[c]) continue;
+            if (s.Dead(c)) continue;
             int n = r.Solver.CellLocalPolygon(c, px, py);
             Assert.Equal(s.PolyLen[c], n);
             if (n == 0) continue;

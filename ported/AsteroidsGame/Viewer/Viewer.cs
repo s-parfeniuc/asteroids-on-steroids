@@ -650,7 +650,7 @@ public partial class Viewer : Node2D
             for (int i = 0; i < len; i++)
             {
                 int c = s.BodyCells[off + i];
-                if (s.CellDead[c]) continue;
+                if (s.Dead(c)) continue;
 
                 int n = solver.CellLocalPolygon(c, _polyX, _polyY);
                 if (n < 3) continue;
@@ -698,7 +698,7 @@ public partial class Viewer : Node2D
         {
             if (s.BondBroken[k]) continue;
             int a = s.BondA[k], b2 = s.BondB[k];
-            if (s.CellDead[a] || s.CellDead[b2]) continue;
+            if (s.Dead(a) || s.Dead(b2)) continue;
             int body = s.CellBody[a];
             if (body != s.CellBody[b2] || body < 0 || body >= s.BodyCount) continue;
 
@@ -946,7 +946,7 @@ public partial class Viewer : Node2D
         float maxX = float.MinValue, maxY = float.MinValue;
         for (int c = 0; c < s.CellCount; c++)
         {
-            if (s.CellDead[c]) continue;
+            if (s.Dead(c)) continue;
             float r = s.CellRad[c];
             if (s.CellPx[c] - r < minX) minX = s.CellPx[c] - r;
             if (s.CellPy[c] - r < minY) minY = s.CellPy[c] - r;
@@ -1081,7 +1081,7 @@ public partial class Viewer : Node2D
         float worst = 0f;
         for (int c = 0; c < s.CellCount; c++)
         {
-            if (s.CellDead[c]) continue;
+            if (s.Dead(c)) continue;
             int bi = s.CellBody[c];
             if (bi < 0 || bi >= s.BodyCount || s.BodyCrushCap[bi] <= 0f) continue;
             float f = s.CellCrush[c] / s.BodyCrushCap[bi];
@@ -1106,7 +1106,7 @@ public partial class Viewer : Node2D
         Solver solver = _scene.Solver;
 
         int live = 0;
-        for (int c = 0; c < s.CellCount; c++) if (!s.CellDead[c]) live++;
+        for (int c = 0; c < s.CellCount; c++) if (!s.Dead(c)) live++;
 
         double frame = _msTick + _msBuild + _msSubmit;
 

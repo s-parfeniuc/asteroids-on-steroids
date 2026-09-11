@@ -57,6 +57,7 @@ internal static class Program
         if (Array.IndexOf(args, "--stress") >= 0) { StressStudy(args); return; }
         if (Array.IndexOf(args, "--crush") >= 0) { CrushSweep(args); return; }
         if (Array.IndexOf(args, "--crushdiag") >= 0) { CrushDiag(args); return; }
+        if (Array.IndexOf(args, "--polycensus") >= 0) { PolyCensus(); return; }
         if (Array.IndexOf(args, "--crushcap") >= 0) { CrushCapSweep(args); return; }
         if (Array.IndexOf(args, "--spall") >= 0) { SpallSweep(args); return; }
         if (Array.IndexOf(args, "--jobsweep") >= 0) { JobSweep(args); return; }
@@ -566,6 +567,40 @@ internal static class Program
             }
             Console.WriteLine();
         }
+    }
+
+    /// <summary>Vertex-count census: what fixed stride the polygon storage needs.</summary>
+    private static void PolyCensus()
+    {
+        var t = SimTuning.Default;
+        int globalMax = 0;
+        foreach (var (name, grain) in new[] { ("collide", 900f), ("collide-fine", 100f),
+                                              ("collide-vfine", 30f), ("projectile", 900f),
+                                              ("field", 900f) })
+        {
+            var r = name.StartsWith("collide")
+                ? Scenarios.Collide(t, Material.Rock, 600f, grain)
+                : name == "projectile" ? Scenarios.Projectile(t, Material.Rock, 900f, 3f, grain)
+                : Scenarios.Field(t, Material.Rock, 5, 5, 60f, 150f, 60f, grain);
+
+            var hist = new int[40];
+            int max = 0, cells = 0;
+            for (int c = 0; c < r.State.CellCount; c++)
+            {
+                int n = r.State.PolyLen[c];
+                if (n <= 0) continue;
+                cells++;
+                if (n < hist.Length) hist[n]++;
+                if (n > max) max = n;
+            }
+            if (max > globalMax) globalMax = max;
+            var parts = new System.Text.StringBuilder();
+            for (int i = 0; i < hist.Length; i++)
+                if (hist[i] > 0) parts.Append($" {i}:{hist[i]}");
+            Console.WriteLine($"{name,-14} grain {grain,5} cells {cells,6} max {max,3} |{parts}");
+        }
+        Console.WriteLine();
+        Console.WriteLine($"GLOBAL MAX VERTICES PER CELL AT BUILD: {globalMax}");
     }
 
     private static Material Retune(in Material m, float crush, float cap)
@@ -1123,7 +1158,7 @@ internal static class Program
             for (int i = 0; i < len; i++)
             {
                 int cc = r.State.BodyCells[off + i];
-                if (r.State.CellDead[cc]) continue;
+                if (r.State.Dead(cc)) continue;
                 float dv = System.Math.Abs(r.State.CellDvx[cc]) + System.Math.Abs(r.State.CellDvy[cc]);
                 if (dv < 0.3f) idleCells++; else { movingCells++; bodyIdle = false; }
                 if (r.State.CellTouch[cc] >= r.State.Tick - 2) touched = true;
@@ -1254,7 +1289,7 @@ internal static class Program
         mean /= samples.Length;
 
         int live = 0;
-        for (int c = 0; c < r.State.CellCount; c++) if (!r.State.CellDead[c]) live++;
+        for (int c = 0; c < r.State.CellCount; c++) if (!r.State.Dead(c)) live++;
 
         // Linear extrapolation from the median: how many cells fit the physics share.
         double cellsAtBudget = live > 0 ? live * (PhysicsShare / p50) : 0;

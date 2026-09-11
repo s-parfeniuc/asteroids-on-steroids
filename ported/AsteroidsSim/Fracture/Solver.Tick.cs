@@ -28,7 +28,7 @@ public sealed partial class Solver
     private void SolveContact(ref Contact ct, float h)
     {
         int a = ct.A, b = ct.B;
-        if (_s.CellDead[a] || _s.CellDead[b]) return;
+        if (_s.Dead(a) || _s.Dead(b)) return;
         // Speculative entries are tracked but inert until they actually close. Their stored
         // impulse is cleared so a pair that separates and closes again does not warm-start from a
         // stale value.
@@ -267,15 +267,15 @@ public sealed partial class Solver
         {
             ref Contact ct = ref _contacts[i];
             int a = ct.A, b = ct.B;
-            if (_crushNew[a] && !_s.CellDead[b]) _crushTot[a] += ct.PressA;
-            if (_crushNew[b] && !_s.CellDead[a]) _crushTot[b] += ct.PressB;
+            if (_crushNew[a] && !_s.Dead(b)) _crushTot[a] += ct.PressA;
+            if (_crushNew[b] && !_s.Dead(a)) _crushTot[b] += ct.PressB;
         }
         for (int i = 0; i < _contactCount; i++)
         {
             ref Contact ct = ref _contacts[i];
             int a = ct.A, b = ct.B;
-            if (_crushNew[a] && !_s.CellDead[b]) TransferShare(a, b, ct.PressA);
-            if (_crushNew[b] && !_s.CellDead[a]) TransferShare(b, a, ct.PressB);
+            if (_crushNew[a] && !_s.Dead(b)) TransferShare(a, b, ct.PressA);
+            if (_crushNew[b] && !_s.Dead(a)) TransferShare(b, a, ct.PressB);
         }
         for (int i = before; i < _crushCount; i++) _crushNew[_crushList[i]] = false;
     }
@@ -300,7 +300,7 @@ public sealed partial class Solver
 
         // Crossed its material's capacity: schedule it for removal and price it now, at this
         // substep's pose and velocity, so the transfer below pays out what it actually had.
-        if (!_tune.Dust || _crushMark[c] || _s.CellSolo[c]) return;
+        if (!_tune.Dust || _crushMark[c] || _s.Solo(c)) return;
         if (_s.CellCrush[c] < _s.BodyCrushCap[bi]) return;
 
         BodyTrig(bi, out float si, out float co);
@@ -415,7 +415,7 @@ public sealed partial class Solver
             if (_s.BondBroken[k]) continue;
             ctr.DamageVisits++;
             int a = _s.BondA[k], b = _s.BondB[k];
-            if (_s.CellDead[a] || _s.CellDead[b])
+            if (_s.Dead(a) || _s.Dead(b))
             { _s.BondBroken[k] = true; MarkDirty(_s.CellBody[a]); continue; }
 
             float sy = _s.BondSy0[k] * _tune.YieldScale;
@@ -472,7 +472,7 @@ public sealed partial class Solver
                 d = SimMath.Min(1f, sf * (lmax - s0) / (lmax * (sf - s0)));
             }
 
-            bool atSurface = _s.CellSurf[a] || _s.CellSurf[b] || _s.CellCracked[a] || _s.CellCracked[b];
+            bool atSurface = _s.AtSurface(a) || _s.AtSurface(b);
             if (!atSurface) d = SimMath.Min(d, 0.97f);
 
             float dPrev = _s.BondDmg[k];
@@ -481,8 +481,8 @@ public sealed partial class Solver
             if (_s.BondDmg[k] >= 1f)
             {
                 _s.BondBroken[k] = true;
-                _s.CellCracked[a] = true;                        // a break IS new surface
-                _s.CellCracked[b] = true;
+                _s.SetFlag(a, CellFlag.Cracked, true);                        // a break IS new surface
+                _s.SetFlag(b, CellFlag.Cracked, true);
                 _s.BondMode[k] = (byte)(sh > op ? 2 : 1);
                 if (Jobs == null) Broken++;
                 ctr.DamageBroke++;

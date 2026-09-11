@@ -205,7 +205,7 @@ public sealed partial class Solver
         {
             ref CellBroad d = ref _broad[c];
             d.Px = _s.CellPx[c]; d.Py = _s.CellPy[c]; d.Rad = _s.CellRad[c];
-            d.Body = _s.CellDead[c] ? -1 : _s.CellBody[c];
+            d.Body = _s.Dead(c) ? -1 : _s.CellBody[c];
         }
     }
 
@@ -469,7 +469,7 @@ public sealed partial class Solver
             for (int i = 0; i < len; i++)
             {
                 int c = _s.BodyCells[off + i];
-                if (_s.CellDead[c]) continue;
+                if (_s.Dead(c)) continue;
                 float x = _s.CellRx[c], y = _s.CellRy[c];
                 _s.CellPx[c] = _s.BodyX[b] + x * co - y * si;
                 _s.CellPy[c] = _s.BodyY[b] + x * si + y * co;
@@ -545,7 +545,7 @@ public sealed partial class Solver
 
         for (int c = 0; c < _s.CellCount; c++)
         {
-            if (_s.CellDead[c]) continue;
+            if (_s.Dead(c)) continue;
             int key = GridKey((int)SimMath.Floor(_s.CellPx[c] / cs), (int)SimMath.Floor(_s.CellPy[c] / cs));
             if (!_grid.TryGetValue(key, out var bucket)) { bucket = RentBucket(); _grid[key] = bucket; }
             bucket.Add(c);
@@ -554,7 +554,7 @@ public sealed partial class Solver
 
         for (int c = 0; c < _s.CellCount; c++)
         {
-            if (_s.CellDead[c]) continue;
+            if (_s.Dead(c)) continue;
             ref CellBroad dc = ref _broad[c];
             int gx = (int)SimMath.Floor(dc.Px / cs);
             int gy = (int)SimMath.Floor(dc.Py / cs);
@@ -771,7 +771,7 @@ public sealed partial class Solver
         {
             ref Contact ct = ref _contacts[i];
             int a = ct.A, b = ct.B;
-            if (_s.CellDead[a] || _s.CellDead[b]) { ct.Depth = -1f; continue; }
+            if (_s.Dead(a) || _s.Dead(b)) { ct.Depth = -1f; continue; }
 
             float dax = _s.CellPx[a] - ct.Ax0, day = _s.CellPy[a] - ct.Ay0;
             float dbx = _s.CellPx[b] - ct.Bx0, dby = _s.CellPy[b] - ct.By0;
@@ -921,7 +921,7 @@ public sealed partial class Solver
             int k = _s.BodyBonds[bondOff + bx];
             if (_s.BondBroken[k]) { c.BondForceSkipped++; continue; }
             int a = _s.BondA[k], b = _s.BondB[k];
-            if (_s.CellDead[a] || _s.CellDead[b]) { c.BondForceSkipped++; continue; }
+            if (_s.Dead(a) || _s.Dead(b)) { c.BondForceSkipped++; continue; }
             c.BondForceVisits++;
 
             float kk = _s.BondK0[k], ka = _s.BondKa0[k];
@@ -977,7 +977,7 @@ public sealed partial class Solver
             int k = _s.BodyBonds[bondOff + bx];
             if (_s.BondBroken[k]) continue;
             int a = _s.BondA[k], b = _s.BondB[k];
-            if (_s.CellDead[a] || _s.CellDead[b]) continue;
+            if (_s.Dead(a) || _s.Dead(b)) continue;
 
             float nx = _s.BondNx[k], ny = _s.BondNy[k];
             float tx = -ny, ty = nx;
@@ -1041,7 +1041,7 @@ public sealed partial class Solver
             for (int i = 0; i < len; i++)
             {
                 int c = _s.BodyCells[off + i];
-                if (_s.CellDead[c]) continue;
+                if (_s.Dead(c)) continue;
                 float vx = _s.CellDvx[c], vy = _s.CellDvy[c];
                 float rx = _s.CellRx[c], ry = _s.CellRy[c];
                 float ax = 0f, ay = 0f;
@@ -1096,7 +1096,7 @@ public sealed partial class Solver
             for (int i = 0; i < len; i++)
             {
                 int c = _s.BodyCells[off + i];
-                if (_s.CellDead[c]) continue;
+                if (_s.Dead(c)) continue;
                 px += _s.CellM[c] * _s.CellDvx[c];
                 py += _s.CellM[c] * _s.CellDvy[c];
                 M += _s.CellM[c];
@@ -1117,7 +1117,7 @@ public sealed partial class Solver
             for (int i = 0; i < len; i++)
             {
                 int c = _s.BodyCells[off + i];
-                if (_s.CellDead[c]) continue;
+                if (_s.Dead(c)) continue;
                 _s.CellDvx[c] -= vx - w * _s.CellRy[c];
                 _s.CellDvy[c] -= vy + w * _s.CellRx[c];
                 _s.CellDw[c] -= w;

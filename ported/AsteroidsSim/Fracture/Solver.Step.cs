@@ -140,7 +140,7 @@ public sealed partial class Solver
         {
             ref Contact ct = ref _contacts[i];
             int a = ct.A, b = ct.B;
-            if (_s.CellDead[a] || _s.CellDead[b]) continue;
+            if (_s.Dead(a) || _s.Dead(b)) continue;
             int ba = _s.CellBody[a], bb = _s.CellBody[b];
             if (ba < 0 || bb < 0 || ba >= _s.BodyCount || bb >= _s.BodyCount || ba == bb) continue;
             // Rubble only, both sides. Generalising this to all bodies was tried and reverted: it
@@ -215,7 +215,7 @@ public sealed partial class Solver
             for (int i = 0; i < len; i++)
             {
                 int c = _s.BodyCells[off + i];
-                if (_s.CellDead[c]) continue;
+                if (_s.Dead(c)) continue;
                 px += _s.CellM[c] * (_s.CellDvx[c] * co - _s.CellDvy[c] * si);
                 py += _s.CellM[c] * (_s.CellDvx[c] * si + _s.CellDvy[c] * co);
             }
@@ -233,7 +233,7 @@ public sealed partial class Solver
             for (int i = 0; i < len; i++)
             {
                 int c = _s.BodyCells[off + i];
-                if (_s.CellDead[c]) continue;
+                if (_s.Dead(c)) continue;
                 float rx = _s.CellRx[c] * co - _s.CellRy[c] * si;
                 float ry = _s.CellRx[c] * si + _s.CellRy[c] * co;
                 float sp = SimMath.Hypot(_s.BodyVx[b] - _s.BodyW[b] * ry,
@@ -267,7 +267,7 @@ public sealed partial class Solver
             for (int ci = 0; ci < cellLen; ci++)
             {
                 int c = _s.BodyCells[cellOff + ci];
-                if (_s.CellDead[c]) continue;
+                if (_s.Dead(c)) continue;
 
                 ctr.RealizeCells++;
                 _s.CellDvx[c] *= rf;
@@ -305,7 +305,7 @@ public sealed partial class Solver
         var bufY = new float[64];
         for (int c = 0; c < _s.CellCount; c++)
         {
-            if (_s.CellDead[c] || _s.CellRad[c] <= 0f) continue;
+            if (_s.Dead(c) || _s.CellRad[c] <= 0f) continue;
             int len = _s.PolyLen[c];
             if (bufX.Length < len) { bufX = new float[len]; bufY = new float[len]; }
             int n = CellLocalPolygon(c, bufX, bufY);

@@ -118,7 +118,7 @@ public static class SceneRunner
             for (int i = 0; i < len; i++)
             {
                 int c = st2.BodyCells[off + i];
-                if (st2.CellDead[c]) continue;
+                if (st2.Dead(c)) continue;
                 n++; m += st2.CellM[c];
             }
             if (n == 0) continue;

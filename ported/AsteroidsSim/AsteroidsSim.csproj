@@ -31,4 +31,11 @@
            Text="AsteroidsSim must not reference Godot. See PORT_PLAN.md §2.2." />
   </Target>
 
+  <ItemGroup>
+    <!-- The carve kernel is geometry with invariants worth testing directly (convexity, winding,
+         monotone area, centroid); exposing it publicly would put it in the solver's API surface. -->
+    <InternalsVisibleTo Include="AsteroidsSim.Tests" />
+    <InternalsVisibleTo Include="FractureBench" />
+  </ItemGroup>
+
 </Project>

@@ -128,7 +128,7 @@ public class PrecisionSpikeTests
 
         float bend = 0f;
         for (int c = 0; c < r.State.CellCount; c++)
-            if (!r.State.CellDead[c])
+            if (!r.State.Dead(c))
                 bend = System.Math.Max(bend, System.Math.Abs(r.State.CellDw[c]));
 
         _out.WriteLine($"steel: bodies={r.State.BodyCount} broken={r.Solver.Broken} " +
@@ -145,7 +145,7 @@ public class PrecisionSpikeTests
     {
         for (int c = 0; c < s.CellCount; c++)
         {
-            if (s.CellDead[c]) continue;
+            if (s.Dead(c)) continue;
             Assert.True(float.IsFinite(s.CellDvx[c]) && float.IsFinite(s.CellDvy[c])
                         && float.IsFinite(s.CellDvx[c]) && float.IsFinite(s.CellDvy[c]),
                         $"cell {c} is not finite");

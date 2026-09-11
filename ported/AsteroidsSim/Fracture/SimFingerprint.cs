@@ -44,8 +44,22 @@ public static class SimFingerprint
             h.AddFloat(s.CellCrush[c]);
             h.AddFloat(s.CellDvx[c]); h.AddFloat(s.CellDvy[c]); h.AddFloat(s.CellDw[c]);
             h.Add(s.CellBody[c]);
-            h.Add(s.CellDead[c]); h.Add(s.CellCracked[c]);
+            // One value covers Dead/Solo/Surf/Cracked and any bit added later, and being a single
+            // field it cannot carry struct padding into the hash.
+            h.Add((int)s.CellFlags[c]); h.Add(s.CellMat[c]); h.AddFloat(s.CellArea0[c]);
             h.Add(s.CellTouch[c]); h.Add(s.CellBorn[c]);
+
+            // Geometry is LIVE now: carving clips these in place, so the polygon is part of the
+            // state a desync can differ in. Only the used prefix is hashed — the slack slots past
+            // PolyLen hold whatever a previous, longer polygon left there and are not state.
+            h.Add(s.PolyLen[c]);
+            int off = s.PolyOff[c];
+            for (int v = 0; v < s.PolyLen[c]; v++)
+            {
+                h.AddFloat(s.PolyX[off + v]); h.AddFloat(s.PolyY[off + v]);
+            }
+            h.AddFloat(s.CellArea[c]); h.AddFloat(s.CellPerim[c]); h.AddFloat(s.CellRad[c]);
+            h.AddFloat(s.CellM[c]); h.AddFloat(s.CellIc[c]);
         }
 
         for (int k = 0; k < s.BondCount; k++)

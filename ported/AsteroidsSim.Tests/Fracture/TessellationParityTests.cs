@@ -86,7 +86,11 @@ public class TessellationParityTests
         Assert.Equal(1, s.BodyCount);
         Assert.Equal(59, s.CellCount);   // reference: body0 cells=59
         Assert.Equal(146, s.BondCount);  // reference: body0 bonds=146
-        Assert.Equal(340, s.PolyCount);  // reference: body0 polygon vertices=340
+        // PolyCount is now an allocation total including per-cell slack, so the quantity the
+        // reference pins is the sum of the lengths.
+        int verts = 0;
+        for (int c = 0; c < s.CellCount; c++) verts += s.PolyLen[c];
+        Assert.Equal(340, verts);        // reference: body0 polygon vertices=340
     }
 
     [Fact]
@@ -119,7 +123,7 @@ public class TessellationParityTests
         Assert.Equal(124.446900, s.CellPerim[0], 3);
         Assert.Equal(26.947353, s.CellRad[0], 3);
         Assert.Equal(6, s.PolyLen[0]);
-        Assert.True(s.CellSurf[0]);
+        Assert.True(s.AtSurface(0));
     }
 
     [Fact]

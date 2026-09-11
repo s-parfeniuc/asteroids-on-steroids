@@ -132,6 +132,30 @@ public readonly struct Material
         "steel" => Steel,
         _ => Rock,
     };
+
+    // ── the id table ─────────────────────────────────────────────────────────
+    //
+    // One byte per cell indexes this, which is what lets a single body hold cells of different
+    // materials without giving every cell its own copy of eight floats. The table is a few hundred
+    // bytes and permanently cache-resident, so a lookup through it costs nothing measurable.
+    //
+    // IDS ARE PART OF THE CONTENT CONTRACT. They are written into cells and therefore into the
+    // fingerprint and every snapshot, so reordering this array renumbers material identity in a
+    // saved or networked simulation. Append only.
+
+    private static readonly Material[] Table = { Rock, Ice, Glass, Sandstone, Steel };
+
+    /// <summary>The material for a cell's stored id.</summary>
+    public static ref readonly Material ById(byte id)
+        => ref Table[id < Table.Length ? id : 0];
+
+    /// <summary>The id to store on a cell built from this material. O(table), build-time only.</summary>
+    public static byte IdOf(in Material m)
+    {
+        for (int i = 0; i < Table.Length; i++)
+            if (ReferenceEquals(Table[i].Name, m.Name) || Table[i].Name == m.Name) return (byte)i;
+        return 0;
+    }
 }
 
 /// <summary>
