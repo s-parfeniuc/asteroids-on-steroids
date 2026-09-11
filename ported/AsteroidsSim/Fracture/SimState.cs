@@ -42,10 +42,14 @@ public sealed class SimState
     // live
     public float[] CellRx = Array.Empty<float>();     // rest offset in the body frame
     public float[] CellRy = Array.Empty<float>();
-    public float[] CellUx = Array.Empty<float>();     // realized displacement (deformation)
-    public float[] CellUy = Array.Empty<float>();
-    public float[] CellUth = Array.Empty<float>();
-    public float[] CellPhi = Array.Empty<float>();    // permanent rest rotation (plastic)
+    // NO realized displacement. Cells sit exactly at their rest offsets: deformation is bookkept on
+    // the bonds as stretch and never becomes visible or collidable geometry. That is what makes a
+    // cell's body-local polygon constant (CellR + q), and therefore the collider constant, which in
+    // turn removes shared-vertex skinning entirely — adjacent cells agree on a shared corner by
+    // construction rather than by averaging.
+    /// <summary>Accumulated comminution dose: stress-seconds of contact above the crush threshold.</summary>
+    public float[] CellCrush = Array.Empty<float>();
+
     public float[] CellDvx = Array.Empty<float>();    // deviation velocity field
     public float[] CellDvy = Array.Empty<float>();
     public float[] CellDw = Array.Empty<float>();
@@ -54,21 +58,16 @@ public sealed class SimState
     public bool[] CellCracked = Array.Empty<bool>();  // a break has opened this cell to a surface
     public int[] CellTouch = Array.Empty<int>();      // last tick this cell was in a contact
     public int[] CellBorn = Array.Empty<int>();       // tick it became a lone single, or -1
-    public int[] CellDeepN = Array.Empty<int>();      // consecutive ticks of deep overlap
 
     // scratch, rebuilt every substep — never snapshotted
     public float[] CellPx = Array.Empty<float>();
     public float[] CellPy = Array.Empty<float>();
-    public float[] CellCa = Array.Empty<float>();
-    public float[] CellSa = Array.Empty<float>();
-    public int[] CellRotStamp = Array.Empty<int>();
 
     // cell polygons, cell-local and centroid-relative (baked)
     public int[] PolyOff = Array.Empty<int>();
     public int[] PolyLen = Array.Empty<int>();
     public float[] PolyX = Array.Empty<float>();
     public float[] PolyY = Array.Empty<float>();
-    public int[] PolyGroup = Array.Empty<int>();      // shared-vertex group id, parallel to PolyX/Y
     public int PolyCount;
 
     public int CellCount;
@@ -76,11 +75,6 @@ public sealed class SimState
     // ── shared-vertex groups ─────────────────────────────────────────────────
     // A Voronoi vertex is shared by ~3 cells. Every copy is drawn at the average of where its
     // sharing cells put it, which is what makes a gap between two bonded cells unrepresentable.
-    public int[] GrpOff = Array.Empty<int>();
-    public int[] GrpLen = Array.Empty<int>();
-    public int[] GrpCell = Array.Empty<int>();
-    public int[] GrpVert = Array.Empty<int>();
-    public int GrpCount;
     public int GrpMemberCount;
 
     // ── bonds ────────────────────────────────────────────────────────────────
@@ -105,10 +99,6 @@ public sealed class SimState
     public float[] BondSn = Array.Empty<float>();     // elastic stretch, per mode
     public float[] BondSt = Array.Empty<float>();
     public float[] BondSa = Array.Empty<float>();
-    public float[] BondPn = Array.Empty<float>();     // plastic offset, per mode
-    public float[] BondPt = Array.Empty<float>();
-    public float[] BondPa = Array.Empty<float>();
-    public float[] BondPTot = Array.Empty<float>();   // accumulated plastic flow (ductile exhaustion)
     public float[] BondDmg = Array.Empty<float>();    // cohesive damage, monotone in [0,1]
     public float[] BondLmax = Array.Empty<float>();   // history max of the equivalent stretch
     public float[] BondRate = Array.Empty<float>();   // strain rate, for rate-dependent strength
@@ -128,8 +118,13 @@ public sealed class SimState
     public float[] BodyAlpha = Array.Empty<float>();
     public float[] BodyM = Array.Empty<float>();
     public float[] BodyI = Array.Empty<float>();
-    public float[] BodyPlast = Array.Empty<float>();  // accumulated plastic flow, triggers a rebake
     public float[] BodyEulL = Array.Empty<float>();   // Euler load's fictitious angular momentum
+
+    /// <summary>
+    /// Set when a body loses a bond or a cell; cleared once the topology pass has processed it.
+    /// A break can only disconnect its own body, so this is what keeps the component walk local.
+    /// </summary>
+    public bool[] BodyDirty = Array.Empty<bool>();
 
     // per-body material, baked at creation so materials with different wave speeds coexist
     public float[] BodyRho = Array.Empty<float>();
@@ -138,6 +133,8 @@ public sealed class SimState
     public float[] BodyVCrit = Array.Empty<float>();
     public float[] BodyDuct = Array.Empty<float>();   // plastic strain capacity, fraction of a cell
     public float[] BodyCellSize = Array.Empty<float>(); // sqrt(grain): per body, so scales can mix
+    public float[] BodyCrush = Array.Empty<float>();   // contact stress at which this body comminutes
+    public float[] BodyCrushCap = Array.Empty<float>(); // stress-seconds above it before powder
 
     // transfer accumulators for the deformation cap (zeroed and consumed within a substep)
     public float[] BodyCpxAcc = Array.Empty<float>();
@@ -185,23 +182,19 @@ public sealed class SimState
         Grow(ref CellArea, n); Grow(ref CellPerim, n); Grow(ref CellRad, n);
         Grow(ref CellSolo, n); Grow(ref CellSurf, n);
         Grow(ref CellRx, n); Grow(ref CellRy, n);
-        Grow(ref CellUx, n); Grow(ref CellUy, n); Grow(ref CellUth, n); Grow(ref CellPhi, n);
-        Grow(ref CellDvx, n); Grow(ref CellDvy, n); Grow(ref CellDw, n);
+        Grow(ref CellCrush, n); Grow(ref CellDvx, n); Grow(ref CellDvy, n); Grow(ref CellDw, n);
         Grow(ref CellBody, n); Grow(ref CellDead, n); Grow(ref CellCracked, n);
-        Grow(ref CellTouch, n); Grow(ref CellBorn, n); Grow(ref CellDeepN, n);
-        Grow(ref CellPx, n); Grow(ref CellPy, n); Grow(ref CellCa, n); Grow(ref CellSa, n);
-        Grow(ref CellRotStamp, n);
+        Grow(ref CellTouch, n); Grow(ref CellBorn, n);
+        Grow(ref CellPx, n); Grow(ref CellPy, n);
         Grow(ref PolyOff, n); Grow(ref PolyLen, n);
         Grow(ref AdjOff, n); Grow(ref AdjLen, n);
     }
 
     public void EnsurePoly(int n)
     {
-        Grow(ref PolyX, n); Grow(ref PolyY, n); Grow(ref PolyGroup, n);
+        Grow(ref PolyX, n); Grow(ref PolyY, n);
     }
 
-    public void EnsureGroups(int n) { Grow(ref GrpOff, n); Grow(ref GrpLen, n); }
-    public void EnsureGroupMembers(int n) { Grow(ref GrpCell, n); Grow(ref GrpVert, n); }
 
     public void EnsureBonds(int n)
     {
@@ -210,7 +203,6 @@ public sealed class SimState
         Grow(ref BondNx, n); Grow(ref BondNy, n);
         Grow(ref BondRax, n); Grow(ref BondRay, n); Grow(ref BondRbx, n); Grow(ref BondRby, n);
         Grow(ref BondSn, n); Grow(ref BondSt, n); Grow(ref BondSa, n);
-        Grow(ref BondPn, n); Grow(ref BondPt, n); Grow(ref BondPa, n); Grow(ref BondPTot, n);
         Grow(ref BondDmg, n); Grow(ref BondLmax, n); Grow(ref BondRate, n);
         Grow(ref BondBroken, n); Grow(ref BondMode, n);
         Grow(ref AdjBond, 2 * n);
@@ -221,9 +213,11 @@ public sealed class SimState
         Grow(ref BodyX, n); Grow(ref BodyY, n); Grow(ref BodyRot, n);
         Grow(ref BodyVx, n); Grow(ref BodyVy, n); Grow(ref BodyW, n);
         Grow(ref BodyWPrev, n); Grow(ref BodyAlpha, n);
-        Grow(ref BodyM, n); Grow(ref BodyI, n); Grow(ref BodyPlast, n); Grow(ref BodyEulL, n);
+        Grow(ref BodyM, n); Grow(ref BodyI, n); Grow(ref BodyEulL, n);
+        Grow(ref BodyDirty, n);
         Grow(ref BodyRho, n); Grow(ref BodyCpx, n); Grow(ref BodyChi, n);
         Grow(ref BodyVCrit, n); Grow(ref BodyDuct, n); Grow(ref BodyCellSize, n);
+        Grow(ref BodyCrush, n); Grow(ref BodyCrushCap, n);
         Grow(ref BodyCpxAcc, n); Grow(ref BodyCpyAcc, n); Grow(ref BodyClAcc, n);
         Grow(ref BodyCellOff, n); Grow(ref BodyCellLen, n);
         Grow(ref BodyBondOff, n); Grow(ref BodyBondLen, n);
@@ -235,7 +229,6 @@ public sealed class SimState
     public void Clear()
     {
         CellCount = 0; BondCount = 0; BodyCount = 0; PolyCount = 0;
-        GrpCount = 0; GrpMemberCount = 0;
         BodyCellsCount = 0; BodyBondsCount = 0; AdjCount = 0;
         Tick = 0; Substep = 0;
     }
@@ -249,8 +242,13 @@ public sealed class SimState
     /// in index order. That scan order is what fixes the order of every later Gauss-Seidel sweep
     /// (the rebake in particular), so it is part of the determinism contract.
     /// </summary>
+    public long ReindexCalls;
+    public long ReindexBondScans;
+
     public void Reindex()
     {
+        ReindexCalls++;
+        ReindexBondScans += 2L * BondCount;
         for (int b = 0; b < BodyCount; b++) BodyBondLen[b] = 0;
         for (int c = 0; c < CellCount; c++) AdjLen[c] = 0;
 

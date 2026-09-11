@@ -87,8 +87,6 @@ public class TessellationParityTests
         Assert.Equal(59, s.CellCount);   // reference: body0 cells=59
         Assert.Equal(146, s.BondCount);  // reference: body0 bonds=146
         Assert.Equal(340, s.PolyCount);  // reference: body0 polygon vertices=340
-        Assert.Equal(129, s.GrpCount);   // reference: body0 shared-vertex groups=129
-                                         // (the reference's headline "245" is both bodies)
     }
 
     [Fact]
@@ -158,18 +156,9 @@ public class TessellationParityTests
     {
         var s = BuildReferenceBody();
 
-        // A Voronoi vertex is shared by about three cells; boundary vertices by one or two. What
-        // matters is that no group is empty and every polygon vertex belongs to exactly one.
-        int members = 0;
-        for (int g = 0; g < s.GrpCount; g++)
-        {
-            Assert.True(s.GrpLen[g] >= 1, $"group {g} is empty");
-            members += s.GrpLen[g];
-        }
-        Assert.Equal(s.PolyCount, members);
-
-        for (int v = 0; v < s.PolyCount; v++)
-            Assert.InRange(s.PolyGroup[v], 0, s.GrpCount - 1);
+        // The shared-vertex groups are gone: with cells sitting at their rest offsets, two cells
+        // sharing a Voronoi corner place it at the same point by construction rather than by
+        // averaging, so there is nothing left to group or to assert about.
     }
 
     [Fact]

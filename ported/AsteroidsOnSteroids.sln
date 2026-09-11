@@ -11,6 +11,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{5CDB6D58
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MathFingerprint", "tools\MathFingerprint\MathFingerprint.csproj", "{F7688845-1BE1-4C11-8FEA-BB2A85A32672}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FractureBench", "tools\FractureBench\FractureBench.csproj", "{316A34BF-F1A4-45F2-BDB3-C2A14B95D125}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AsteroidsGame", "AsteroidsGame\AsteroidsGame.csproj", "{F27DAC65-5384-4920-8EA6-5CBAB790F38C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -32,8 +36,17 @@ Global
 		{F7688845-1BE1-4C11-8FEA-BB2A85A32672}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F7688845-1BE1-4C11-8FEA-BB2A85A32672}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F7688845-1BE1-4C11-8FEA-BB2A85A32672}.Release|Any CPU.Build.0 = Release|Any CPU
+		{316A34BF-F1A4-45F2-BDB3-C2A14B95D125}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{316A34BF-F1A4-45F2-BDB3-C2A14B95D125}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{316A34BF-F1A4-45F2-BDB3-C2A14B95D125}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{316A34BF-F1A4-45F2-BDB3-C2A14B95D125}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F27DAC65-5384-4920-8EA6-5CBAB790F38C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F27DAC65-5384-4920-8EA6-5CBAB790F38C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F27DAC65-5384-4920-8EA6-5CBAB790F38C}.Release|Any CPU.ActiveCfg = Debug|Any CPU
+		{F27DAC65-5384-4920-8EA6-5CBAB790F38C}.Release|Any CPU.Build.0 = Debug|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{F7688845-1BE1-4C11-8FEA-BB2A85A32672} = {5CDB6D58-C0A7-4778-89C1-9D005987EF3D}
+		{316A34BF-F1A4-45F2-BDB3-C2A14B95D125} = {5CDB6D58-C0A7-4778-89C1-9D005987EF3D}
 	EndGlobalSection
 EndGlobal

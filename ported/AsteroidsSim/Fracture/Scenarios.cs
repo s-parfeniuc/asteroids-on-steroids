@@ -96,6 +96,99 @@ public static class Scenarios
         return Finish(s, tuning);
     }
 
+    /// <summary>
+    /// A field of asteroids on a grid, drifting so that a realistic fraction of them are in contact
+    /// at any moment. This is the scaling scenario: it is not a reference case for behaviour, it
+    /// exists to put a chosen number of live cells in front of the solver.
+    /// </summary>
+    /// <param name="cols">Bodies across.</param>
+    /// <param name="rows">Bodies down.</param>
+    /// <param name="radius">Body radius; with the grain this sets cells per body.</param>
+    /// <param name="spacing">Centre-to-centre spacing. Below ~2.2x the radius they start packed.</param>
+    /// <param name="speed">Drift speed scale.</param>
+    public static Result Field(in SimTuning tuning, in Material material,
+        int cols, int rows, float radius = 60f, float spacing = 150f, float speed = 60f,
+        float grain = 900f, int seed = ProtoRng.DefaultSeed)
+    {
+        var s = new SimState();
+        var rng = new ProtoRng(seed);
+
+        float x0 = 400f, y0 = 400f;
+        for (int r = 0; r < rows; r++)
+        {
+            for (int c = 0; c < cols; c++)
+            {
+                float cx = x0 + c * spacing;
+                float cy = y0 + r * spacing;
+                var outline = BodyBuilder.MakeBlob(ref rng, cx, cy, radius, radius * 0.92, 0.14, 16);
+
+                // Drift toward the field centre so contacts actually happen, plus a little spin.
+                float tx = x0 + (cols - 1) * spacing * 0.5f;
+                float ty = y0 + (rows - 1) * spacing * 0.5f;
+                float dx = tx - cx, dy = ty - cy;
+                float L = Math.SimMath.Hypot(dx, dy);
+                if (L < 1e-3f) L = 1f;
+                float jitter = (float)rng.Range(0.6, 1.4);
+                float spin = (float)rng.Range(-0.8, 0.8);
+
+                BodyBuilder.AddBody(s, ref rng, tuning, outline,
+                    dx / L * speed * jitter, dy / L * speed * jitter, spin, material, grain);
+            }
+        }
+        return Finish(s, tuning);
+    }
+
+    /// <summary>
+    /// Injects a small fast body into a live scene, aimed from one world point at another.
+    /// </summary>
+    /// <remarks>
+    /// <para>For the viewer: it is the difference between watching the model and poking it. The body
+    /// is appended to the existing <see cref="SimState"/> and the index tables rebuilt; the solver
+    /// re-derives everything else from state each tick, so nothing further is needed.</para>
+    ///
+    /// <para>The conservation baselines are <b>adjusted, not reset</b>. Recomputing them would zero
+    /// the accumulated drift and hide exactly what the readout exists to show, so the momentum and
+    /// energy the new body brings are added to the originals and the running drift stays meaningful
+    /// across a whole session of firing.</para>
+    ///
+    /// <para>Not part of the reference scenario set and not on the fingerprint path: it draws from
+    /// its own generator stream, seeded by the caller so a session can still be replayed.</para>
+    /// </remarks>
+    public static Result FireAt(in Result r, in SimTuning tuning, in Material material,
+        float fromX, float fromY, float toX, float toY, float speed = 900f,
+        float radius = 16f, float grain = 900f, int seed = 1)
+    {
+        SimState s = r.State;
+        Solver solver = r.Solver;
+
+        solver.TotalMomentum(out float pxBefore, out float pyBefore);
+        float keBefore = solver.BodyKineticEnergy();
+
+        var rng = new ProtoRng(seed);
+        var shot = BodyBuilder.MakeBlob(ref rng, fromX, fromY, radius, radius, 0.18, 10);
+
+        float dx = toX - fromX, dy = toY - fromY;
+        float L = Math.SimMath.Hypot(dx, dy);
+        if (L < 1e-3f) { dx = 1f; dy = 0f; L = 1f; }
+
+        BodyBuilder.AddBody(s, ref rng, tuning, shot,
+            dx / L * speed, dy / L * speed, 0f, material, grain);
+        s.Reindex();
+
+        solver.TotalMomentum(out float pxAfter, out float pyAfter);
+        float keAfter = solver.BodyKineticEnergy();
+
+        float mass = 0f;
+        for (int b = 0; b < s.BodyCount; b++) mass += s.BodyM[b];
+
+        return new Result(s, solver,
+            r.P0x + (pxAfter - pxBefore),
+            r.P0y + (pyAfter - pyBefore),
+            r.Ke0 + (keAfter - keBefore),
+            mass,
+            Math.SimMath.Max(r.V0, speed));
+    }
+
     private static Result Finish(SimState s, in SimTuning tuning)
     {
         var solver = new Solver(s, tuning);

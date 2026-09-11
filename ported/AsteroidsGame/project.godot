@@ -6,7 +6,10 @@ config_version=5
 [application]
 
 config/name="Asteroids on Steroids"
-run/main_scene="res://Main.tscn"
+; The development viewer for the ported fracture model. Main.tscn (SimRoot) is the
+; Phase-1 game host and is left alone; this is a tool for validating the solver by
+; eye against prototypes/stress-fracture-v9.html.
+run/main_scene="res://Viewer/Viewer.tscn"
 config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 
 [dotnet]
@@ -26,6 +29,12 @@ common/physics_ticks_per_second=60
 ; without the addon installed.
 2d/default_gravity=0.0
 2d/default_gravity_vector=Vector2(0, 0)
+
+[display]
+
+; Roomy enough for the viewer's control panel beside the world.
+window/size/viewport_width=1600
+window/size/viewport_height=900
 
 [rendering]
 

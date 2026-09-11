@@ -48,16 +48,18 @@ public class PrecisionSpikeTests
 
         _out.WriteLine($"spin: bodies={r.State.BodyCount} broken={r.Solver.Broken} " +
                        $"mom={100 * r.MomentumDrift():F4}% ke={100 * r.EnergyFraction():F1}% " +
-                       $"peak={100 * peakKe:F1}% gap={r.Solver.MaxSharedVertexGap():F4}");
+                       $"peak={100 * peakKe:F1}% vtx={r.Solver.MaxSkinRadiusRatio():F4}");
 
         Assert.Equal(1, r.State.BodyCount);
         Assert.Equal(0, r.Solver.Broken);
         Assert.True(peakKe <= 1.02f, $"spin created energy: peak {peakKe:P1}");
 
+        // Cells no longer displace, so what a spinner must keep quiet is the deviation VELOCITY
+        // field: a rigid rotation should leave it identically zero.
         float u = 0f;
         for (int c = 0; c < r.State.CellCount; c++)
-            u = System.Math.Max(u, System.Math.Abs(r.State.CellUx[c]) + System.Math.Abs(r.State.CellUy[c]));
-        Assert.True(u < 0.5f, $"a pure spinner deformed by {u:F3} px");
+            u = System.Math.Max(u, System.Math.Abs(r.State.CellDvx[c]) + System.Math.Abs(r.State.CellDvy[c]));
+        Assert.True(u < 0.5f, $"a pure spinner stirred the field by {u:F3} px/s");
     }
 
     [Fact]
@@ -71,7 +73,7 @@ public class PrecisionSpikeTests
         _out.WriteLine($"collide: cells={cells0} bonds={bonds0} " +
                        $"bodies={r.State.BodyCount} broken={r.Solver.Broken} dust={r.Solver.Dust} " +
                        $"mom={100 * drift:F4}% ke={100 * r.EnergyFraction():F1}% peak={100 * peakKe:F1}% " +
-                       $"ov={r.Solver.MaxOverlap:F2} gap={r.Solver.MaxSharedVertexGap():F4}");
+                       $"ov={r.Solver.MaxOverlap:F2} vtx={r.Solver.MaxSkinRadiusRatio():F4}");
 
         Assert.True(drift < 0.02f, $"momentum drift {drift:P3}");
         Assert.True(peakKe <= 1.05f, $"energy created: peak {peakKe:P1}");
@@ -88,7 +90,7 @@ public class PrecisionSpikeTests
         _out.WriteLine($"projectile: bodies={r.State.BodyCount} broken={r.Solver.Broken} " +
                        $"dust={r.Solver.Dust} mom={100 * drift:F4}% " +
                        $"ke={100 * r.EnergyFraction():F1}% peak={100 * peakKe:F1}% " +
-                       $"ov={r.Solver.MaxOverlap:F2} gap={r.Solver.MaxSharedVertexGap():F4}");
+                       $"ov={r.Solver.MaxOverlap:F2} vtx={r.Solver.MaxSkinRadiusRatio():F4}");
 
         Assert.True(drift < 0.02f, $"momentum drift {drift:P3}");
         Assert.True(peakKe <= 1.05f, $"energy created: peak {peakKe:P1}");
@@ -107,10 +109,11 @@ public class PrecisionSpikeTests
         {
             r.Solver.Step();
             if (i % 10 == 0)
-                worst = System.Math.Max(worst, r.Solver.MaxSharedVertexGap());
+                worst = System.Math.Max(worst, r.Solver.MaxSkinRadiusRatio());
         }
         _out.WriteLine($"max shared-vertex gap over 200 ticks: {worst:E3} px");
-        Assert.True(worst < 1e-3f, $"a shared side opened by {worst:E3} px");
+        Assert.True(worst < 1.05f,
+            $"a collider vertex sat {worst:F2}x its cell radius from the cell");
     }
 
     [Fact]
@@ -126,7 +129,7 @@ public class PrecisionSpikeTests
         float bend = 0f;
         for (int c = 0; c < r.State.CellCount; c++)
             if (!r.State.CellDead[c])
-                bend = System.Math.Max(bend, System.Math.Abs(r.State.CellPhi[c]));
+                bend = System.Math.Max(bend, System.Math.Abs(r.State.CellDw[c]));
 
         _out.WriteLine($"steel: bodies={r.State.BodyCount} broken={r.Solver.Broken} " +
                        $"rebakes={r.Solver.Rebakes} plastic={r.Solver.PlasticWork:E2} " +
@@ -144,7 +147,7 @@ public class PrecisionSpikeTests
         {
             if (s.CellDead[c]) continue;
             Assert.True(float.IsFinite(s.CellDvx[c]) && float.IsFinite(s.CellDvy[c])
-                        && float.IsFinite(s.CellUx[c]) && float.IsFinite(s.CellUy[c]),
+                        && float.IsFinite(s.CellDvx[c]) && float.IsFinite(s.CellDvy[c]),
                         $"cell {c} is not finite");
         }
         for (int b = 0; b < s.BodyCount; b++)

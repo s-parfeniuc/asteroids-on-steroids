@@ -21,16 +21,51 @@ public sealed partial class Solver
         MaxOverlap = 0f;
         _s.Tick++;
 
+        // OPEN A FRESH CACHE EPOCH BEFORE ANYTHING READS GEOMETRY.
+        // The skinned polygons and the cell-local vertex transforms are cached per substep, and the
+        // trig cache per rotation epoch. Both were stamped during the previous tick's last substep —
+        // and AFTER that, the end-of-tick work ran: splits re-centre a body's cells, a plastic
+        // rebake moves rest offsets and rotations, and the pose integrates. The manifold build below
+        // then ran at the same substep number and read all of it back out of the cache, so the first
+        // contacts of every tick following a topology change were built from where the geometry used
+        // to be. It was found by a bound that could not be violated being violated: a cell whose
+        // rest offset was (0,0) and whose polygon spans 18 px produced a vertex 214 px away, still
+        // carrying the offset it had had inside the body it was cut out of.
+        _s.Substep++;
+        BumpRotEpoch();
+
         BuildPairs();
+        Mark(SolverPhase.BuildPairs);
+        BuildManifold();                           // once per tick, with a speculative margin
+        Mark(SolverPhase.BuildContacts);
 
         for (int s = 0; s < sub; s++)
         {
             _s.Substep++;
-            BuildContacts();
+            BumpRotEpoch();
+            // Refresh while the manifold still describes the scene; re-derive it when it does not.
+            // In a settled pile this rebuilds once a tick, which is the whole saving; under a fast
+            // impactor it rebuilds every substep, which is what correctness there costs.
+            if (ManifoldDrift() > _mfDriftLimit)
+            {
+                BuildManifold();
+                C.ManifoldRebuilds++;
+                Mark(SolverPhase.BuildContacts);
+            }
+            else
+            {
+                RefreshManifold();
+                Mark(SolverPhase.RefreshContacts);
+            }
             ApplyInertialLoads(h);                 // before the solve: these are loads
+            Mark(SolverPhase.Inertial);
             BondForces(h);
+            Mark(SolverPhase.BondForces);
             for (int i = 0; i < _contactCount; i++) SolveContact(ref _contacts[i], h);
+            AccumulateCrushDose(h);            // per CELL, after every contact on it has been seen
+            Mark(SolverPhase.Contacts);
             BondIntegrate(h);
+            Mark(SolverPhase.BondIntegrate);
             DecomposeMotion();                     // before damping, so damping can't eat momentum
 
             // Undo the promotion of the Euler load's fictitious torque. The bond stretch it
@@ -42,6 +77,7 @@ public sealed partial class Solver
                 _s.BodyW[b] -= _s.BodyEulL[b] / _s.BodyI[b];
                 _s.BodyEulL[b] = 0f;
             }
+            Mark(SolverPhase.Decompose);
 
             float rf = SimMath.Max(0f, 1f - _tune.Relax * h);
             for (int b = 0; b < _s.BodyCount; b++)
@@ -49,66 +85,8 @@ public sealed partial class Solver
                 _s.BodyCpxAcc[b] = 0f; _s.BodyCpyAcc[b] = 0f; _s.BodyClAcc[b] = 0f;
             }
 
-            for (int c = 0; c < _s.CellCount; c++)
-            {
-                if (_s.CellDead[c]) continue;
-                int b = _s.CellBody[c];
-
-                // Realize the deformation. DecomposeMotion has just left the field zero-mean, so u
-                // carries no rigid part and the collider stays centred on the pose.
-                _s.CellUx[c] += _s.CellDvx[c] * h;
-                _s.CellUy[c] += _s.CellDvy[c] * h;
-                _s.CellUth[c] += _s.CellDw[c] * h;
-
-                // Legitimate elastic displacement is about 1% of a cell, so this allowance is not a
-                // physical limit but a guard on artifacts.
-                float ucap = (b >= 0 && b < _s.BodyCount ? _s.BodyCellSize[b] : 30f) * 0.15f;
-
-                // THE CAP IS A CONSTRAINT, NOT A CLAMP. Scaling u back while leaving dv alone lets
-                // the field keep accelerating into a wall forever — free kinetic energy. At the
-                // limit the outward velocity must go too, which is what a material that has run out
-                // of deformation does: it stops, and breaks instead. The removed velocity is HANDED
-                // TO THE BODY, not deleted, making the limit an internal inelastic collision:
-                // momentum exact, energy strictly down.
-                float um = SimMath.Hypot(_s.CellUx[c], _s.CellUy[c]);
-                if (um > ucap)
-                {
-                    float nx = _s.CellUx[c] / um, ny = _s.CellUy[c] / um;
-                    _s.CellUx[c] = nx * ucap;
-                    _s.CellUy[c] = ny * ucap;
-                    float vn = _s.CellDvx[c] * nx + _s.CellDvy[c] * ny;
-                    if (vn > 0f)
-                    {
-                        float dx = vn * nx, dy = vn * ny;
-                        _s.CellDvx[c] -= dx;
-                        _s.CellDvy[c] -= dy;
-                        if (b >= 0 && b < _s.BodyCount)
-                        {
-                            _s.BodyCpxAcc[b] += _s.CellM[c] * dx;
-                            _s.BodyCpyAcc[b] += _s.CellM[c] * dy;
-                            _s.BodyClAcc[b] += _s.CellM[c] * (_s.CellRx[c] * dy - _s.CellRy[c] * dx);
-                        }
-                    }
-                }
-
-                // With skinning, inter-cell rotation shears the polygons instead of opening a gap,
-                // so this needs nothing like the range it once had. Same constraint rule.
-                if (_s.CellUth[c] > 0.1f || _s.CellUth[c] < -0.1f)
-                {
-                    float lim = _s.CellUth[c] > 0f ? 0.1f : -0.1f;
-                    if (_s.CellDw[c] * lim > 0f)
-                    {
-                        if (b >= 0 && b < _s.BodyCount)
-                            _s.BodyClAcc[b] += _s.CellIc[c] * _s.CellDw[c];
-                        _s.CellDw[c] = 0f;
-                    }
-                    _s.CellUth[c] = lim;
-                }
-
-                _s.CellDvx[c] *= rf;
-                _s.CellDvy[c] *= rf;
-                _s.CellDw[c] *= rf;
-            }
+            if (!Par(16)) RealizeDeformation(h, rf, 0, _s.BodyCount, ref C);
+            else RunOverBodies((chunk, lo, hi) => RealizeDeformation(h, rf, lo, hi, ref _chunkC[chunk]));
 
             for (int b = 0; b < _s.BodyCount; b++)
             {
@@ -127,41 +105,30 @@ public sealed partial class Solver
                 _s.BodyAlpha[b] = (_s.BodyW[b] - _s.BodyWPrev[b]) / h;
                 _s.BodyWPrev[b] = _s.BodyW[b];
             }
+            BumpRotEpoch();                        // bodies just rotated
 
-            if (UpdateDamage(h))
-            {
-                RebuildBodies();
-                BuildPairs();                      // fresh fragments need contacts THIS tick
-                DecomposeMotion();                 // fragments claim their share of the field
-            }
+            Mark(SolverPhase.Realize);
+
+            UpdateDamage(h);                       // marks affected bodies dirty
+            Mark(SolverPhase.Damage);
         }
 
-        // ── INERTIA FOLLOWS THE DEFORMED SHAPE, AND L IS THE INVARIANT ────────
-        // Material that moves outward increases I, and angular momentum — not omega — is what is
-        // conserved. With I frozen at the rest configuration there is a free spin-up loop:
-        // centrifugal drives radial deviation, Coriolis turns it tangential, DecomposeMotion
-        // promotes that to body spin, which strengthens centrifugal. Paying for the shape change
-        // makes it self-limiting, exactly as it is in reality. Rigid rotation keeps u identically
-        // zero, so a pure spinner never enters this at all.
-        for (int b = 0; b < _s.BodyCount; b++)
-        {
-            float I = 0f;
-            int off = _s.BodyCellOff[b], len = _s.BodyCellLen[b];
-            for (int i = 0; i < len; i++)
-            {
-                int c = _s.BodyCells[off + i];
-                if (_s.CellDead[c]) continue;
-                float x = _s.CellRx[c] + _s.CellUx[c];
-                float y = _s.CellRy[c] + _s.CellUy[c];
-                I += _s.CellIc[c] + _s.CellM[c] * (x * x + y * y);
-            }
-            I = SimMath.Max(1f, I);
-            if (SimMath.Abs(I - _s.BodyI[b]) > 1e-9f * _s.BodyI[b])
-            {
-                _s.BodyW[b] *= _s.BodyI[b] / I;
-                _s.BodyI[b] = I;
-            }
-        }
+        // ── TOPOLOGY IS SETTLED ONCE PER TICK, NOT ONCE PER SUBSTEP ──────────
+        // Breaking a bond stops it transmitting force immediately, which is the part that matters
+        // physically; re-partitioning the body into fragments is bookkeeping and can wait for the
+        // end of the tick. Doing it per substep meant up to nine component passes, nine membership
+        // and adjacency rebuilds and nine broadphase rebuilds per tick, to reach a state that only
+        // needed computing once. Separation velocity is not lost in the meantime: it lives in the
+        // deviation field, and each fragment claims its share through DecomposeMotion below.
+        RebuildBodies();
+        DecomposeMotion();
+        Mark(SolverPhase.Split);
+
+        // NO INERTIA RECOMPUTE. It existed because realized displacement changed a body's shape
+        // within a tick, so I drifted and angular momentum rather than omega had to be conserved —
+        // and that coupling was itself a free spin-up loop until it was paid for. With deformation
+        // gone the shape is fixed between topology events, so I is set once by RecomputeBody and
+        // nothing here needs to touch it.
 
         // ── RUBBLE IS RIGID, SO ITS IMPENETRABILITY IS KINEMATIC ──────────────
         // A bond-less single cell has no bond network and therefore no deformation outlet at all:
@@ -176,6 +143,10 @@ public sealed partial class Solver
             if (_s.CellDead[a] || _s.CellDead[b]) continue;
             int ba = _s.CellBody[a], bb = _s.CellBody[b];
             if (ba < 0 || bb < 0 || ba >= _s.BodyCount || bb >= _s.BodyCount || ba == bb) continue;
+            // Rubble only, both sides. Generalising this to all bodies was tried and reverted: it
+            // is body-level positional response, which moves a body rather than letting the contact
+            // resolve through the material, and that defeats the interpenetrating contact,
+            // emergent participating mass and wave-speed load transfer the model exists for.
             if (_s.BodyCellLen[ba] > 1 || _s.BodyCellLen[bb] > 1) continue;
             float pen = ct.Depth - 0.05f;
             if (pen <= 0f) continue;
@@ -189,18 +160,28 @@ public sealed partial class Solver
             _s.BodyY[bb] += ct.Ny * push * wB / tot;
         }
 
-        for (int b = 0; b < _s.BodyCount; b++)
-            if (_s.BodyPlast[b] > RebakeThreshold) Rebake(b);   // bends become structure
+        Mark(SolverPhase.Settle);
 
-        ResetDeep();
-        for (int i = 0; i < _contactCount; i++)
+        // The deep-overlap census that used to run here is gone with the criterion that read it.
+        // It recorded each single-cell body's deepest contact partner, for a comminution trigger
+        // keyed on penetration DEPTH sustained over several ticks. Pressure-gated comminution needs
+        // neither: it selects on load rather than geometry, and it pays out to every contact by
+        // weight rather than to one deepest partner, so a full sweep over contacts and cells per
+        // tick disappears with it.
+        if (ConvertDust())
         {
-            ref Contact ct = ref _contacts[i];
-            if (_s.CellDead[ct.A] || _s.CellDead[ct.B]) continue;
-            RecordDeep(ct.A, ct.B, ct.Depth);
-            RecordDeep(ct.B, ct.A, ct.Depth);
+            RebuildBodies();                         // gated on mechanical decoupling
+            DecomposeMotion();
         }
-        if (ConvertDust()) RebuildBodies();          // per tick, gated on mechanical decoupling
+        Mark(SolverPhase.Dust);
+
+        // Close the cache epoch as well as opening one. Everything above this line — the split, the
+        // rebake, the dust conversion, the final pose — moved geometry after the last substep
+        // stamped the skin and trig caches, so a reader that asks for a collider polygon between
+        // now and the next tick would be handed the shape from before it all. That reader is not
+        // hypothetical: it is the renderer, and the interpolating draw call that follows Step.
+        _s.Substep++;
+        BumpRotEpoch();
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -267,35 +248,79 @@ public sealed partial class Solver
     /// Largest distance between two copies of the same shared vertex inside one body. A bond is a
     /// shared side, so this must stay at zero: it is the direct assertion that skinning holds.
     /// </summary>
-    public float MaxSharedVertexGap()
+
+    /// <summary>
+    /// Realizes the deformation field into <c>u</c>, applies the cap and the damping, for a
+    /// contiguous range of bodies.
+    /// </summary>
+    /// <remarks>
+    /// Iterating per body rather than over the global cell array leaves every accumulation into a
+    /// cell, and into that cell's body reaction accumulators, in the same order: <c>BodyCells</c>
+    /// holds a body's cells in ascending global index, and a cell only ever contributes to its own
+    /// body. Same argument as <see cref="BondForces"/>, and the same reason it is dispatchable.
+    /// </remarks>
+    private void RealizeDeformation(float h, float rf, int bodyLo, int bodyHi, ref SolverCounters ctr)
     {
+        for (int b = bodyLo; b < bodyHi; b++)
+        {
+            int cellOff = _s.BodyCellOff[b], cellLen = _s.BodyCellLen[b];
+            for (int ci = 0; ci < cellLen; ci++)
+            {
+                int c = _s.BodyCells[cellOff + ci];
+                if (_s.CellDead[c]) continue;
+
+                ctr.RealizeCells++;
+                _s.CellDvx[c] *= rf;
+                _s.CellDvy[c] *= rf;
+                _s.CellDw[c] *= rf;
+            }
+        }
+    }
+    /// <summary>
+    /// The furthest any collider vertex sits from its own cell's centre, in units of that cell's
+    /// circumscribed radius.
+    /// </summary>
+    /// <remarks>
+    /// With deformation removed this should be at most 1 by construction — the polygon is the rest
+    /// polygon and nothing displaces it. It is kept because it is cheap and because it is the check
+    /// that caught a stale per-substep cache feeding the first contacts of every tick geometry from
+    /// before the previous tick's splits: the polygons were internally consistent and every
+    /// conservation invariant stayed green, and only "this vertex is 200 px from the cell it belongs
+    /// to" gave it away. A transform reading the wrong body or a stale pose would show up the same
+    /// way.
+    ///
+    /// <para>Its companion, the shared-vertex gap, is gone: two cells sharing a Voronoi corner now
+    /// compute it from the same rest data, so agreement is an identity rather than a measurement.</para>
+    /// </remarks>
+    public float MaxSkinRadiusRatio()
+    {
+        // Refresh the cached centres first. They are rebuilt inside the substep loop, and the body
+        // pose integrates once more after the last substep, so reading CellPx straight after Step
+        // compares a current-pose vertex against a centre one substep behind — which reads as a
+        // vertex 1.7x its cell radius out and is an artefact of the measurement, not the geometry.
+        UpdateCenters();
+
         float worst = 0f;
         var bufX = new float[64];
         var bufY = new float[64];
-        for (int g = 0; g < _s.GrpCount; g++)
+        for (int c = 0; c < _s.CellCount; c++)
         {
-            int off = _s.GrpOff[g], len = _s.GrpLen[g];
-            for (int i = 0; i < len; i++)
-            {
-                int ci = _s.GrpCell[off + i];
-                if (_s.CellDead[ci]) continue;
-                if (bufX.Length < _s.PolyLen[ci]) { bufX = new float[_s.PolyLen[ci]]; bufY = new float[_s.PolyLen[ci]]; }
-                CellPoly(ci, bufX, bufY);
-                float x0 = bufX[_s.GrpVert[off + i]], y0 = bufY[_s.GrpVert[off + i]];
+            if (_s.CellDead[c] || _s.CellRad[c] <= 0f) continue;
+            int len = _s.PolyLen[c];
+            if (bufX.Length < len) { bufX = new float[len]; bufY = new float[len]; }
+            int n = CellLocalPolygon(c, bufX, bufY);
 
-                for (int j = i + 1; j < len; j++)
-                {
-                    int cj = _s.GrpCell[off + j];
-                    if (_s.CellDead[cj] || _s.CellBody[cj] != _s.CellBody[ci]) continue;
-                    if (bufX.Length < _s.PolyLen[cj]) { bufX = new float[_s.PolyLen[cj]]; bufY = new float[_s.PolyLen[cj]]; }
-                    CellPoly(cj, bufX, bufY);
-                    float dx = bufX[_s.GrpVert[off + j]] - x0;
-                    float dy = bufY[_s.GrpVert[off + j]] - y0;
-                    float d = SimMath.Hypot(dx, dy);
-                    if (d > worst) worst = d;
-                }
+            int b = _s.CellBody[c];
+            BodyTrig(b, out float si, out float co);
+            for (int v = 0; v < n; v++)
+            {
+                float wx = _s.BodyX[b] + bufX[v] * co - bufY[v] * si;
+                float wy = _s.BodyY[b] + bufX[v] * si + bufY[v] * co;
+                float r = SimMath.Hypot(wx - _s.CellPx[c], wy - _s.CellPy[c]) / _s.CellRad[c];
+                if (r > worst) worst = r;
             }
         }
         return worst;
     }
+
 }

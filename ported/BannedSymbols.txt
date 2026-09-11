@@ -49,9 +49,16 @@ P:System.Environment.TickCount;No wall clock in the simulation.
 P:System.Environment.TickCount64;No wall clock in the simulation.
 
 ; ── Threading: reorders work, and the deterministic path is single-threaded ─
+; ONE EXEMPTION: Fracture/SimJobs.cs disables RS0030 for the whole file. It is the
+; worker pool, and it earns the exemption by making the partition independent of
+; thread count — fixed chunk count, chunks writing only their own items, cross-chunk
+; accumulators merged in chunk order. Results are bit-identical on 1 worker and on
+; 12, and identical to running sequentially, which the simulation fingerprint checks
+; directly. Nothing else in the project may touch these types; the ban below is what
+; keeps that true. See PORT_PLAN.md §6 rule 8.
 T:System.Threading.Tasks.Parallel;No threading in the deterministic path.
 T:System.Threading.Tasks.Task;No threading in the deterministic path.
-T:System.Threading.Thread;No threading in the deterministic path.
+T:System.Threading.Thread;No threading outside Fracture/SimJobs.cs — see the note above.
 
 ; ── Unstable ordering ──────────────────────────────────────────────────────
 M:System.Array.Sort``1(``0[]);Array.Sort is introsort and UNSTABLE — use SimSort.

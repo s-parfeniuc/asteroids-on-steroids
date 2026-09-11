@@ -77,10 +77,24 @@ jobs:
           cat "fingerprint-${{ matrix.name }}-detail.txt"
           echo "combined: $(cat fingerprint-${{ matrix.name }}.txt)"
 
+      # The SimMath gate above covers the maths library. This one covers the solver built on it:
+      # solve order, topology renumbering, and the accumulation order inside every reduction. A
+      # build that agrees on the maths and disagrees here has a bug in the simulation.
+      - name: Simulation fingerprint
+        shell: bash
+        run: |
+          dotnet run --project tools/FractureBench -c Release --no-build -- --fingerprint \
+            > "simprint-${{ matrix.name }}.txt" 2> "simprint-${{ matrix.name }}-detail.txt"
+          echo "── ${{ matrix.name }} ──"
+          cat "simprint-${{ matrix.name }}-detail.txt"
+          echo "combined: $(cat simprint-${{ matrix.name }}.txt)"
+
       - uses: actions/upload-artifact@v4
         with:
           name: fingerprint-${{ matrix.name }}
-          path: ported/fingerprint-${{ matrix.name }}*.txt
+          path: |
+            ported/fingerprint-${{ matrix.name }}*.txt
+            ported/simprint-${{ matrix.name }}*.txt
 
   # ────────────────────────────────────────────────────────────────────────────
   # THE DETERMINISM GATE.
@@ -127,6 +141,31 @@ jobs:
           fi
           echo ""
           echo "✅ All platforms agree: $(tr -d '\r' < fingerprint-linux-x64.txt)"
+
+      - name: Compare simulation fingerprints across platforms
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Per-platform simulation fingerprints:"
+          for p in linux-x64 windows-x64 macos-arm64; do
+            printf '  %-14s %s\n' "$p" "$(tr -d '\r' < "simprint-$p.txt")"
+          done
+
+          uniq_count=$(cat simprint-linux-x64.txt simprint-windows-x64.txt \
+                           simprint-macos-arm64.txt | tr -d '\r' | sort -u | wc -l)
+          if [ "$uniq_count" -ne 1 ]; then
+            echo ""
+            echo "::error::DETERMINISM GATE FAILED — the simulation differs across platforms."
+            echo "SimMath agreed, so this is the solver: solve order, topology renumbering,"
+            echo "or the accumulation order inside a reduction. Per-scenario detail below —"
+            echo "the first scenario that differs narrows it down."
+            for f in simprint-*-detail.txt; do
+              echo "── $f"; cat "$f"
+            done
+            exit 1
+          fi
+          echo ""
+          echo "✅ All platforms agree: $(tr -d '\r' < simprint-linux-x64.txt)"
 
   # ────────────────────────────────────────────────────────────────────────────
   # INDEPENDENCE GATE — ported/PORT_PLAN.md §11.

@@ -150,7 +150,9 @@ public static class BodyBuilder
         s.BodyRho[bi] = mp.Rho; s.BodyCpx[bi] = mp.Cpx; s.BodyChi[bi] = mp.Chi;
         s.BodyVCrit[bi] = mp.VCrit; s.BodyDuct[bi] = mp.Duct;
         s.BodyCellSize[bi] = (float)step;
-        s.BodyPlast[bi] = 0f; s.BodyEulL[bi] = 0f;
+        s.BodyCrush[bi] = mp.CrushStress;
+        s.BodyCrushCap[bi] = mp.CrushCap;
+        s.BodyEulL[bi] = 0f;
         s.BodyCount = bi + 1;
 
         bool solo = rawPoly.Count == 1;   // built as one cell: a legitimate pebble, never dust
@@ -183,12 +185,11 @@ public static class BodyBuilder
             {
                 s.PolyX[s.PolyCount] = (float)(poly[v].X - cent.X);
                 s.PolyY[s.PolyCount] = (float)(poly[v].Y - cent.Y);
-                s.PolyGroup[s.PolyCount] = -1;
                 s.PolyCount++;
             }
 
             s.CellRx[ci] = (float)rx; s.CellRy[ci] = (float)ry;
-            s.CellUx[ci] = 0f; s.CellUy[ci] = 0f; s.CellUth[ci] = 0f; s.CellPhi[ci] = 0f;
+            s.CellCrush[ci] = 0f;
             s.CellDvx[ci] = 0f; s.CellDvy[ci] = 0f; s.CellDw[ci] = 0f;
             s.CellM[ci] = (float)m; s.CellIm[ci] = (float)(1.0 / m);
             s.CellIc[ci] = (float)Ic; s.CellIic[ci] = (float)(1.0 / Ic);
@@ -198,8 +199,7 @@ public static class BodyBuilder
             s.CellBody[ci] = bi;
             s.CellDead[ci] = false; s.CellCracked[ci] = false;
             s.CellSolo[ci] = solo; s.CellSurf[ci] = false;
-            s.CellTouch[ci] = int.MinValue; s.CellBorn[ci] = int.MinValue; s.CellDeepN[ci] = 0;
-            s.CellRotStamp[ci] = -1;
+            s.CellTouch[ci] = int.MinValue; s.CellBorn[ci] = int.MinValue;
         }
         s.CellCount = cellStart + rawPoly.Count;
         s.BodyI[bi] = (float)bodyI;
@@ -268,7 +268,6 @@ public static class BodyBuilder
                 s.BondRby[bk] = (float)(my - s.CellRy[cb]);
                 s.BondNx[bk] = (float)nx; s.BondNy[bk] = (float)ny;
                 s.BondSn[bk] = 0f; s.BondSt[bk] = 0f; s.BondSa[bk] = 0f;
-                s.BondPn[bk] = 0f; s.BondPt[bk] = 0f; s.BondPa[bk] = 0f; s.BondPTot[bk] = 0f;
                 s.BondDmg[bk] = 0f; s.BondLmax[bk] = 0f; s.BondRate[bk] = 0f;
                 s.BondBroken[bk] = false; s.BondMode[bk] = 0;
                 s.BondCount = bk + 1;
@@ -299,7 +298,6 @@ public static class BodyBuilder
                 s.CellSurf[cellStart + i] = acc[i] < s.CellPerim[cellStart + i] * 0.75;
         }
 
-        BuildVertexGroups(s, cellStart, s.CellCount);
         RebuildMembership(s);
         s.Reindex();
     }
@@ -376,87 +374,6 @@ public static class BodyBuilder
 
             s.BondStr[k] = SimMath.Clamp(str, 0.05f, 3f);
         }
-    }
-
-    /// <summary>
-    /// Groups coincident polygon vertices. A bond is a shared side, so the two cells' copies of it
-    /// must never move apart; the skinning in the renderer/narrow phase places every copy at the
-    /// average of where the sharing cells put it, which makes a gap unrepresentable.
-    /// </summary>
-    private static void BuildVertexGroups(SimState s, int cellStart, int cellEnd)
-    {
-        const double Q = 2.0;            // 0.5 px buckets
-        const double Tol = 0.35;
-        var hash = new Dictionary<long, List<int>>();
-        var posX = new List<double>();
-        var posY = new List<double>();
-        var members = new List<(int cell, int vert)>();
-        var groupStartLocal = s.GrpCount;
-
-        // group id -> member list, kept as parallel lists while building
-        var grpMembers = new List<List<(int cell, int vert)>>();
-
-        for (int ci = cellStart; ci < cellEnd; ci++)
-        {
-            int off = s.PolyOff[ci], len = s.PolyLen[ci];
-            for (int v = 0; v < len; v++)
-            {
-                double px = s.CellRx[ci] + s.PolyX[off + v];
-                double py = s.CellRy[ci] + s.PolyY[off + v];
-                long gx = (long)System.Math.Round(px * Q);
-                long gy = (long)System.Math.Round(py * Q);
-
-                int found = -1;
-                for (long dx = -1; dx <= 1 && found < 0; dx++)
-                    for (long dy = -1; dy <= 1 && found < 0; dy++)
-                    {
-                        long key = (gx + dx) * 100003L + (gy + dy);
-                        if (!hash.TryGetValue(key, out var bucket)) continue;
-                        for (int bidx = 0; bidx < bucket.Count; bidx++)
-                        {
-                            int cand = bucket[bidx];
-                            if (System.Math.Abs(posX[cand] - px) < Tol &&
-                                System.Math.Abs(posY[cand] - py) < Tol)
-                            { found = cand; break; }
-                        }
-                    }
-
-                if (found < 0)
-                {
-                    found = posX.Count;
-                    posX.Add(px); posY.Add(py);
-                    grpMembers.Add(new List<(int, int)>());
-                    long key = gx * 100003L + gy;
-                    if (!hash.TryGetValue(key, out var bucket)) { bucket = new List<int>(); hash[key] = bucket; }
-                    bucket.Add(found);
-                }
-
-                grpMembers[found].Add((ci, v));
-                s.PolyGroup[off + v] = groupStartLocal + found;
-            }
-        }
-
-        s.EnsureGroups(groupStartLocal + grpMembers.Count);
-        int memberOff = s.GrpMemberCount;
-        int totalMembers = 0;
-        for (int i = 0; i < grpMembers.Count; i++) totalMembers += grpMembers[i].Count;
-        s.EnsureGroupMembers(memberOff + totalMembers);
-
-        for (int i = 0; i < grpMembers.Count; i++)
-        {
-            int gid = groupStartLocal + i;
-            s.GrpOff[gid] = memberOff;
-            s.GrpLen[gid] = grpMembers[i].Count;
-            for (int j = 0; j < grpMembers[i].Count; j++)
-            {
-                s.GrpCell[memberOff] = grpMembers[i][j].cell;
-                s.GrpVert[memberOff] = grpMembers[i][j].vert;
-                memberOff++;
-            }
-        }
-        s.GrpCount = groupStartLocal + grpMembers.Count;
-        s.GrpMemberCount = memberOff;
-        _ = members;
     }
 
     /// <summary>
