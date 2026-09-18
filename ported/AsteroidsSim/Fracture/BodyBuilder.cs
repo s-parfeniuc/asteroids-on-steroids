@@ -88,6 +88,10 @@ public static class BodyBuilder
         // ── Voronoi cells ────────────────────────────────────────────────────
         var rawPoly = new List<List<Vec2d>>();
         var rawCent = new List<Vec2d>();
+        var rawSeed = new List<Vec2d>();
+        var sealed_ = new List<int>();   // cell pairs that touch but are too short to bond
+        var touching = new List<int>();  // every cell pair that meets, bonded or not
+        var touchBondOf = new List<int>();
         var rawArea = new List<double>();
 
         var work = new List<Vec2d>();
@@ -123,11 +127,14 @@ public static class BodyBuilder
 
             if (work.Count < 3) continue;
             var poly = new List<Vec2d>(work);
+            DropSliverSides(poly);
+            if (poly.Count < 3) continue;
             if (Geometry2D.Area(poly) < 0) poly.Reverse();
             double A = System.Math.Abs(Geometry2D.Area(poly));
             if (A < MinCellArea) continue;
             rawPoly.Add(poly);
             rawCent.Add(Geometry2D.Centroid(poly));
+            rawSeed.Add(sd);
             rawArea.Add(A);
         }
 
@@ -150,11 +157,10 @@ public static class BodyBuilder
         s.BodyRho[bi] = mp.Rho; s.BodyCpx[bi] = mp.Cpx; s.BodyChi[bi] = mp.Chi;
         s.BodyVCrit[bi] = mp.VCrit; s.BodyDuct[bi] = mp.Duct;
         s.BodyCellSize[bi] = (float)step;
-        s.BodyCrush[bi] = mp.CrushStress;
-        s.BodyCrushCap[bi] = mp.CrushCap;
         s.BodyEulL[bi] = 0f;
         s.BodyCount = bi + 1;
 
+        byte matId = s.RegisterMaterial(material);
         bool solo = rawPoly.Count == 1;   // built as one cell: a legitimate pebble, never dust
         int cellStart = s.CellCount;
         double bodyI = 0;
@@ -202,7 +208,9 @@ public static class BodyBuilder
             s.SetFlag(ci, CellFlag.Dead, false); s.SetFlag(ci, CellFlag.Cracked, false);
             s.SetFlag(ci, CellFlag.Solo, solo); s.SetFlag(ci, CellFlag.Surf, false);
             s.CellTouch[ci] = int.MinValue; s.CellBorn[ci] = int.MinValue;
-            s.CellMat[ci] = Material.IdOf(material);
+            s.CellMat[ci] = matId;
+            s.CellSeedX[ci] = (float)(rawSeed[i].X - cent.X);
+            s.CellSeedY[ci] = (float)(rawSeed[i].Y - cent.Y);
             s.CellArea0[ci] = s.CellArea[ci];
         }
         s.CellCount = cellStart + rawPoly.Count;
@@ -247,7 +255,15 @@ public static class BodyBuilder
                         }
                     }
                 }
-                if (sh <= MinSharedEdge || cnt == 0) continue;
+                // TOUCHING is recorded whether or not a bond follows. A bond is skipped when the
+                // shared side is shorter than MinSharedEdge, and inferring adjacency from bonds is
+                // what made those sides read as open surface in the middle of solid material.
+                if (sh > 0 && cnt > 0) { touching.Add(ca); touching.Add(cb); }
+                if (sh <= MinSharedEdge || cnt == 0)
+                {
+                    if (sh > 0 && cnt > 0) { sealed_.Add(ca); sealed_.Add(cb); }
+                    continue;
+                }
                 mx /= cnt; my /= cnt;
 
                 double nx = s.CellRx[cb] - s.CellRx[ca], ny = s.CellRy[cb] - s.CellRy[ca];
@@ -260,6 +276,7 @@ public static class BodyBuilder
 
                 int bk = s.BondCount;
                 s.EnsureBonds(bk + 1);
+                touchBondOf.Add(bk);
                 s.BondA[bk] = ca; s.BondB[bk] = cb;
                 s.BondLen[bk] = (float)sh;
                 s.BondStr[bk] = 1f;
@@ -304,12 +321,36 @@ public static class BodyBuilder
 
         RebuildMembership(s);
         s.Reindex();
+        LabelPolyEdges(s, cellStart, s.CellCount, sealed_);
+        BuildTouchRecords(s, touching);
     }
 
     /// <summary>
     /// True when the half-plane could remove at least one vertex. Used only to skip clips that
     /// provably do nothing — see the call site.
     /// </summary>
+    /// <summary>Removes vertices that sit within rounding of their predecessor.</summary>
+    /// <remarks>
+    /// Clipping a Voronoi cell by several half-planes can put two consecutive vertices a few
+    /// hundredths of a pixel apart where three planes nearly meet at a point. The sliver side
+    /// between them is collinear with a real shared side, so the touch-record builder links it to
+    /// that record — and it then lies outside the span the two cells actually share. That was every
+    /// audit fault present at tick 0: labels contradicting their record before the simulation had
+    /// taken a step. Everything downstream (area, centroid, inertia, bonds) derives from this list,
+    /// so cleaning it here keeps the build self-consistent. 0.05 px is the same noise floor
+    /// ClassifySide uses, and two orders below any side a bond is built on.
+    /// </remarks>
+    private static void DropSliverSides(List<Vec2d> poly)
+    {
+        const double eps = 0.05;
+        for (int v = poly.Count - 1; v >= 0 && poly.Count > 3; v--)
+        {
+            int u = v == 0 ? poly.Count - 1 : v - 1;
+            double dx = poly[v].X - poly[u].X, dy = poly[v].Y - poly[u].Y;
+            if (dx * dx + dy * dy < eps * eps) poly.RemoveAt(v);
+        }
+    }
+
     private static bool HalfPlaneCanCut(List<Vec2d> poly, double px, double py, double nx, double ny)
     {
         for (int i = 0; i < poly.Count; i++)
@@ -384,6 +425,241 @@ public static class BodyBuilder
     /// Rebuilds the per-body cell lists by scanning cells in index order, so membership order — and
     /// therefore every per-body loop — is a pure function of cell indices.
     /// </summary>
+    /// <summary>
+    /// Labels every cell edge with the bond across it, or −1 for a surface side.
+    /// </summary>
+    /// <remarks>
+    /// <para>Done ONCE, here, where the geometry is exactly as the tessellator left it: a shared
+    /// edge lies precisely on the bisector of the two cells' seeds, so the match is unambiguous.
+    /// Afterwards the labelling is MAINTAINED — bond breaks turn sides into surface, carving remaps
+    /// them through the clip — because re-deriving it from moved geometry is what produced interior
+    /// sides reported as free.</para>
+    /// <para>Runs after <c>Reindex</c>, so <c>AdjBond</c> is available and each cell need only test
+    /// its own neighbours rather than every cell in the body.</para>
+    /// </remarks>
+    public static void LabelPolyEdges(SimState s, int cellFrom, int cellTo,
+        List<int>? sealedPairs = null)
+    {
+        for (int c = cellFrom; c < cellTo; c++)
+        {
+            int off = s.PolyOff[c], len = s.PolyLen[c];
+            for (int v = 0; v < len; v++) { s.PolyBond[off + v] = -1; s.SideTouch[off + v] = -1; }
+            if (len < 3) continue;
+
+            double eps = System.Math.Max(1e-3, s.CellRad[c] * 2e-3);
+            int aoff = s.AdjOff[c], alen = s.AdjLen[c];
+            int extra = sealedPairs?.Count ?? 0;
+            for (int j = 0; j < alen + extra / 2; j++)
+            {
+                int k, o;
+                if (j < alen)
+                {
+                    k = s.AdjBond[aoff + j];
+                    o = s.BondA[k] == c ? s.BondB[k] : s.BondA[k];
+                }
+                else
+                {
+                    int e = (j - alen) * 2;
+                    int p0 = sealedPairs![e], p1 = sealedPairs[e + 1];
+                    if (p0 != c && p1 != c) continue;
+                    o = p0 == c ? p1 : p0;
+                    k = SimState.SideSealed;          // interior, but nothing to reference
+                }
+                if (o < 0 || o >= s.CellCount) continue;
+
+                // The shared edge lies on the perpendicular bisector of the two SEEDS — not of the
+                // two centroids, which is a different line entirely and matches almost nothing.
+                double sxa = s.CellSeedX[c], sya = s.CellSeedY[c];
+                double sxb = s.CellRx[o] + s.CellSeedX[o] - s.CellRx[c];
+                double syb = s.CellRy[o] + s.CellSeedY[o] - s.CellRy[c];
+                double ex = sxb - sxa, ey = syb - sya;
+                double el = System.Math.Sqrt(ex * ex + ey * ey);
+                if (el < 1e-9) continue;
+                ex /= el; ey /= el;
+                double mx = 0.5 * (sxa + sxb), my = 0.5 * (sya + syb);
+
+                for (int v = 0; v < len; v++)
+                {
+                    int w = v + 1 == len ? 0 : v + 1;
+                    double d0 = (s.PolyX[off + v] - mx) * ex + (s.PolyY[off + v] - my) * ey;
+                    double d1 = (s.PolyX[off + w] - mx) * ex + (s.PolyY[off + w] - my) * ey;
+                    if (System.Math.Abs(d0) <= eps && System.Math.Abs(d1) <= eps)
+                        s.PolyBond[off + v] = (short)k;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates one touch record per adjacent cell pair and links both cells' sides to it.
+    /// </summary>
+    /// <remarks>
+    /// Runs once, here, where the geometry is exactly as the tessellator left it — the two cells'
+    /// copies of a shared side coincide to float rounding, so projecting both onto the bisector and
+    /// intersecting gives the true shared extent. Afterwards the record is MAINTAINED: carving
+    /// narrows the interval, and both cells see that through the one record rather than through two
+    /// copies that have to be kept in step.
+    /// </remarks>
+    /// <summary>Whether body-frame point (px,py) is a vertex of cell c at which a free side starts or ends.</summary>
+    private static bool EndOnFreeSide(SimState s, int c, double px, double py)
+    {
+        int off = s.PolyOff[c], len = s.PolyLen[c];
+        double tol = 1e-3 * System.Math.Max(1f, s.CellRad[c]);
+        for (int v = 0; v < len; v++)
+        {
+            if (s.PolyBond[off + v] != SimState.SideReal) continue;
+            int w = v + 1 == len ? 0 : v + 1;
+            double x0 = s.CellRx[c] + s.PolyX[off + v], y0 = s.CellRy[c] + s.PolyY[off + v];
+            double x1 = s.CellRx[c] + s.PolyX[off + w], y1 = s.CellRy[c] + s.PolyY[off + w];
+            if (System.Math.Abs(x0 - px) <= tol && System.Math.Abs(y0 - py) <= tol) return true;
+            if (System.Math.Abs(x1 - px) <= tol && System.Math.Abs(y1 - py) <= tol) return true;
+        }
+        return false;
+    }
+
+    public static void BuildTouchRecords(SimState s, List<int> touching)
+    {
+        for (int i = 0; i + 1 < touching.Count; i += 2)
+        {
+            int a = touching[i], b = touching[i + 1];
+            if (!Bisector(s, a, b, out double ex, out double ey, out double mx, out double my))
+                continue;
+
+            if (!SideOnLine(s, a, ex, ey, mx, my, out double a0, out double a1)) continue;
+            if (!SideOnLine(s, b, ex, ey, mx, my, out double b0, out double b1)) continue;
+
+            double t0 = System.Math.Max(a0, b0), t1 = System.Math.Min(a1, b1);
+            if (t1 - t0 <= 1e-4) continue;
+
+            int r = s.TouchCount;
+            s.EnsureTouch(r + 1);
+            s.TouchA[r] = a; s.TouchB[r] = b;
+            s.TouchBond[r] = -1;
+            s.TouchT0[r] = (float)t0; s.TouchT1[r] = (float)t1;
+            s.TouchS0[r] = (float)t0; s.TouchS1[r] = (float)t1;
+            s.TouchCount = r + 1;
+
+            LinkSide(s, a, ex, ey, mx, my, (short)r);
+            LinkSide(s, b, ex, ey, mx, my, (short)r);
+            s.TouchOpen[r] = 0;
+        }
+
+        // Attach the bond that runs along each adjacency, where one was built.
+        for (int k = 0; k < s.BondCount; k++)
+        {
+            int a = s.BondA[k], b = s.BondB[k];
+            for (int r = 0; r < s.TouchCount; r++)
+                if ((s.TouchA[r] == a && s.TouchB[r] == b) || (s.TouchA[r] == b && s.TouchB[r] == a))
+                { s.TouchBond[r] = (short)k; break; }
+        }
+
+        // ── LABELS FOLLOW RECORDS ─────────────────────────────────────────────
+        // LabelPolyEdges and this pass match sides to neighbours independently, each with its own
+        // tolerance, and at a near-4-valent vertex — two copies of a vertex 0.04 px apart — the
+        // label pass missed a 3.85 px interface the record pass found. The side sat labelled REAL
+        // with a live record and a live bond, and the exposed-end tagging below then read that REAL
+        // side as outline and marked three interior records open: an internal surface at tick 7 of
+        // a grain-255 scene. Records are the adjacency truth; a side that carries one is not free.
+        for (int c = 0; c < s.CellCount; c++)
+        {
+            int off = s.PolyOff[c], len = s.PolyLen[c];
+            for (int v = 0; v < len; v++)
+            {
+                short r = s.SideTouch[off + v];
+                if (r < 0 || s.TouchA[r] < 0) continue;
+                short k = s.TouchBond[r];
+                s.PolyBond[off + v] = k >= 0 ? k : SimState.SideSealed;
+            }
+        }
+
+        // ── EXPOSED ENDS ──────────────────────────────────────────────────────
+        // An end of a record is exposed when it is an outline vertex: a vertex of either cell that a
+        // free side starts or ends at. Interior ends are where three records meet. Only now, with
+        // the labels consistent, can a free side be trusted to mean outline.
+        for (int r = 0; r < s.TouchCount; r++)
+        {
+            int a = s.TouchA[r], b = s.TouchB[r];
+            if (a < 0 || !Bisector(s, a, b, out double ex, out double ey, out double mx, out double my)) continue;
+            double t0 = s.TouchT0[r], t1 = s.TouchT1[r];
+            byte open = 0;
+            if (EndOnFreeSide(s, a, mx + t0 * ex, my + t0 * ey) || EndOnFreeSide(s, b, mx + t0 * ex, my + t0 * ey))
+                open |= SimState.TouchOpen0;
+            if (EndOnFreeSide(s, a, mx + t1 * ex, my + t1 * ey) || EndOnFreeSide(s, b, mx + t1 * ex, my + t1 * ey))
+                open |= SimState.TouchOpen1;
+            s.TouchOpen[r] = open;
+        }
+    }
+
+    /// <summary>The perpendicular bisector of two cells' seeds, in body coordinates.</summary>
+    private static bool Bisector(SimState s, int a, int b,
+        out double ex, out double ey, out double mx, out double my)
+    {
+        double sax = s.CellRx[a] + s.CellSeedX[a], say = s.CellRy[a] + s.CellSeedY[a];
+        double sbx = s.CellRx[b] + s.CellSeedX[b], sby = s.CellRy[b] + s.CellSeedY[b];
+        double dx = sbx - sax, dy = sby - say;
+        double d = System.Math.Sqrt(dx * dx + dy * dy);
+        mx = 0.5 * (sax + sbx); my = 0.5 * (say + sby);
+        if (d < 1e-9) { ex = 1; ey = 0; return false; }
+        ex = -dy / d; ey = dx / d;              // along the bisector
+        return true;
+    }
+
+    /// <summary>Extent, along the bisector, of whichever side of cell c lies on it.</summary>
+    private static bool SideOnLine(SimState s, int c, double ex, double ey, double mx, double my,
+        out double t0, out double t1)
+    {
+        // UNION of every side on that line, not the first one found. One shared boundary can be
+        // split across several collinear sides of a cell — a third cell meeting it partway adds a
+        // vertex — and taking only the first makes the recorded overlap shorter than the boundary
+        // really is. Measured: 250 of 537 interior sides then reported themselves partly exposed at
+        // build, before anything had moved, drawn as surface scattered through solid material.
+        t0 = 0; t1 = 0; bool any = false;
+        int off = s.PolyOff[c], len = s.PolyLen[c];
+        double nx = -ey, ny = ex;                                  // normal to the bisector
+        double tol = System.Math.Max(1e-2, s.CellRad[c] * 5e-3);
+        for (int v = 0; v < len; v++)
+        {
+            int w = v + 1 == len ? 0 : v + 1;
+            double px = s.CellRx[c] + s.PolyX[off + v] - mx, py = s.CellRy[c] + s.PolyY[off + v] - my;
+            double qx = s.CellRx[c] + s.PolyX[off + w] - mx, qy = s.CellRy[c] + s.PolyY[off + w] - my;
+            if (System.Math.Abs(px * nx + py * ny) > tol) continue;
+            if (System.Math.Abs(qx * nx + qy * ny) > tol) continue;
+            double u0 = px * ex + py * ey, u1 = qx * ex + qy * ey;
+            if (!any) { t0 = System.Math.Min(u0, u1); t1 = System.Math.Max(u0, u1); any = true; }
+            else
+            {
+                t0 = System.Math.Min(t0, System.Math.Min(u0, u1));
+                t1 = System.Math.Max(t1, System.Math.Max(u0, u1));
+            }
+        }
+        return any;
+    }
+
+    private static void LinkSide(SimState s, int c, double ex, double ey, double mx, double my, short r)
+    {
+        int off = s.PolyOff[c], len = s.PolyLen[c];
+        double nx = -ey, ny = ex;
+        double tol = System.Math.Max(1e-2, s.CellRad[c] * 5e-3);
+        double t0 = s.TouchT0[r], t1 = s.TouchT1[r];
+        for (int v = 0; v < len; v++)
+        {
+            int w = v + 1 == len ? 0 : v + 1;
+            double px = s.CellRx[c] + s.PolyX[off + v] - mx, py = s.CellRy[c] + s.PolyY[off + v] - my;
+            double qx = s.CellRx[c] + s.PolyX[off + w] - mx, qy = s.CellRy[c] + s.PolyY[off + w] - my;
+            if (System.Math.Abs(px * nx + py * ny) > tol) continue;
+            if (System.Math.Abs(qx * nx + qy * ny) > tol) continue;
+
+            // On the line is not enough: the side has to lie within the span the two cells share. A
+            // sliver collinear with a shared side but beyond its end faces a THIRD cell — it is that
+            // pair's business, and linking it here left a label contradicting its record at tick 0.
+            double u0 = px * ex + py * ey, u1 = qx * ex + qy * ey;
+            double lo = System.Math.Min(u0, u1), hi = System.Math.Max(u0, u1);
+            if (System.Math.Min(hi, t1) - System.Math.Max(lo, t0) <= 1e-3) continue;
+
+            s.SideTouch[off + v] = r;                              // EVERY such side, not just one
+        }
+    }
+
     public static void RebuildMembership(SimState s)
     {
         for (int b = 0; b < s.BodyCount; b++) s.BodyCellLen[b] = 0;

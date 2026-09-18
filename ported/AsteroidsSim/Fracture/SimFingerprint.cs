@@ -22,7 +22,7 @@ namespace AsteroidsSim.Fracture;
 /// </remarks>
 public static class SimFingerprint
 {
-    public static Fnv128 Compute(SimState s)
+    public static Fnv128 Compute(SimState s, bool withRecords = true)
     {
         var h = Fnv128.Create();
 
@@ -47,6 +47,7 @@ public static class SimFingerprint
             // One value covers Dead/Solo/Surf/Cracked and any bit added later, and being a single
             // field it cannot carry struct padding into the hash.
             h.Add((int)s.CellFlags[c]); h.Add(s.CellMat[c]); h.AddFloat(s.CellArea0[c]);
+            h.AddFloat(s.CellCarvePend[c]);
             h.Add(s.CellTouch[c]); h.Add(s.CellBorn[c]);
 
             // Geometry is LIVE now: carving clips these in place, so the polygon is part of the
@@ -57,9 +58,26 @@ public static class SimFingerprint
             for (int v = 0; v < s.PolyLen[c]; v++)
             {
                 h.AddFloat(s.PolyX[off + v]); h.AddFloat(s.PolyY[off + v]);
+                h.Add(s.PolyBond[off + v]);
             }
+            h.AddFloat(s.CellSeedX[c]); h.AddFloat(s.CellSeedY[c]);
             h.AddFloat(s.CellArea[c]); h.AddFloat(s.CellPerim[c]); h.AddFloat(s.CellRad[c]);
             h.AddFloat(s.CellM[c]); h.AddFloat(s.CellIc[c]);
+        }
+
+        // Touch records are state: ClassifySide reads them, so carving and the crack rule do, so
+        // the physics does. They were missing here — a desync in a span would not have moved the
+        // hash until it had moved a polygon.
+        if (withRecords)
+        {
+        h.Add(s.TouchCount);
+        for (int r = 0; r < s.TouchCount; r++)
+        {
+            h.Add(s.TouchA[r]); h.Add(s.TouchB[r]); h.Add(s.TouchBond[r]);
+            h.AddFloat(s.TouchT0[r]); h.AddFloat(s.TouchT1[r]);
+            h.AddFloat(s.TouchS0[r]); h.AddFloat(s.TouchS1[r]);
+            h.Add(s.TouchOpen[r]);
+        }
         }
 
         for (int k = 0; k < s.BondCount; k++)
@@ -76,6 +94,9 @@ public static class SimFingerprint
     }
 
     public static string Hex(SimState s) => Compute(s).ToHex();
+
+    /// <summary>The pre-v2 field set, for proving a change left the simulation itself untouched.</summary>
+    public static string HexWithoutRecords(SimState s) => Compute(s, withRecords: false).ToHex();
 
     /// <summary>The 32-bit form sent over the wire for periodic desync detection.</summary>
     public static uint Short(SimState s) => Compute(s).ToUInt32();

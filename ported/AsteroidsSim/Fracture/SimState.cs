@@ -64,7 +64,7 @@ public sealed class SimState
     public float[] CellRad = Array.Empty<float>();    // max vertex distance from the cell centre
 
     /// <summary>
-    /// Material identity, one byte indexing <see cref="Material.ById"/>.
+    /// Material identity, one byte indexing <see cref="MatTable"/>.
     /// </summary>
     /// <remarks>
     /// A static TAG, not a per-cell property set. Density is not live — carving holds it constant and
@@ -76,6 +76,32 @@ public sealed class SimState
 
     /// <summary>Area at build. Carving is measured against it — see the material's shed limit.</summary>
     public float[] CellArea0 = Array.Empty<float>();
+
+    /// <summary>Area a cell has been asked to shed but that was too small to be worth a clip yet.</summary>
+    /// <remarks>
+    /// The rate law yields a recession per <i>substep</i>, which is a couple of hundredths of a
+    /// pixel. Clipping each of those immediately is what made carving churn: a cut that shallow
+    /// cannot shave a corner, it replaces a whole side with a parallel one just behind it, and every
+    /// such replacement re-labels the polygon's edges. Holding the demand until it is worth a real
+    /// cut keeps the request continuous while the geometry changes in visible steps.
+    /// </remarks>
+    public float[] CellCarvePend = Array.Empty<float>();
+
+    /// <summary>
+    /// The Voronoi seed this cell was grown from, in the SAME cell-local frame as
+    /// <see cref="PolyX"/> — i.e. relative to the cell centroid.
+    /// </summary>
+    /// <remarks>
+    /// <para>A cell's shared edge with a neighbour lies on the perpendicular bisector of their two
+    /// SEEDS, which is not the bisector of their centroids: a Voronoi cell's centroid is not its
+    /// seed. Carving needs that plane exactly, to guarantee it can never eat into an edge a bonded
+    /// neighbour also owns, so the seed has to survive rather than be re-derived.</para>
+    /// <para>Stored cell-local so it rides along with the geometry: carving re-centres the polygon on
+    /// its new centroid and shifts the seed by the same amount, and a body re-centring moves
+    /// <c>CellR</c> without touching either.</para>
+    /// </remarks>
+    public float[] CellSeedX = Array.Empty<float>();
+    public float[] CellSeedY = Array.Empty<float>();
 
     // live
     public float[] CellRx = Array.Empty<float>();     // rest offset in the body frame
@@ -146,11 +172,148 @@ public sealed class SimState
     public int[] PolyLen = Array.Empty<int>();
     /// <summary>Slots reserved for this cell at <see cref="PolyOff"/>: its build length plus slack.</summary>
     public int[] PolyCap = Array.Empty<int>();
+
+    /// <summary>
+    /// Per EDGE, one of three things. Edge <c>i</c> runs from vertex <c>i</c> to <c>i+1</c>,
+    /// indexed like <see cref="PolyX"/>.
+    /// <list type="bullet">
+    /// <item><c>&gt;= 0</c> — the bond across it: an interior side.</item>
+    /// <item><see cref="SideReal"/> (−1) — <b>real surface</b>: the body's silhouette, or a face
+    /// erosion has cut. Open to the world.</item>
+    /// <item><see cref="SideCrack"/> (−2) — <b>crack surface</b>: opened by a bond breaking.</item>
+    /// </list>
+    /// The two kinds of open side are distinguished because a crack that curls round and meets
+    /// itself would ring-fence the cells inside it. A side whose BOTH ends touch only crack surface
+    /// is that closing move, and refusing it is what keeps cracks from detaching interior material.
+    /// </summary>
+    /// <remarks>
+    /// <para>Maintained, not re-derived. It was computed geometrically at first — test each edge
+    /// against each bonded neighbour's seed bisector — and that is wrong as soon as anything moves:
+    /// carving replaces one endpoint of a shared edge with a new vertex on the carve plane, the
+    /// "both endpoints lie on the bisector" test then fails, and the edge is reported FREE. Interior
+    /// sides were shed and gaps opened inside solid bodies.</para>
+    ///
+    /// <para>Surface is a property of a SIDE, not of a cell. A cell being "at a surface" says
+    /// nothing about WHICH of its sides is exposed, and that is the thing every consumer actually
+    /// needs: a crack may only advance along a side adjacent to one already open, and carving may
+    /// only cut a side facing open space.</para>
+    ///
+    /// <para>Written at build, where geometry is pristine; at bond break, where two shared sides
+    /// become surface at once; and remapped through the clip when carving changes the vertex list.
+    /// </para>
+    /// </remarks>
+    public short[] PolyBond = Array.Empty<short>();
+
+    /// <summary>Per polygon slot: the touch record for the side starting here, or −1 if none.</summary>
+    public short[] SideTouch = Array.Empty<short>();
+
+    // ── touch records: adjacency as a first-class thing ──────────────────────
+    //
+    // ONE record per pair of cells that meet, shared by both — not one per cell. This is the entity
+    // the model was missing. Bonds were standing in for it, and a bond is a MECHANICAL object that
+    // can break or be skipped for being too short, while adjacency is a TOPOLOGICAL fact. Every
+    // classification bug traced to that conflation: cells touching with no bond read as surface,
+    // broken bonds read as surface while the cells still touched, and the two cells kept private
+    // copies of a side they share with nothing forcing them to agree.
+    //
+    // The shared segment is stored as an INTERVAL along the seed bisector rather than as two points.
+    // Both cells' copies of a side lie on that line by construction, a half-plane clip of a convex
+    // polygon truncates a side from one end so the overlap is always contiguous, and the line itself
+    // is stable: seeds are held cell-local and shifted with the centroid, so their body-frame
+    // position survives carving, and a body re-centring moves both cells equally so t is unchanged.
+    // Two floats instead of four, and the shared length is single-valued — so the two cells
+    // disagreeing about it is not merely absent but unrepresentable.
+    public int[] TouchA = Array.Empty<int>();
+    public int[] TouchB = Array.Empty<int>();
+    /// <summary>The bond along this adjacency, or −1 when there is none.</summary>
+    public short[] TouchBond = Array.Empty<short>();
+    /// <summary>Shared extent along the bisector, signed from its midpoint.</summary>
+    public float[] TouchT0 = Array.Empty<float>();
+    public float[] TouchT1 = Array.Empty<float>();
+
+    /// <summary>The span as built — immutable. What a neighbour has receded from is <c>[T1, S1]</c>.</summary>
+    /// <remarks>
+    /// Carving v2 narrows <c>T0/T1</c> from an exposed end. The bare stretch a cell then presents
+    /// along this line — the part its neighbour no longer covers — is the difference between the
+    /// built span and the current one, so the built span has to be kept.
+    /// </remarks>
+    public float[] TouchS0 = Array.Empty<float>();
+    public float[] TouchS1 = Array.Empty<float>();
+
+    /// <summary>Which ends of the record lie on open surface: bit 0 for the T0 end, bit 1 for T1.</summary>
+    /// <remarks>
+    /// A surface vertex IS the exposed end of a record, and erosion moves it inward along the record.
+    /// Set at build for ends on the body outline; set on propagation when a record is spent and the
+    /// interior vertex it ended at becomes surface.
+    /// </remarks>
+    public byte[] TouchOpen = Array.Empty<byte>();
+    public const byte TouchOpen0 = 1, TouchOpen1 = 2;
+
+    public int TouchCount;
+
+    public void EnsureTouch(int n)
+    {
+        Grow(ref TouchA, n); Grow(ref TouchB, n); Grow(ref TouchBond, n);
+        Grow(ref TouchT0, n); Grow(ref TouchT1, n);
+        Grow(ref TouchS0, n); Grow(ref TouchS1, n); Grow(ref TouchOpen, n);
+    }
+
+    /// <summary>The other cell of a touch record.</summary>
+    public int TouchOther(int r, int c) => TouchA[r] == c ? TouchB[r] : TouchA[r];
+
+    /// <summary>Shared length this record currently describes.</summary>
+    public float TouchLen(int r) => Math.SimMath.Max(0f, TouchT1[r] - TouchT0[r]);
+
+    public const short SideReal = -1;
+    public const short SideCrack = -2;
+
+    /// <summary>
+    /// Touching a live cell of the same body, but carrying no bond — the shared edge was shorter
+    /// than <c>MinSharedEdge</c> so none was built.
+    /// </summary>
+    /// <remarks>
+    /// Not surface. There is material on the other side, so nothing may crack from it and nothing
+    /// may carve it. Without this state such an edge falls through as real surface, because the
+    /// labelling walks bonds and there is no bond to find — and then cracks start from specks in
+    /// the middle of a solid body.
+    /// </remarks>
+    public const short SideSealed = -3;
     public float[] PolyX = Array.Empty<float>();
     public float[] PolyY = Array.Empty<float>();
     public int PolyCount;
 
     public int CellCount;
+
+    // ── material table ───────────────────────────────────────────────────────
+    //
+    // Per SimState rather than static, for two reasons. Static mutable state inside the tick is a
+    // determinism hazard and cannot be snapshotted (PORT_PLAN §6 rule 5). And a fixed global table
+    // makes ad-hoc material VARIANTS impossible: a tuning tool that nudges one parameter would have
+    // its variant silently resolve back to the canonical entry, which is exactly what happened when
+    // ids were looked up by name — every row of a calibration sweep came out identical.
+    //
+    // Registration appends on first sight and returns the existing id for an exact match, so a
+    // variant is a distinct material and a repeat is free.
+    public Material[] MatTable = new Material[8];
+    public int MatCount;
+
+    /// <summary>The material of cell <paramref name="c"/>.</summary>
+    public ref readonly Material Mat(int c) => ref MatTable[CellMat[c]];
+
+    public byte RegisterMaterial(in Material m)
+    {
+        for (int i = 0; i < MatCount; i++)
+            if (MatTable[i].SameAs(m)) return (byte)i;
+        if (MatCount >= MatTable.Length)
+        {
+            if (MatCount >= 255) return 0;                 // pathological; keep the sim running
+            var bigger = new Material[MatTable.Length * 2];
+            Array.Copy(MatTable, bigger, MatCount);
+            MatTable = bigger;
+        }
+        MatTable[MatCount] = m;
+        return (byte)MatCount++;
+    }
 
     // ── shared-vertex groups ─────────────────────────────────────────────────
     // A Voronoi vertex is shared by ~3 cells. Every copy is drawn at the average of where its
@@ -213,8 +376,6 @@ public sealed class SimState
     public float[] BodyVCrit = Array.Empty<float>();
     public float[] BodyDuct = Array.Empty<float>();   // plastic strain capacity, fraction of a cell
     public float[] BodyCellSize = Array.Empty<float>(); // sqrt(grain): per body, so scales can mix
-    public float[] BodyCrush = Array.Empty<float>();   // contact stress at which this body comminutes
-    public float[] BodyCrushCap = Array.Empty<float>(); // stress-seconds above it before powder
 
     // transfer accumulators for the deformation cap (zeroed and consumed within a substep)
     public float[] BodyCpxAcc = Array.Empty<float>();
@@ -260,7 +421,8 @@ public sealed class SimState
     {
         Grow(ref CellM, n); Grow(ref CellIm, n); Grow(ref CellIc, n); Grow(ref CellIic, n);
         Grow(ref CellArea, n); Grow(ref CellPerim, n); Grow(ref CellRad, n);
-        Grow(ref CellMat, n); Grow(ref CellArea0, n);
+        Grow(ref CellMat, n); Grow(ref CellArea0, n); Grow(ref CellCarvePend, n);
+        Grow(ref CellSeedX, n); Grow(ref CellSeedY, n);
         Grow(ref CellRx, n); Grow(ref CellRy, n);
         Grow(ref CellCrush, n); Grow(ref CellDvx, n); Grow(ref CellDvy, n); Grow(ref CellDw, n);
         Grow(ref CellBody, n); Grow(ref CellFlags, n);
@@ -272,7 +434,7 @@ public sealed class SimState
 
     public void EnsurePoly(int n)
     {
-        Grow(ref PolyX, n); Grow(ref PolyY, n);
+        Grow(ref PolyX, n); Grow(ref PolyY, n); Grow(ref PolyBond, n); Grow(ref SideTouch, n);
     }
 
 
@@ -297,7 +459,6 @@ public sealed class SimState
         Grow(ref BodyDirty, n);
         Grow(ref BodyRho, n); Grow(ref BodyCpx, n); Grow(ref BodyChi, n);
         Grow(ref BodyVCrit, n); Grow(ref BodyDuct, n); Grow(ref BodyCellSize, n);
-        Grow(ref BodyCrush, n); Grow(ref BodyCrushCap, n);
         Grow(ref BodyCpxAcc, n); Grow(ref BodyCpyAcc, n); Grow(ref BodyClAcc, n);
         Grow(ref BodyCellOff, n); Grow(ref BodyCellLen, n);
         Grow(ref BodyBondOff, n); Grow(ref BodyBondLen, n);
@@ -308,7 +469,7 @@ public sealed class SimState
 
     public void Clear()
     {
-        CellCount = 0; BondCount = 0; BodyCount = 0; PolyCount = 0;
+        CellCount = 0; BondCount = 0; BodyCount = 0; PolyCount = 0; MatCount = 0; TouchCount = 0;
         BodyCellsCount = 0; BodyBondsCount = 0; AdjCount = 0;
         Tick = 0; Substep = 0;
     }

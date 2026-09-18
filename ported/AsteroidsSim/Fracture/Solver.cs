@@ -17,12 +17,8 @@ public struct Contact
     public float Ln;   // normal impulse for THIS substep (XPBD lambda; reset each substep)
     public float Lt;   // accumulated tangential impulse
 
-    // Comminution pressure this contact contributed to each of its two cells, summed over the
-    // tick's substeps. Two values, not one, because the drive term reads each cell's OWN deviation
-    // field. These are the weights the momentum transfer divides by: the contacts that pressed a
-    // cell hardest are the ones that receive it. Zeroed once per tick, before the substep loop.
-    public float PressA;
-    public float PressB;
+    /// <summary>Work this contact did against the approach this substep — what carving is paid from.</summary>
+    public float Work;
 
     // Reference state captured when the manifold was built, so a substep can refresh the contact
     // from rigid motion instead of re-running the narrow phase. Depth0 is signed: negative means
@@ -355,11 +351,30 @@ public sealed partial class Solver
     public float PeakDyn;
     /// <summary>Peak of the confining (penetration) term alone.</summary>
     public float PeakConf;
+    /// <summary>Peak per-contact carve work in a substep. Diagnostics.</summary>
+    public float PeakWork;
+    public long DbgCalls, DbgDead, DbgGate, DbgWc, DbgWant, DbgArea, DbgRemoved, DbgCarved;
+    public int DbgCapHit; public double DbgCapExcess;
+
+    // ── carve log: every clip, with the direction it used. Diagnostics only. ──
+    /// <summary>Diagnostics: follow one cell through the contact solve and the carve.</summary>
+    public int TraceCell = -1;
+    public System.Action<string>? TraceSink;
+
+    public bool CarveLogging;
+    public int[] CarveLogCell = new int[4096];
+    public float[] CarveLogNx = new float[4096];
+    public float[] CarveLogNy = new float[4096];
+    public float[] CarveLogArea = new float[4096];
+    public int CarveLogCount;
     public float[] CrushDose = Array.Empty<float>();
 
     public int Broken;
     public int Dust;
     public int Crushed;
+
+    /// <summary>Cell-areas' worth of material carved away, as a fraction sum. Diagnostics.</summary>
+    public float ShedArea;
     public int Rebakes;
     public float MaxOverlap;
     public float PlasticWork;
@@ -919,7 +934,8 @@ public sealed partial class Solver
         for (int bx = 0; bx < bondLen; bx++)
         {
             int k = _s.BodyBonds[bondOff + bx];
-            if (_s.BondBroken[k]) { c.BondForceSkipped++; continue; }
+            bool broken = _s.BondBroken[k];
+            if (broken && !_tune.CrackPush) { c.BondForceSkipped++; continue; }
             int a = _s.BondA[k], b = _s.BondB[k];
             if (_s.Dead(a) || _s.Dead(b)) { c.BondForceSkipped++; continue; }
             c.BondForceVisits++;
@@ -928,9 +944,21 @@ public sealed partial class Solver
             float soft = 1f - _s.BondDmg[k];
             float sn = _s.BondSn[k], st = _s.BondSt[k], sa = _s.BondSa[k];
 
-            float fn = -(sn > 0f ? kk * soft : kk) * sn;
-            float ft = -kk * soft * st;
-            float fa = -ka * soft * sa;
+            float fn, ft, fa;
+            if (broken)
+            {
+                // A crack cannot pull, but it can push: full compressive stiffness while the faces
+                // are pressed together, no tension, no shear. (sn is held <= 0 for a broken bond by
+                // BondIntegrate, so this is the closing part only.)
+                if (sn >= 0f) { c.BondForceSkipped++; continue; }
+                fn = -kk * sn; ft = 0f; fa = 0f;
+            }
+            else
+            {
+                fn = -(sn > 0f ? kk * soft : kk) * sn;
+                ft = -kk * soft * st;
+                fa = -ka * soft * sa;
+            }
 
             float nx = _s.BondNx[k], ny = _s.BondNy[k];
             float tx = -ny, ty = nx;
@@ -975,7 +1003,8 @@ public sealed partial class Solver
         for (int bx = 0; bx < bondLen; bx++)
         {
             int k = _s.BodyBonds[bondOff + bx];
-            if (_s.BondBroken[k]) continue;
+            bool broken = _s.BondBroken[k];
+            if (broken && !_tune.CrackPush) continue;
             int a = _s.BondA[k], b = _s.BondB[k];
             if (_s.Dead(a) || _s.Dead(b)) continue;
 
@@ -994,6 +1023,13 @@ public sealed partial class Solver
             if (rateSens)
                 _s.BondRate[k] = SimMath.Hypot(rvx, rvy) / SimMath.Max(1f, _s.BondLen[k]);
 
+            if (broken)
+            {
+                // Across a crack only closing is remembered: the faces part freely, and meet again
+                // from zero. Tension and shear across a crack do not exist.
+                _s.BondSn[k] = SimMath.Min(0f, _s.BondSn[k] + (rvx * nx + rvy * ny) * h);
+                continue;
+            }
             _s.BondSn[k] += (rvx * nx + rvy * ny) * h;
             _s.BondSt[k] += (rvx * tx + rvy * ty) * h;
             _s.BondSa[k] += rva * h;

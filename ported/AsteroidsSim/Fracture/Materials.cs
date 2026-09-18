@@ -54,21 +54,45 @@ public readonly struct Material
     public readonly float Crush;
 
     /// <summary>
-    /// Stress-seconds above <see cref="Crush"/> a cell absorbs before it is powder.
+    /// Energy needed to destroy one unit of area — the cost of carving.
     /// </summary>
-    public readonly float CrushCap;
+    /// <remarks>
+    /// Conceptually what <see cref="Chi"/> already is for bonds: energy per unit of new surface.
+    /// This is what couples destruction to momentum transfer, because the energy has to come from
+    /// the contact doing work, and the contact can only do work if the impactor decelerates.
+    /// </remarks>
+    public readonly float CrushRate;
+
+    /// <summary>
+    /// How much of its ORIGINAL area a cell may LOSE before it comminutes — not how much it may
+    /// shrink to. Glass may shed 15% and then shatters; steel endures 50% of erosion first.
+    /// </summary>
+    public readonly float ShedLimit;
+
+    /// <summary>How wide a dent is, in radii of the loaded cell: the kernel radius over which one
+    /// contact's recession is spread across neighbouring surface vertices.</summary>
+    /// <remarks>
+    /// The one parameter carving v2 adds. Narrow gives pits (glass), wide gives dents (steel). A
+    /// multiple of cell radius rather than pixels so it means the same thing at any grain.
+    /// </remarks>
+    public readonly float Dent;
 
     public Material(string name, float rho, float c, float strain, float chi, float yield, float duct,
-        float crush, float crushCap)
+        float crush, float crushEnergy, float shedLimit, float dent = 1.5f)
     {
         Name = name; Rho = rho; C = c; Strain = strain; Chi = chi; Yield = yield; Duct = duct;
-        Crush = crush; CrushCap = crushCap;
+        Crush = crush; CrushRate = crushEnergy; ShedLimit = shedLimit; Dent = dent;
     }
 
     // ── The comminution pair ─────────────────────────────────────────────────────
     //
     // Crushing has the same shape as bond damage — one number for where it STARTS, one for how much
     // it takes to FINISH — and the two are independent axes, exactly as s0 and chi are:
+    //
+    // CrushRate is a DIMENSIONLESS multiplier on the impedance-derived yield speed, so it must not
+    // re-encode softness: rho*c already does that, and doing it twice is what vaporised every soft
+    // material in the collide scene. Only genuine deviations from the impedance expectation belong
+    // here — glass powders faster than its stiffness suggests, steel resists beyond its own.
     //
     //   Crush     the pressure a cell must feel before any comminution happens at all
     //   CrushCap  how much it then absorbs before it is powder — the brittle/ductile axis
@@ -117,12 +141,12 @@ public readonly struct Material
     //                          capacity   glass < ice < sandstone < rock < steel  (brittle first)
 
     /// <summary>The prototype's table (<c>MATERIALS</c>), plus the authored comminution pair.</summary>
-    //                                                  rho     c     strain  chi   yield duct   crush   cap
-    public static readonly Material Rock = new("rock", 3000f, 5000f, 0.010f, 90f, 0.95f, 0.02f, 2.5e5f, 2.0e5f);
-    public static readonly Material Ice = new("ice", 917f, 3200f, 0.007f, 70f, 0.70f, 0.05f, 6.0e4f, 5.0e4f);
-    public static readonly Material Glass = new("glass", 2500f, 5500f, 0.008f, 1.05f, 9f, 0.00f, 4.0e5f, 2.0e4f);
-    public static readonly Material Sandstone = new("sandstone", 2200f, 2500f, 0.009f, 50f, 0.85f, 0.05f, 1.5e5f, 1.0e5f);
-    public static readonly Material Steel = new("steel", 7850f, 5900f, 0.020f, 50f, 0.35f, 0.50f, 1.0e6f, 2.0e6f);
+    //                                              rho     c    strain  chi   yield duct   crush  rate  shed  dent
+    public static readonly Material Rock = new("rock", 3000f, 5000f, 0.010f, 90f, 0.95f, 0.02f, 2.5e5f, 1.0f, 0.35f, 1.5f);
+    public static readonly Material Ice = new("ice", 917f, 3200f, 0.007f, 70f, 0.70f, 0.05f, 6.0e4f, 1.0f, 0.25f, 1.5f);
+    public static readonly Material Glass = new("glass", 2500f, 5500f, 0.008f, 1.05f, 9f, 0.00f, 4.0e5f, 2.0f, 0.15f, 0.8f);
+    public static readonly Material Sandstone = new("sandstone", 2200f, 2500f, 0.009f, 50f, 0.85f, 0.05f, 1.5e5f, 1.0f, 0.25f, 1.5f);
+    public static readonly Material Steel = new("steel", 7850f, 5900f, 0.020f, 50f, 0.35f, 0.50f, 1.0e6f, 0.3f, 0.50f, 2.5f);
 
     public static Material ByName(string name) => name switch
     {
@@ -133,29 +157,11 @@ public readonly struct Material
         _ => Rock,
     };
 
-    // ── the id table ─────────────────────────────────────────────────────────
-    //
-    // One byte per cell indexes this, which is what lets a single body hold cells of different
-    // materials without giving every cell its own copy of eight floats. The table is a few hundred
-    // bytes and permanently cache-resident, so a lookup through it costs nothing measurable.
-    //
-    // IDS ARE PART OF THE CONTENT CONTRACT. They are written into cells and therefore into the
-    // fingerprint and every snapshot, so reordering this array renumbers material identity in a
-    // saved or networked simulation. Append only.
-
-    private static readonly Material[] Table = { Rock, Ice, Glass, Sandstone, Steel };
-
-    /// <summary>The material for a cell's stored id.</summary>
-    public static ref readonly Material ById(byte id)
-        => ref Table[id < Table.Length ? id : 0];
-
-    /// <summary>The id to store on a cell built from this material. O(table), build-time only.</summary>
-    public static byte IdOf(in Material m)
-    {
-        for (int i = 0; i < Table.Length; i++)
-            if (ReferenceEquals(Table[i].Name, m.Name) || Table[i].Name == m.Name) return (byte)i;
-        return 0;
-    }
+    /// <summary>Exact field equality — what material-table registration dedupes on.</summary>
+    public bool SameAs(in Material o)
+        => Name == o.Name && Rho == o.Rho && C == o.C && Strain == o.Strain && Chi == o.Chi
+           && Yield == o.Yield && Duct == o.Duct && Crush == o.Crush
+           && CrushRate == o.CrushRate && ShedLimit == o.ShedLimit && Dent == o.Dent;
 }
 
 /// <summary>
@@ -170,8 +176,10 @@ public readonly struct MaterialProps
     public readonly float Cpx;
     /// <summary>Contact stress at which this material begins to comminute.</summary>
     public readonly float CrushStress;
-    /// <summary>Stress-seconds above the threshold this material absorbs before it is powder.</summary>
-    public readonly float CrushCap;
+    /// <summary>Energy per unit area destroyed.</summary>
+    public readonly float CrushRate;
+    /// <summary>Fraction of original area a cell may shed before comminuting.</summary>
+    public readonly float ShedLimit;
     /// <summary>Failure strain after the trim.</summary>
     public readonly float Eps;
     /// <summary>Critical particle velocity in px/s: strength follows strain.</summary>
@@ -195,7 +203,8 @@ public readonly struct MaterialProps
         // compressive failure and is not the same axis, so a scene tuned to be more or less brittle
         // in tension does not silently move the pressure at which cells turn to powder.
         CrushStress = m.Crush;
-        CrushCap = m.CrushCap;
+        CrushRate = m.CrushRate;
+        ShedLimit = m.ShedLimit;
     }
 }
 
@@ -238,6 +247,42 @@ public struct SimTuning
     /// invisible.</para>
     /// </remarks>
     public float CrushConfine;
+
+    /// <summary>
+    /// How strongly an eroded surface is pulled to meet its neighbour's at the side they share.
+    /// </summary>
+    /// <remarks>
+    /// <para>Cells clip independently, so two neighbours under similar load can recede by different
+    /// amounts and leave a STEP where their shared side reaches the outside. The cure is not a
+    /// shared depth or a shared direction — sharing the direction would only make the steps
+    /// parallel, which reads worse than ragged. What has to match is the POINT at which each cell's
+    /// eroded surface crosses their shared side.</para>
+    ///
+    /// <para>That point is already known: the touch record's interval endpoint is exactly where the
+    /// neighbour's erosion cut the shared side. So each cell keeps its own direction and its own
+    /// depth, and only its plane OFFSET is relaxed toward passing through that point. 0 leaves the
+    /// steps exactly as they are; 1 makes the surfaces meet. Creases — two surfaces meeting at an
+    /// angle — are left alone, because that is faceting rather than an artifact.</para>
+    /// </remarks>
+    public float CarveContinuity;
+
+    /// <summary>Smallest clip worth making, as a fraction of the cell's current area.</summary>
+    /// <remarks>
+    /// A floor on the size of a single cut, not on the rate of erosion: demand below it accumulates
+    /// in <see cref="SimState.CellCarvePend"/> rather than being discarded, so the total area shed
+    /// over time is unchanged and only the granularity of the geometry changes.
+    /// </remarks>
+    public float CarveMinArea;
+
+    /// <summary>A crack transmits compression: broken bonds between live cells keep their
+    /// compressive normal force, and none of their tension or shear.</summary>
+    /// <remarks>
+    /// Without it, from the substep a bond breaks until the body is split at the end of the tick,
+    /// the two sides of a crack have no interaction of any kind — same-body cells never contact —
+    /// so a detached front row slides into the row behind it with no resistance. A clump of cells
+    /// that are still touching behaves like a bonded body in compression; this is what lets it.
+    /// </remarks>
+    public bool CrackPush;
 
     /// <summary>
     /// Fraction of a snapping bond's stored elastic energy that becomes fly-apart kinetic energy.
@@ -322,6 +367,9 @@ public struct SimTuning
         ContactMu = 0.6f,
         ContactCompliance = 1f,
         CrushConfine = 0.05f,
+        CarveContinuity = 0.5f,
+        CarveMinArea = 0.005f,
+        CrackPush = true,
         SpallFraction = 1f,
         ExportFreeDebris = false,
         ContactBias = 0.2f,

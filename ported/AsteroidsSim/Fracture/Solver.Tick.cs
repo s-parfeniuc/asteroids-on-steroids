@@ -165,8 +165,22 @@ public sealed partial class Solver
         float pressB = shared + driveB;
         _cellPress[a] += pressA;
         _cellPress[b] += pressB;
-        ct.PressA = pressA;
-        ct.PressB = pressB;
+        // WORK, which is what carving is actually rate-limited by. Force times approach speed times
+        // the substep: the energy this contact took out of the approach. A pressure-time integral
+        // would let destruction outrun momentum transfer — carve rate would RISE with pressure, so
+        // the more violent the impact the faster the load path is cut. Work cannot do that, because
+        // the contact can only do work if the impactor decelerates.
+        ct.Work = lnBrake * SimMath.Max(0f, -vn) / h;
+        if (MeasureStress && ct.Work > PeakWork) PeakWork = ct.Work;
+        if (TraceCell >= 0 && (a == TraceCell || b == TraceCell))
+        {
+            bool isA = a == TraceCell;
+            TraceSink?.Invoke($"  sub{_s.Substep % 100,2} contact with {(isA ? b : a)}: "
+                + $"depth {ct.Depth,6:F2} n=({ct.Nx,5:F2},{ct.Ny,5:F2}) "
+                + $"dyn {dyn,10:E2} conf {conf,10:E2} drive {(isA ? driveA : driveB),10:E2} "
+                + $"-> press {(isA ? pressA : pressB),10:E2}");
+        }
+
         float press = SimMath.Max(pressA, pressB);
 
         if (MeasureStress)
@@ -225,95 +239,313 @@ public sealed partial class Solver
     /// the ones with contacts. Zeroing on visit is what makes that safe: a cell in six contacts is
     /// reached six times and charged once, with its complete sum.</para>
     /// </remarks>
-    private void AccumulateCrushDose(float h)
+    /// <summary>
+    /// Turns the work each contact did into carved area, once per substep, after every contact has
+    /// been solved.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>After the loop, not inside it.</b> Carving mutates collider geometry — vertices,
+    /// area, <c>CellRad</c>, the centroid — and contacts solved later in the same substep read all
+    /// of that. Carving mid-loop would leave the manifold describing geometry that no longer exists.
+    /// </para>
+    ///
+    /// <para><b>Per contact, not per cell.</b> A cell in three contacts is carved three times, from
+    /// three directions, which is what a cell caught in a pile should look like. Accumulating a
+    /// single averaged direction per cell would flatten a corner being ground from two sides into one
+    /// meaningless bevel.</para>
+    ///
+    /// <para>Pressure still decides WHETHER — it is compared against the cell's own material
+    /// threshold — and the share of the work that carves ramps with how far over that threshold the
+    /// cell is, so the onset is smooth rather than a switch.</para>
+    /// </remarks>
+    private void ApplyCarving(float h)
     {
-        EnsureCrushScratch();
-        int before = _crushCount;
-
+        // The GATE reads the cell's TOTAL pressure this substep, not this contact's share. A cell
+        // squeezed from both sides at 60% of threshold is under 120% of it and must yield; asking
+        // each contact on its own reads 60%, twice, and concludes nothing is happening. Confinement
+        // is the sum of what presses on a cell, so the sum is what the threshold is for.
+        //
+        // The RATE reads this contact's work, because the energy is this contact's to spend.
         for (int i = 0; i < _contactCount; i++)
         {
             ref Contact ct = ref _contacts[i];
-            ChargeCell(ct.A, h);
-            ChargeCell(ct.B, h);
+
+            // NO BRAKING GATE. This used to skip any contact with ct.Work <= 0, left over from the
+            // rate being paid out of braking work. The rate moved to pressure; the gate did not, so
+            // carving still only ran on substeps where something was being decelerated — the
+            // approach transient — and a cell held in deep sustained overlap carved on roughly one
+            // substep in nine. Traced on cell 562 at grain 170: pressure sat at 3.5e5 against a
+            // 2.5e5 threshold for eight substeps with no carve attempted at all, while penetration
+            // grew from 2.3 to 5.3 px.
+            float dA = CarveSide(ct.A, ct.B, _cellPress[ct.A], h, ct.Nx, ct.Ny, ct.Px, ct.Py);
+            float dB = CarveSide(ct.B, ct.A, _cellPress[ct.B], h, -ct.Nx, -ct.Ny, ct.Px, ct.Py);
+
+            // CLOSE THE FEEDBACK LOOP. Depth comes from the manifold, which is only re-derived when
+            // ManifoldDrift trips — so without this the pressure keeps reading the overlap that was
+            // just carved away, and erosion runs at full rate against material already gone.
+            // Subtracting the realized depth is O(1); Depth0 goes with it so the refresh path stays
+            // consistent with the rebuild path.
+            float relief = dA + dB;
+            if (relief > 0f) { ct.Depth -= relief; ct.Depth0 -= relief; }
         }
 
-        // ── THE MOMENTUM TRANSFER HAPPENS HERE, NOT AT END OF TICK ────────────
-        // The cell is not removed until ConvertDust — topology cannot change mid-solve — but WHO it
-        // hands its momentum to has to be decided now, in the substep that crossed capacity, while
-        // the contacts that did the crushing are still live.
-        //
-        // Deferring the whole operation to end of tick did not work, and the measurement was
-        // unambiguous: at 1500 px/s the projectile crushed five cells and performed ZERO transfers.
-        // Under a fast impactor the manifold is re-derived every substep, so by the end of the tick
-        // the contact list no longer holds the pair that did the crushing — and a cell whose dose
-        // crossed three substeps ago may have separated entirely. The weights were gone before
-        // anything could be paid out with them, and the whole momentum went to the ledger.
-        //
-        // Two passes over contacts, and only when something actually crossed: total the weights over
-        // live partners, then distribute. Both are O(contacts) however many cells crushed.
-        // `_crushNew` is what crossed THIS substep and has not been paid out; `_crushMark` is
-        // everything awaiting removal. The two must be separate: a cell marked three substeps ago
-        // has already handed over its momentum, and totalling it again would pay it out twice.
-        //
-        // A partner that is ITSELF being powdered is still a valid recipient, and excluding one was
-        // measurably wrong. Under a fast impactor both sides of the contact cross capacity in the
-        // same substep — that is what a violent impact IS — so excluding crushed partners meant
-        // neither side had anyone to pay, and at 1500 px/s five cells crushed with zero transfers.
-        // The recipient is the partner's BODY, which goes on existing minus one cell, so it can
-        // absorb momentum perfectly well while the cell that delivered the contact is removed.
-        if (_crushCount == before) return;
-
+        // Drained by walking contacts rather than by clearing the whole array: only contact
+        // endpoints are ever written, so this is O(contacts) instead of O(cells) — and it cannot
+        // touch scratch that a contact-free tick never caused to be allocated.
         for (int i = 0; i < _contactCount; i++)
         {
             ref Contact ct = ref _contacts[i];
-            int a = ct.A, b = ct.B;
-            if (_crushNew[a] && !_s.Dead(b)) _crushTot[a] += ct.PressA;
-            if (_crushNew[b] && !_s.Dead(a)) _crushTot[b] += ct.PressB;
+            ct.Work = 0f;
+            _cellPress[ct.A] = 0f;
+            _cellPress[ct.B] = 0f;
         }
-        for (int i = 0; i < _contactCount; i++)
-        {
-            ref Contact ct = ref _contacts[i];
-            int a = ct.A, b = ct.B;
-            if (_crushNew[a] && !_s.Dead(b)) TransferShare(a, b, ct.PressA);
-            if (_crushNew[b] && !_s.Dead(a)) TransferShare(b, a, ct.PressB);
-        }
-        for (int i = before; i < _crushCount; i++) _crushNew[_crushList[i]] = false;
     }
 
-    private void ChargeCell(int c, float h)
+    /// <summary>
+    /// Carves one cell of one contact, and hands the shed mass to the partner.
+    /// </summary>
+    /// <param name="nx">World-space direction from this cell TOWARD the partner: the load direction.</param>
+    private float CarveSide(int c, int other, float press, float h, float nx, float ny, float wpx, float wpy)
     {
-        float press = _cellPress[c];
-        if (press <= 0f) return;
-        _cellPress[c] = 0f;
+        DbgCalls++;
+        if (_s.Dead(c) || _s.Dead(other)) { DbgDead++; return 0f; }
+        int bi = _s.CellBody[c];
+        if (bi < 0 || bi >= _s.BodyCount) return 0f;
 
-        if (MeasureStress && CrushDose.Length > c)
+        ref readonly Material m = ref _s.Mat(c);
+        float excess = press - m.Crush;
+        if (c == TraceCell)
+            TraceSink?.Invoke($"     carve gate: press {press,10:E2} vs threshold {m.Crush,10:E2}"
+                + $" -> {(excess > 0f ? "OPEN" : "shut")}");
+        if (excess <= 0f) { DbgGate++; return 0f; }
+
+        // ── RATE: VISCOPLASTIC YIELD, NOT BRAKING WORK ───────────────────────
+        // The rate used to be paid out of the work the contact did against the approach. That is a
+        // TRANSIENT: the solve kills the approach within a substep or two — that is its whole job —
+        // so work collapses to nothing and a SUSTAINED overlap carves nothing at all. Measured, 10
+        // of 12 carve attempts removed zero area while pressure sat well over threshold and the peak
+        // work reading looked healthy; the peak was the first substep of contact and nothing after.
+        //
+        // Work-gating existed to stop destruction outrunning momentum transfer. ShedMass already
+        // prevents that, continuously and by construction — the ledger share fell from 88.8% to
+        // 2.8% — so the rate is free to follow pressure. A brake with nothing left to protect is
+        // just a brake.
+        //
+        // It needs NO new free parameter. In 2D, energy-per-area and force-per-length are the same
+        // units (M/T^2), so excess pressure over the acoustic impedance rho*c is a VELOCITY: the
+        // speed the surface recedes at. Dimensionally forced, and it separates materials before any
+        // tuning, since steel's impedance is 3.4x glass's.
+        // SAME floored stiffness the contact itself uses. ContactCMin floors contact stiffness so a
+        // soft material's contacts are no softer than a hard one's — impenetrability is kinematic —
+        // which means ice and sandstone FEEL rock-like pressure. Dividing that by their unfloored
+        // impedance made them erode 10x and 4x faster than rock: pressure floored in one place and
+        // not the other. The floor has to appear on both sides or it is not a floor, it is a bias.
+        float cPx = SimMath.Max(m.C * _tune.PxPerMetre, _tune.ContactCMin * _tune.PxPerMetre);
+        float imp = SimMath.Max(1e-3f, (m.Rho / 1000f) * cPx);
+        float depth = m.CrushRate * (excess / imp) * h;
+
+        // A cell may not vanish inside one substep however violent the contact: the shed has to be
+        // spread over enough substeps for its momentum to leave through the contact with it.
+        if (depth <= 1e-5f) { DbgWant++; return 0f; }
+
+        // ── v2: recede the surface around the contact ────────────────────────
+        // Cells with a surface chord are dented through their records; the direction clip below
+        // is kept only for cells with no chord to move (lone rubble, single-neighbour hangers).
         {
-            float exd = press - CrushThreshold;
-            if (exd > 0f) CrushDose[c] += exd * h;
+            float gotV2 = DentAt(c, other, depth, wpx, wpy);
+            if (gotV2 >= 0f)
+            {
+                if (c == TraceCell)
+                    TraceSink?.Invoke($"     dent: depth {depth,7:F3} removed {gotV2,7:F2}  area {_s.CellArea[c],7:F1}/{_s.CellArea0[c],7:F1} "
+                        + $"shed {100f * (1f - _s.CellArea[c] / SimMath.Max(1f, _s.CellArea0[c])),5:F1}%");
+                if (gotV2 <= 0f) { DbgRemoved++; return 0f; }
+                DbgCarved++;
+                return gotV2 / SimMath.Max(1f, _s.CellPerim[c] * 0.25f);
+            }
         }
 
-        int bi = _s.CellBody[c];
-        if (bi < 0 || bi >= _s.BodyCount) return;
-        float excess = press - _s.BodyCrush[bi];
-        if (excess <= 0f) return;
-        _s.CellCrush[c] += excess * h;
+        // The yield speed gives how far the surface recedes; the area that corresponds to is the
+        // recession times the contact length it happens over.
+        // v1 only: the depth cap that kept a cell from vanishing in one substep. v2 guards on area.
+        if (depth > _s.CellRad[c] * 0.25f) { DbgCapHit++; DbgCapExcess += depth / (_s.CellRad[c] * 0.25f); }
+        depth = SimMath.Min(depth, _s.CellRad[c] * 0.25f);
 
-        // Crossed its material's capacity: schedule it for removal and price it now, at this
-        // substep's pose and velocity, so the transfer below pays out what it actually had.
-        if (!_tune.Dust || _crushMark[c] || _s.Solo(c)) return;
-        if (_s.CellCrush[c] < _s.BodyCrushCap[bi]) return;
+        float lcw = SimMath.Max(1f, _s.CellPerim[c] * 0.25f);
+        float wantArea = depth * lcw;
 
+        // The load direction is world; the polygon is body-local.
         BodyTrig(bi, out float si, out float co);
+        float lx = nx * co + ny * si;
+        float ly = -nx * si + ny * co;
+
+        float areaBefore = _s.CellArea[c];
+        if (areaBefore <= 1e-6f) { DbgArea++; return 0f; }
+
+        // ── A CLIP HAS TO BE WORTH MAKING ────────────────────────────────────
+        // The rate law gives a recession per substep, which is hundredths of a pixel. Carving that
+        // away immediately is not "continuous erosion", it is churn: a cut shallower than the
+        // polygon's own feature size cannot shave a corner, so it deletes whichever side it runs
+        // parallel to and relays a new one just behind, re-labelling the cell's edges every substep
+        // for no visible change. Demand below the floor is HELD, not dropped, so the erosion rate is
+        // untouched and only the grain of the geometry changes.
+        float pending = _s.CellCarvePend[c] + wantArea;
+        if (pending < _tune.CarveMinArea * areaBefore) { _s.CellCarvePend[c] = pending; DbgWant++; return 0f; }
+        _s.CellCarvePend[c] = 0f;
+        wantArea = pending;
+
+        float removed = CarveCellByArea(c, lx, ly, wantArea);
+        if (c == TraceCell)
+            TraceSink?.Invoke($"     carve: depth {depth,7:F3} want {wantArea,7:F2} "
+                + $"removed {removed,7:F2}  area {_s.CellArea[c],7:F1}/{_s.CellArea0[c],7:F1} "
+                + $"shed {100f * (1f - _s.CellArea[c] / SimMath.Max(1f, _s.CellArea0[c])),5:F1}%");
+        if (removed <= 0f) { DbgRemoved++; return 0f; }
+        DbgCarved++;
+
+        if (CarveLogging && CarveLogCount < CarveLogCell.Length)
+        {
+            CarveLogCell[CarveLogCount] = c;
+            CarveLogNx[CarveLogCount] = nx; CarveLogNy[CarveLogCount] = ny;
+            CarveLogArea[CarveLogCount] = removed;
+            CarveLogCount++;
+        }
+
+        ShedMass(c, other, removed / areaBefore);
+
+        // Realized depth, from the area actually taken — the request may have been clamped by the
+        // bonded-edge guard, and only what really went may be credited against the overlap.
+        float lc = SimMath.Max(1f, _s.CellPerim[c] * 0.25f);
+        return removed / lc;
+    }
+
+    /// <summary>
+    /// Removes the fraction <paramref name="f"/> of a cell's mass and hands its momentum to the
+    /// partner cell, continuously.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Density is held constant and mass leaves.</b> That is what makes carving spalling
+    /// rather than compaction, and it is the same for every material — a receding surface is a dent
+    /// whether the lost area became shed mass or higher density, so the eye cannot tell them apart
+    /// and only one of them is cheap.</para>
+    ///
+    /// <para><b>The transfer is an inelastic collision between the shed mass and the partner
+    /// CELL</b>, not its body. Handing it to the body would deliver it instantaneously to material
+    /// arbitrarily far from the contact; writing into the partner's deviation field lets the bonds
+    /// carry it outward at wave speed, which is the premise the model is built on. The inelastic
+    /// form is what guarantees the exchange is dissipative: a straight handoff of <c>dm*v</c> would
+    /// CREATE energy whenever the partner is already co-moving with the shedding cell.</para>
+    ///
+    /// <para>What the partner cannot take works out to <c>dm * v_partner</c> — precisely the
+    /// momentum the departed mass would have had if it were moving with the material it left behind,
+    /// which legitimately goes with it. That is the ledger's actual job.</para>
+    /// </remarks>
+    private void ShedMass(int c, int other, float f)
+    {
+        if (f <= 0f) return;
+        if (f > 1f) f = 1f;
+
+        float dm = _s.CellM[c] * f;
+        if (dm <= 1e-9f) return;
+
+        int bi = _s.CellBody[c], bo = _s.CellBody[other];
+        if (bo < 0 || bo >= _s.BodyCount) return;
+
+        CellVelocity(c, bi, out float vcx, out float vcy);
+        CellVelocity(other, bo, out float vox, out float voy);
+
+        float mo = _s.CellM[other];
+        float mu = mo > 0f ? dm * mo / (dm + mo) : 0f;
+        float jx = mu * (vcx - vox), jy = mu * (vcy - voy);
+
+        // World -> the partner's body-local frame, exactly as ApplyPair does.
+        BodyTrig(bo, out float so, out float coo);
+        float ax = jx / mo, ay = jy / mo;
+        _s.CellDvx[other] += ax * coo + ay * so;
+        _s.CellDvy[other] += -ax * so + ay * coo;
+
+        // Mass leaves at the cell's own velocity, so the cell's velocity does not change. Inertia
+        // follows mass at fixed shape.
+        float mNew = _s.CellM[c] - dm;
+        if (mNew <= 1e-6f) mNew = 1e-6f;
+        float scale = mNew / _s.CellM[c];
+        dm = _s.CellM[c] - mNew;                  // what actually left, after the floor
+        _s.CellM[c] = mNew;
+
+        // THE BODY LOSES IT TOO, immediately. BodyM is otherwise only re-derived from live cells at
+        // a topology boundary, so between now and then BodyKineticEnergy would still be counting
+        // mass that has gone — while the ledger counts it as well. That double count is not subtle:
+        // it read as energy CREATION, 113% of the initial, which the guardrail caught at once.
+        // Inertia follows mass at fixed shape; RecomputeBody sets both absolutely later, so this
+        // cannot compound with it.
+        if (_s.BodyM[bi] > dm)
+        {
+            float bScale = (_s.BodyM[bi] - dm) / _s.BodyM[bi];
+            _s.BodyM[bi] -= dm;
+            _s.BodyI[bi] = SimMath.Max(1f, _s.BodyI[bi] * bScale);
+        }
+        _s.CellIm[c] = 1f / mNew;
+        _s.CellIc[c] *= scale;
+        _s.CellIic[c] = 1f / SimMath.Max(1e-9f, _s.CellIc[c]);
+
+        // ── THE DUST COMPACTS INTO THE DENT ──────────────────────────────────
+        // What the partner did not take, dm·v_c − j, used to go to the ledger: the dust left the
+        // simulation at the partner's speed, so the partner was slowed by the dust it made and the
+        // body that lost the material barely felt it — 35% of momentum in the ledger at 900 px/s,
+        // 90% at 4000. The displaced material does not leave; it is pressed into the crater. So the
+        // remainder is delivered to the shedding cell, which is exactly conservative in-sim at any
+        // shed size — the reason the old depth cap is no longer needed. The energy the dust had at
+        // v_c and does not have at the cell's speed is dissipation, which is what crushing is.
+        float rx = dm * vcx - jx, ry = dm * vcy - jy;
+
+        // The crater floor cannot be pushed faster than the impactor is closing on it: an inelastic
+        // push ends at co-motion, not beyond. Without this, a cell shedding nearly all of itself in
+        // one substep (mNew at its floor) would take the whole remainder as an absurd velocity —
+        // measured as a NaN at 4000 px/s. What it cannot absorb is dust that was flung, and leaves.
+        float dvMax = SimMath.Hypot(vox - vcx, voy - vcy);
+        float dvAsk = SimMath.Hypot(rx, ry) / mNew;
+        if (dvAsk > dvMax)
+        {
+            float keep = dvMax / dvAsk;
+            ExportedPx += rx * (1f - keep); ExportedPy += ry * (1f - keep);
+            rx *= keep; ry *= keep;
+        }
+
+        BodyTrig(bi, out float sc, out float cc);
+        float bx = rx / mNew, by = ry / mNew;
+        _s.CellDvx[c] += bx * cc + by * sc;
+        _s.CellDvy[c] += -bx * sc + by * cc;
+        ExportedKe += 0.5f * dm * (vcx * vcx + vcy * vcy)
+                      - (jx * vox + jy * voy + (jx * jx + jy * jy) / (2f * mo))
+                      - (rx * vcx + ry * vcy + (rx * rx + ry * ry) / (2f * mNew));   // what the cell gained
+        DustMass += dm;
+        ShedArea += f;
+        MarkDirty(bi);
+    }
+
+    /// <summary>A cell's full world velocity: body translation, w x r, and its own deviation.</summary>
+    private void CellVelocity(int c, int b, out float vx, out float vy)
+    {
+        BodyTrig(b, out float si, out float co);
         float rx = _s.CellRx[c] * co - _s.CellRy[c] * si;
         float ry = _s.CellRx[c] * si + _s.CellRy[c] * co;
-        float bw = _s.BodyW[bi];
-        _crushVx[c] = _s.BodyVx[bi] - bw * ry + _s.CellDvx[c] * co - _s.CellDvy[c] * si;
-        _crushVy[c] = _s.BodyVy[bi] + bw * rx + _s.CellDvx[c] * si + _s.CellDvy[c] * co;
-        _crushW[c] = bw + _s.CellDw[c];
-        _crushTot[c] = 0f; _crushJx[c] = 0f; _crushJy[c] = 0f; _crushGain[c] = 0f;
-        _crushMark[c] = true;
-        _crushNew[c] = true;
-        _crushList[_crushCount++] = c;
+        float w = _s.BodyW[b];
+        vx = _s.BodyVx[b] - w * ry + _s.CellDvx[c] * co - _s.CellDvy[c] * si;
+        vy = _s.BodyVy[b] + w * rx + _s.CellDvx[c] * si + _s.CellDvy[c] * co;
+    }
+
+    /// <summary>
+    /// True when breaking bond <paramref name="k"/> would leave cell <paramref name="c"/> with no
+    /// unbroken bond while it is still buried — surrounded by live cells of its own body.
+    /// </summary>
+    private bool WouldIsolateBuried(int c, int k)
+    {
+        int aoff = _s.AdjOff[c], alen = _s.AdjLen[c];
+        for (int j = 0; j < alen; j++)
+        {
+            int o = _s.AdjBond[aoff + j];
+            if (o == k || _s.BondBroken[o]) continue;
+            return false;                       // another bond survives; nothing to worry about
+        }
+        return !HasFreeEdge(c);                 // last bond, and no side of it faces open space
     }
 
     private void TotalVelocity(
@@ -472,7 +704,16 @@ public sealed partial class Solver
                 d = SimMath.Min(1f, sf * (lmax - s0) / (lmax * (sf - s0)));
             }
 
-            bool atSurface = _s.AtSurface(a) || _s.AtSurface(b);
+            // ── A CRACK ADVANCES ALONG SIDES, NOT THROUGH CELLS ──────────────
+            // Separation is allowed only where the side this bond occupies touches a side that is
+            // already open. A crack tip is a vertex; the next side it can take is one sharing that
+            // vertex.
+            //
+            // Testing whether the CELL is at a surface — which is what CellSurf/CellCracked did —
+            // is far too weak. It licenses every bond of that cell, including ones buried on the far
+            // side, so a crack tunnels inward and interior cells fall out of bodies that still
+            // enclose them. And it cannot express the thing that matters: WHICH side is exposed.
+            bool atSurface = SideTouchesSurface(a, k) || SideTouchesSurface(b, k);
             if (!atSurface) d = SimMath.Min(d, 0.97f);
 
             float dPrev = _s.BondDmg[k];
@@ -491,6 +732,7 @@ public sealed partial class Solver
                 ReleaseRecoil(k, a, b, dPrev, chi, ref recoil);
 
                 _s.BondSn[k] = 0f; _s.BondSt[k] = 0f; _s.BondSa[k] = 0f;
+                OpenBondSides(k);
                 broke = true;
             }
         }

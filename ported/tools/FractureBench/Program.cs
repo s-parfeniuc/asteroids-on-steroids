@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Diagnostics;
 using System.Globalization;
@@ -58,6 +59,30 @@ internal static class Program
         if (Array.IndexOf(args, "--crush") >= 0) { CrushSweep(args); return; }
         if (Array.IndexOf(args, "--crushdiag") >= 0) { CrushDiag(args); return; }
         if (Array.IndexOf(args, "--polycensus") >= 0) { PolyCensus(); return; }
+        if (Array.IndexOf(args, "--sidecensus") >= 0) { SideCensus(); return; }
+        if (Array.IndexOf(args, "--audit") >= 0) { SideAuditRun(); return; }
+        if (Array.IndexOf(args, "--carvetrace") >= 0) { CarveTrace(); return; }
+        if (Array.IndexOf(args, "--tick69") >= 0) { Tick69(args); return; }
+        if (Array.IndexOf(args, "--normals") >= 0) { NormalSpread(args); return; }
+        if (Array.IndexOf(args, "--cell") >= 0) { TraceOneCell(args); return; }
+        if (Array.IndexOf(args, "--pair") >= 0) { TracePair(args); return; }
+        if (Array.IndexOf(args, "--census") >= 0) { CarveCensus(args); return; }
+        if (Array.IndexOf(args, "--steel") >= 0) { SteelRepro(args); return; }
+        if (Array.IndexOf(args, "--loop") >= 0) { LoopRepro(args); return; }
+        if (Array.IndexOf(args, "--records") >= 0) { RecordCensus(); return; }
+        if (Array.IndexOf(args, "--build0") >= 0) { BuildFaults(args); return; }
+        if (Array.IndexOf(args, "--osic") >= 0) { OpenCoveredSample(args); return; }
+        if (Array.IndexOf(args, "--dent") >= 0) { DentProfile(args); return; }
+        if (Array.IndexOf(args, "--tri") >= 0) { TriRepro(args); return; }
+        if (Array.IndexOf(args, "--lendis") >= 0) { LengthDisagreements(args); return; }
+        if (Array.IndexOf(args, "--five") >= 0) { FiveRepro(args); return; }
+        if (Array.IndexOf(args, "--zls") >= 0) { ZeroLengthSample(args); return; }
+        if (Array.IndexOf(args, "--cell36") >= 0) { Cell36(args); return; }
+        if (Array.IndexOf(args, "--vkinds") >= 0) { VertexKinds(args); return; }
+        if (Array.IndexOf(args, "--bias") >= 0) { BiasSweepV2(args); return; }
+        if (Array.IndexOf(args, "--momflow") >= 0) { MomentumFlow(args); return; }
+        if (Array.IndexOf(args, "--mats") >= 0) { MaterialCensus(args); return; }
+        if (Array.IndexOf(args, "--stretch") >= 0) { StretchProbe(args); return; }
         if (Array.IndexOf(args, "--crushcap") >= 0) { CrushCapSweep(args); return; }
         if (Array.IndexOf(args, "--spall") >= 0) { SpallSweep(args); return; }
         if (Array.IndexOf(args, "--jobsweep") >= 0) { JobSweep(args); return; }
@@ -342,7 +367,7 @@ internal static class Program
             float tensile = mp.Rho * mp.Cpx * mp.Cpx * mp.Eps;
             Console.WriteLine($"   {m.Name,-10} {tensile.ToString("E2", ci),12} "
                 + $"{mp.CrushStress.ToString("E2", ci),14} {(mp.CrushStress / tensile).ToString("F1", ci),13}x "
-                + $"{mp.CrushCap.ToString("E2", ci),13}");
+                + $"{mp.CrushRate.ToString("E2", ci),13}");
         }
 
         // ── A. pressure vs static overlap ────────────────────────────────────
@@ -351,7 +376,7 @@ internal static class Program
         // term nearly on its own — which is the whole point of having one.
         Console.WriteLine();
         Console.WriteLine("A. PRESSURE vs STATIC OVERLAP  (at rest — the confining term on its own)");
-        Console.WriteLine("   overlap px    peak dyn     peak conf    peak total   over thr?");
+        Console.WriteLine("   overlap px    peak dyn     peak conf    peak total   over thr?    peak work   carved");
         foreach (float push in new[] { 0.5f, 1f, 2f, 4f, 8f, 16f, 32f })
         {
             var r = Scenarios.Collide(t, Material.Rock, speed: 0f);
@@ -364,29 +389,30 @@ internal static class Program
             r.Solver.Step();
             Console.WriteLine($"   {push,10} {r.Solver.PeakDyn.ToString("E2", ci),11} "
                 + $"{r.Solver.PeakConf.ToString("E2", ci),13} {r.Solver.PeakStress.ToString("E2", ci),13}   "
-                + $"{(r.Solver.PeakStress > thrRock ? "YES" : "no"),5}");
+                + $"{(r.Solver.PeakStress > thrRock ? "YES" : "no"),5} "
+                + $"{r.Solver.PeakWork.ToString("E2", ci),12} {r.Solver.ShedArea.ToString("F3", ci),8}"
+                + $"  [calls {r.Solver.DbgCalls} gate {r.Solver.DbgGate} depth {r.Solver.DbgWant} rem {r.Solver.DbgRemoved} ok {r.Solver.DbgCarved}]"
+                + $" cc[len {r.Solver.CcLen} reach {r.Solver.CcReach} degen {r.Solver.CcDegen} zeroA {r.Solver.CcZeroArea} ok {r.Solver.CcOk} lastD {r.Solver.CcLastDepth:F4} lastR {r.Solver.CcLastRemoved:F4}]");
         }
 
         // ── B. pressure vs closing speed ─────────────────────────────────────
         Console.WriteLine();
         Console.WriteLine("B. PRESSURE vs CLOSING SPEED  (projectile, 60 ticks)");
-        Console.WriteLine("   speed     peak dyn     peak conf     max dose   crushed");
+        Console.WriteLine("   speed     peak dyn     peak conf    peak shed   carved  crushed");
         foreach (float v in new[] { 150f, 300f, 600f, 1200f, 2400f, 4800f })
         {
             var r = Scenarios.Projectile(t, Material.Rock, v, 3f);
             r.Solver.MeasureStress = true;
             for (int i = 0; i < 60; i++) r.Solver.Step();
-            float dose = 0f;
-            for (int c = 0; c < r.State.CellCount; c++)
-                if (r.State.CellCrush[c] > dose) dose = r.State.CellCrush[c];
             Console.WriteLine($"   {v,7} {r.Solver.PeakDyn.ToString("E2", ci),12} "
-                + $"{r.Solver.PeakConf.ToString("E2", ci),13} {dose.ToString("E2", ci),12} "
-                + $"{r.Solver.Crushed,9}");
+                + $"{r.Solver.PeakConf.ToString("E2", ci),13} "
+                + $"{(100f * MaxShed(r.State)).ToString("F1", ci),11}% "
+                + $"{r.Solver.ShedArea.ToString("F2", ci),8} {r.Solver.Crushed,9}");
         }
 
         // ── C. dose vs sustained contact ─────────────────────────────────────
         Console.WriteLine();
-        Console.WriteLine("C. DOSE vs SUSTAINED CONTACT  (slow closing press, dose on the worst cell)");
+        Console.WriteLine("C. SHED vs SUSTAINED CONTACT  (slow closing press, worst cell, % of its limit)");
         Console.WriteLine("   ticks      60 px/s     150 px/s     400 px/s");
         foreach (int n in new[] { 20, 50, 100, 200, 400 })
         {
@@ -395,10 +421,7 @@ internal static class Program
             {
                 var r = Scenarios.Collide(t, Material.Rock, speed: v);
                 for (int i = 0; i < n; i++) r.Solver.Step();
-                float dose = 0f;
-                for (int c = 0; c < r.State.CellCount; c++)
-                    if (r.State.CellCrush[c] > dose) dose = r.State.CellCrush[c];
-                Console.Write($"{dose.ToString("E2", ci),13}");
+                Console.Write($"{(100f * MaxShed(r.State)).ToString("F1", ci),12}%");
             }
             Console.WriteLine();
         }
@@ -484,12 +507,10 @@ internal static class Program
 
                 var press = Scenarios.Collide(t, m, speed: 150f);
                 for (int i = 0; i < 400; i++) press.Solver.Step();
-                float dose = 0f;
-                for (int c = 0; c < press.State.CellCount; c++)
-                    if (press.State.CellCrush[c] > dose) dose = press.State.CellCrush[c];
+                float dose = MaxShed(press.State);
 
                 Console.Write($"  {thr.ToString("E1", ci),-8} {cap.ToString("E1", ci),-10} "
-                    + $"{rest.Solver.Crushed,4} {(dose / cap).ToString("F2", ci),10}");
+                    + $"{rest.Solver.Crushed,4} {dose.ToString("F2", ci),10}");
                 foreach (float v in new[] { 900f, 1500f, 3000f })
                 {
                     var r = Scenarios.Projectile(t, m, v, 3f);
@@ -603,8 +624,1116 @@ internal static class Program
         Console.WriteLine($"GLOBAL MAX VERTICES PER CELL AT BUILD: {globalMax}");
     }
 
-    private static Material Retune(in Material m, float crush, float cap)
-        => new(m.Name, m.Rho, m.C, m.Strain, m.Chi, m.Yield, m.Duct, crush, cap);
+    /// <summary>Worst shed fraction in the scene, as a share of that cell's material limit.</summary>
+    private static float MaxShed(SimState s)
+    {
+        float worst = 0f;
+        for (int c = 0; c < s.CellCount; c++)
+        {
+            if (s.Dead(c) || s.CellArea0[c] <= 0f) continue;
+            float lim = SimMath.Max(0.01f, s.Mat(c).ShedLimit);
+            float f = (1f - s.CellArea[c] / s.CellArea0[c]) / lim;
+            if (f > worst) worst = f;
+        }
+        return worst;
+    }
+
+    /// <summary>Census of side labels: how many real, crack, sealed and bonded, over time.</summary>
+    private static void SideCensus()
+    {
+        var t = SimTuning.Default;
+        foreach (var (name, r) in new[]
+        {
+            ("collide", Scenarios.Collide(t, Material.Rock, speed: 600f)),
+            ("glass", Scenarios.Projectile(t, Material.Glass)),
+        })
+        {
+            Console.WriteLine($"── {name} ──");
+            Console.WriteLine("   tick    real   crack  sealed  bonded   bodies");
+            for (int i = 0; i <= 200; i++)
+            {
+                if (i % 50 == 0)
+                {
+                    var s = r.State;
+                    int real = 0, crack = 0, seal = 0, bond = 0;
+                    for (int c = 0; c < s.CellCount; c++)
+                    {
+                        if (s.Dead(c)) continue;
+                        int off = s.PolyOff[c];
+                        for (int v = 0; v < s.PolyLen[c]; v++)
+                        {
+                            short k = s.PolyBond[off + v];
+                            if (k == SimState.SideReal) real++;
+                            else if (k == SimState.SideCrack) crack++;
+                            else if (k == SimState.SideSealed) seal++;
+                            else bond++;
+                        }
+                    }
+                    Console.WriteLine($"   {i,4} {real,7} {crack,7} {seal,7} {bond,7} {s.BodyCount,8}");
+                }
+                r.Solver.Step();
+            }
+        }
+    }
+
+    /// <summary>Runs the side-classification audit per tick and reports where it first breaks.</summary>
+    private static void SideAuditRun()
+    {
+        var t = SimTuning.Default;
+        var t170 = SimTuning.Default; t170.ToughnessScale = 1.1f; t170.CarveContinuity = 0.75f; t170.CrushConfine = 0.10f;
+        var t255 = SimTuning.Default; t255.ToughnessScale = 1.7f;
+        var hardSteel = new Material("steel", 7850f, 5900f, 0.020f, 50f, 0.35f, 0.50f, 2.0e6f, 0.01875f, 0.50f, 2.5f);
+        foreach (var (name, r) in new[]
+        {
+            ("collide/rock", Scenarios.Collide(t, Material.Rock, speed: 600f)),
+            ("collide/glass", Scenarios.Collide(t, Material.Glass, speed: 600f)),
+            ("projectile", Scenarios.Projectile(t, Material.Rock)),
+            ("collide/rock g170", Scenarios.Collide(t170, Material.Rock, 600f, 170f)),
+            ("steel/steel g255 2250", Scenarios.Projectile(t255, hardSteel, 2250f, 5.5f, 255f, impactor: hardSteel)),
+            ("steel/rock g900 900", Scenarios.Projectile(t, Material.Rock, 900f, 3f, 900f, impactor: Material.Steel)),
+        })
+        {
+            var rep = new SideAudit.Report();
+            SideAudit.Audit(r.State, rep, 0);
+            SideAudit.AuditGeometry(r.State, rep, 0);
+            {
+                var s2 = r.State; int nReal = 0, nPart = 0, nOther = 0;
+                for (int c = 0; c < s2.CellCount; c++)
+                {
+                    if (s2.Dead(c)) continue;
+                    for (int v = 0; v < s2.PolyLen[c]; v++)
+                    {
+                        var kk = r.Solver.ClassifySide(c, v, out float g0, out float g1);
+                        if (kk == Solver.SideKind.RealSurface) nReal++;
+                        else { nOther++; if (g0 > 1e-3f || g1 < 1f - 1e-3f) nPart++; }
+                    }
+                }
+                Console.WriteLine($"   sides: {nReal} real, {nOther} covered, {nPart} partly exposed");
+                int shown = 0;
+                for (int c = 0; c < s2.CellCount && shown < 4; c++)
+                {
+                    if (s2.Dead(c)) continue;
+                    int off = s2.PolyOff[c];
+                    for (int v = 0; v < s2.PolyLen[c] && shown < 4; v++)
+                    {
+                        var kk = r.Solver.ClassifySide(c, v, out float g0, out float g1);
+                        if (kk == Solver.SideKind.RealSurface) continue;
+                        if (g0 <= 1e-3f && g1 >= 1f - 1e-3f) continue;
+                        short rec = s2.SideTouch[off + v];
+                        int o = s2.TouchOther(rec, c);
+                        int w = v + 1 == s2.PolyLen[c] ? 0 : v + 1;
+                        float sl = SimMath.Hypot(s2.PolyX[off + w] - s2.PolyX[off + v],
+                                                 s2.PolyY[off + w] - s2.PolyY[off + v]);
+                        Console.WriteLine($"      cell {c} side {v} (len {sl:F2}) rec {rec} with {o}: "
+                            + $"covered [{g0:F3},{g1:F3}]  rec span {s2.TouchT1[rec] - s2.TouchT0[rec]:F2}");
+                        shown++;
+                    }
+                }
+            }
+            Console.WriteLine($"── {name} — at BUILD: {rep}");
+
+            var run = new SideAudit.Report();
+            for (int i = 1; i <= 200; i++)
+            {
+                r.Solver.Step();
+                SideAudit.Audit(r.State, run, i);
+                if (i % 100 == 0) Console.WriteLine($"   tick {i,3}: {FalseSurface(r, out int part)} false, {part} partial"
+                    + $", clips {r.Solver.CarveClips}, simplifications {r.Solver.CarveSimplifications}"
+                    + $", refused {r.Solver.CarveRefused}");
+            }
+            Console.WriteLine($"   over 200 ticks: {run}");
+            if (run.FirstUnlinked != null) Console.WriteLine($"   first unlinked: {run.FirstUnlinked}");
+        }
+    }
+
+    /// <summary>
+    /// Counts what the VIEW would draw as real surface with material actually across it — exactly
+    /// the classification the renderer uses, probed geometrically.
+    /// </summary>
+    private static int FalseSurface(Scenarios.Result r, out int partial)
+    {
+        SimState s = r.State;
+        int bad = 0; partial = 0;
+        for (int c = 0; c < s.CellCount; c++)
+        {
+            if (s.Dead(c)) continue;
+            int off = s.PolyOff[c], len = s.PolyLen[c];
+            if (len < 3) continue;
+            float probe = SimMath.Max(0.05f, s.CellRad[c] * 0.03f);
+
+            for (int v = 0; v < len; v++)
+            {
+                var kind = r.Solver.ClassifySide(c, v, out float f0, out float f1);
+                bool anyExposed = kind == Solver.SideKind.RealSurface
+                                  || f0 > 1e-3f || f1 < 1f - 1e-3f;
+                if (!anyExposed) continue;
+                if (kind != Solver.SideKind.RealSurface) partial++;
+
+                // Probe the midpoint of an exposed span.
+                float a0 = kind == Solver.SideKind.RealSurface ? 0f : (f0 > 1e-3f ? 0f : f1);
+                float a1 = kind == Solver.SideKind.RealSurface ? 1f : (f0 > 1e-3f ? f0 : 1f);
+                float mid = 0.5f * (a0 + a1);
+
+                int w = v + 1 == len ? 0 : v + 1;
+                float x0 = s.PolyX[off + v], y0 = s.PolyY[off + v];
+                float x1 = s.PolyX[off + w], y1 = s.PolyY[off + w];
+                float dx = x1 - x0, dy = y1 - y0;
+                float dl = SimMath.Hypot(dx, dy);
+                if (dl < 1e-4f) continue;
+                float px = s.CellRx[c] + x0 + dx * mid + (dy / dl) * probe;
+                float py = s.CellRy[c] + y0 + dy * mid - (dx / dl) * probe;
+
+                if (Covered(s, px, py, s.CellBody[c], c)) bad++;
+            }
+        }
+        return bad;
+    }
+
+    private static bool Covered(SimState s, float px, float py, int body, int skip)
+    {
+        for (int o = 0; o < s.CellCount; o++)
+        {
+            if (o == skip || s.Dead(o) || s.CellBody[o] != body) continue;
+            int off = s.PolyOff[o], len = s.PolyLen[o];
+            if (len < 3) continue;
+            float qx = px - s.CellRx[o], qy = py - s.CellRy[o];
+            if (SimMath.Hypot(qx, qy) > s.CellRad[o]) continue;
+            bool inside = true;
+            for (int v = 0; v < len && inside; v++)
+            {
+                int w = v + 1 == len ? 0 : v + 1;
+                float ax = s.PolyX[off + v], ay = s.PolyY[off + v];
+                float bx = s.PolyX[off + w], by = s.PolyY[off + w];
+                inside = (bx - ax) * (qy - ay) - (by - ay) * (qx - ax) >= -1e-3f;
+            }
+            if (inside) return true;
+        }
+        return false;
+    }
+
+    /// <summary>One controlled carve, with every side's classification before and after.</summary>
+    private static void CarveTrace()
+    {
+        var r = Scenarios.Collide(SimTuning.Default, Material.Rock, speed: 0f);
+        SimState s = r.State;
+
+        // An interior-ish cell with several bonded sides.
+        int target = -1;
+        for (int c = 0; c < s.CellCount && target < 0; c++)
+        {
+            int covered = 0;
+            for (int v = 0; v < s.PolyLen[c]; v++)
+                if (r.Solver.ClassifySide(c, v, out _, out _) != Solver.SideKind.RealSurface) covered++;
+            if (covered >= 4) target = c;
+        }
+        Console.WriteLine($"cell {target}, radius {s.CellRad[target]:F2}, {s.PolyLen[target]} sides");
+
+        void Dump(string when)
+        {
+            Console.WriteLine($"  ── {when} ──");
+            int off = s.PolyOff[target], len = s.PolyLen[target];
+            for (int v = 0; v < len; v++)
+            {
+                int w = v + 1 == len ? 0 : v + 1;
+                float sl = SimMath.Hypot(s.PolyX[off + w] - s.PolyX[off + v],
+                                         s.PolyY[off + w] - s.PolyY[off + v]);
+                var k = r.Solver.ClassifySide(target, v, out float f0, out float f1);
+                short rec = s.SideTouch[off + v];
+                string span = rec >= 0 && rec < s.TouchCount && s.TouchA[rec] >= 0
+                    ? $"rec {rec} [{s.TouchT0[rec]:F2},{s.TouchT1[rec]:F2}]" : "no record";
+                Console.WriteLine($"    side {v}: len {sl,6:F2}  {k,-12} covered [{f0:F3},{f1:F3}]  {span}");
+            }
+        }
+
+        Dump("before");
+        // Carve along +x, taking a slab off that side.
+        float removed = r.Solver.CarveCellByArea(target, 1f, 0f, 30f);
+        Console.WriteLine($"  carved {removed:F2} area along +x");
+        Dump("after");
+
+        // The neighbour across record 0 — its side is untouched, but part of it now faces the
+        // carve face and should read as exposed. THIS is the copy the carved cell cannot see.
+        int nb = s.TouchA[0] == target ? s.TouchB[0] : s.TouchA[0];
+        Console.WriteLine($"  ── neighbour {nb} across record 0 ──");
+        int noff = s.PolyOff[nb], nlen = s.PolyLen[nb];
+        for (int v = 0; v < nlen; v++)
+        {
+            if (s.SideTouch[noff + v] != 0) continue;
+            int w = v + 1 == nlen ? 0 : v + 1;
+            float sl = SimMath.Hypot(s.PolyX[noff + w] - s.PolyX[noff + v],
+                                     s.PolyY[noff + w] - s.PolyY[noff + v]);
+            var k = r.Solver.ClassifySide(nb, v, out float f0, out float f1);
+            Console.WriteLine($"    side {v}: len {sl,6:F2}  {k,-12} covered [{f0:F3},{f1:F3}]"
+                + $"  -> covered {sl * (f1 - f0),6:F2}, exposed {sl * (1f - (f1 - f0)),6:F2}");
+        }
+    }
+
+    /// <summary>Finds the tick a side first goes falsely-surface, and dumps its state either side.</summary>
+    private static void Tick69(string[] args)
+    {
+        int stop = ArgInt(args, "--at", 69);
+        ProbeDist = ArgFloat(args, "--probe", 0.03f);
+        Console.WriteLine($"probe = {ProbeDist:F4} x cell radius");
+        var r = Scenarios.Collide(SimTuning.Default, Material.Rock, 600f, 170f);
+        SimState s = r.State;
+
+        var wasFalse = new System.Collections.Generic.HashSet<long>();
+        float[] t0 = new float[4096], t1 = new float[4096];
+        int[] ta = new int[4096], tb = new int[4096];
+        short[] tbond = new short[4096];
+
+        for (int tick = 1; tick <= stop; tick++)
+        {
+            for (int i = 0; i < s.TouchCount && i < 4096; i++)
+            { t0[i] = s.TouchT0[i]; t1[i] = s.TouchT1[i]; ta[i] = s.TouchA[i]; tb[i] = s.TouchB[i]; tbond[i] = s.TouchBond[i]; }
+
+            r.Solver.Step();
+
+            var now = FalseSides(r);
+            foreach (long key in now)
+            {
+                if (!wasFalse.Add(key)) continue;
+                int c = (int)(key >> 20), v = (int)(key & 0xFFFFF);
+                if (tick < stop) continue;
+                int off = s.PolyOff[c], len = s.PolyLen[c];
+                short rec = s.SideTouch[off + v];
+                int w = v + 1 == len ? 0 : v + 1;
+                float sl = SimMath.Hypot(s.PolyX[off + w] - s.PolyX[off + v],
+                                         s.PolyY[off + w] - s.PolyY[off + v]);
+                var kind = r.Solver.ClassifySide(c, v, out float f0, out float f1);
+                Console.WriteLine($"tick {tick}: cell {c} (body {s.CellBody[c]}, {len} sides) side {v} "
+                    + $"len {sl:F2} -> {kind} covered [{f0:F3},{f1:F3}]");
+                if (rec >= 0 && rec < s.TouchCount)
+                    Console.WriteLine($"           rec {rec}: A={s.TouchA[rec]} B={s.TouchB[rec]} "
+                        + $"bond={s.TouchBond[rec]} span [{s.TouchT0[rec]:F2},{s.TouchT1[rec]:F2}]  "
+                        + $"BEFORE A={ta[rec]} B={tb[rec]} bond={tbond[rec]} span [{t0[rec]:F2},{t1[rec]:F2}]");
+                else
+                    Console.WriteLine($"           SideTouch = {rec} (no record)");
+
+            }
+        }
+        Console.WriteLine("no new false surface found");
+    }
+
+    private static System.Collections.Generic.HashSet<long> FalseSides(Scenarios.Result r)
+    {
+        SimState s = r.State;
+        var set = new System.Collections.Generic.HashSet<long>();
+        for (int c = 0; c < s.CellCount; c++)
+        {
+            if (s.Dead(c)) continue;
+            int off = s.PolyOff[c], len = s.PolyLen[c];
+            if (len < 3) continue;
+            float probe = ProbeDist * SimMath.Max(1f, s.CellRad[c]);
+            for (int v = 0; v < len; v++)
+            {
+                var kind = r.Solver.ClassifySide(c, v, out float f0, out float f1);
+                if (kind != Solver.SideKind.RealSurface && f0 <= 1e-3f && f1 >= 1f - 1e-3f) continue;
+                int w = v + 1 == len ? 0 : v + 1;
+                float x0 = s.PolyX[off + v], y0 = s.PolyY[off + v];
+                float dx = s.PolyX[off + w] - x0, dy = s.PolyY[off + w] - y0;
+                float dl = SimMath.Hypot(dx, dy);
+                if (dl < 1e-4f) continue;
+                float mid = kind == Solver.SideKind.RealSurface ? 0.5f
+                          : (f0 > 1e-3f ? 0.5f * f0 : 0.5f * (1f + f1));
+                float px = s.CellRx[c] + x0 + dx * mid + (dy / dl) * probe;
+                float py = s.CellRy[c] + y0 + dy * mid - (dx / dl) * probe;
+                if (Covered(s, px, py, s.CellBody[c], c)) set.Add(((long)c << 20) | (uint)v);
+            }
+        }
+        return set;
+    }
+
+    /// <summary>Per-tick carve census: how much each cell lost, and how scattered the directions were.</summary>
+    private static void NormalSpread(string[] args)
+    {
+        int at = ArgInt(args, "--at", 36);
+        var r = Scenarios.Collide(SimTuning.Default, Material.Rock, 600f, 170f);
+        SimState s = r.State;
+        r.Solver.CarveLogging = true;
+
+        for (int tick = 1; tick <= at; tick++)
+        {
+            r.Solver.CarveLogCount = 0;
+            r.Solver.Step();
+            if (tick < at - 1) continue;
+
+            int n = r.Solver.CarveLogCount;
+            Console.WriteLine($"── tick {tick}: {n} clips ──");
+
+            // group by cell
+            var seen = new System.Collections.Generic.HashSet<int>();
+            for (int i = 0; i < n; i++)
+            {
+                int c = r.Solver.CarveLogCell[i];
+                if (!seen.Add(c)) continue;
+                float area = 0f, sx = 0f, sy = 0f, mag = 0f;
+                int cuts = 0;
+                for (int j = 0; j < n; j++)
+                {
+                    if (r.Solver.CarveLogCell[j] != c) continue;
+                    float a = r.Solver.CarveLogArea[j];
+                    area += a; cuts++;
+                    sx += r.Solver.CarveLogNx[j] * a; sy += r.Solver.CarveLogNy[j] * a; mag += a;
+                }
+                float coh = mag > 1e-9f ? SimMath.Hypot(sx, sy) / mag : 0f;
+                float shed = s.CellArea0[c] > 0f ? 1f - s.CellArea[c] / s.CellArea0[c] : 0f;
+                if (area < 0.5f) continue;
+                Console.WriteLine($"   cell {c,4}: {cuts,2} cuts, area {area,7:F2} "
+                    + $"({100f * area / SimMath.Max(1f, s.CellArea0[c]),5:F1}% of build), "
+                    + $"direction coherence {coh:F2}, total shed {100f * shed,5:F1}%");
+            }
+        }
+    }
+
+    private static void TraceOneCell(string[] args)
+    {
+        int cell = ArgInt(args, "--cell", 562);
+        int from = ArgInt(args, "--from", 30), to = ArgInt(args, "--to", 38);
+        var r = Scenarios.Collide(SimTuning.Default, Material.Rock, 600f, 170f);
+        SimState s = r.State;
+        r.Solver.TraceSink = Console.WriteLine;
+
+        for (int tick = 1; tick <= to; tick++)
+        {
+            r.Solver.TraceCell = tick >= from ? cell : -1;
+            if (tick >= from)
+                Console.WriteLine($"── tick {tick}  body {s.CellBody[cell]}  "
+                    + $"area {s.CellArea[cell]:F1}/{s.CellArea0[cell]:F1}  "
+                    + $"shed {100f * (1f - s.CellArea[cell] / SimMath.Max(1f, s.CellArea0[cell])):F1}%  "
+                    + $"sides {s.PolyLen[cell]}  dead {s.Dead(cell)}");
+            r.Solver.Step();
+        }
+    }
+
+    /// <summary>State of one cell pair at a given tick, swept over the continuity knob.</summary>
+    private static void TracePair(string[] args)
+    {
+        int ca = ArgInt(args, "--a", 455), cb = ArgInt(args, "--b", 474);
+        int at = ArgInt(args, "--at", 42);
+        foreach (float cont in new[] { 0f, 0.25f, 0.5f, 1f })
+        {
+            var tune = SimTuning.Default;
+            tune.CarveContinuity = cont;
+            var r = Scenarios.Collide(tune, Material.Rock, 600f, 170f);
+            SimState s = r.State;
+            for (int i = 0; i < at; i++) r.Solver.Step();
+
+            int bond = -1;
+            for (int k = 0; k < s.BondCount; k++)
+                if ((s.BondA[k] == ca && s.BondB[k] == cb) || (s.BondA[k] == cb && s.BondB[k] == ca))
+                { bond = k; break; }
+
+            string state = bond < 0 ? "no bond exists"
+                : s.BondBroken[bond] ? $"bond {bond} BROKEN" : $"bond {bond} intact";
+            string bodies = $"bodies {s.CellBody[ca]}/{s.CellBody[cb]}";
+            string shed = $"shed {100f * (1f - s.CellArea[ca] / SimMath.Max(1f, s.CellArea0[ca])):F1}%"
+                        + $"/{100f * (1f - s.CellArea[cb] / SimMath.Max(1f, s.CellArea0[cb])):F1}%";
+            Console.WriteLine($"continuity {cont:F2}: {state}, {bodies}, {shed}, "
+                + $"dead {s.Dead(ca)}/{s.Dead(cb)} | vanished sides {r.Solver.CcVanishTotal},"
+                + $" steered {r.Solver.CcSteered}, shielded {r.Solver.CcShielded}");
+        }
+    }
+
+    private static void CarveCensus(string[] args)
+    {
+        int ticks = ArgInt(args, "--ticks", 200);
+        bool loopCfg = Array.IndexOf(args, "--loopcfg") >= 0;
+        foreach (float minArea in loopCfg ? new[] { 0.005f } : new[] { 0f, 0.0025f, 0.005f, 0.01f, 0.02f })
+        {
+            var tune = SimTuning.Default;
+            tune.CarveMinArea = minArea;
+            if (loopCfg) { tune.ToughnessScale = 1.1f; tune.CarveContinuity = 0.75f; tune.CrushConfine = 0.10f; }
+            var r = Scenarios.Collide(tune, Material.Rock, 600f, 170f);
+            var cen = new Solver.CarveCensus();
+            r.Solver.Census = cen;
+            if (loopCfg) r.Solver.DentProbe = msg => Console.WriteLine("   probe: " + msg);
+            float peakOv = 0f;
+            for (int i = 0; i < ticks; i++)
+            {
+                r.Solver.Step();
+                if (r.Solver.MaxOverlap > peakOv) peakOv = r.Solver.MaxOverlap;
+            }
+            SimState st = r.State;
+            float shed = 0f, area0 = 0f;
+            for (int c = 0; c < st.CellCount; c++)
+            { area0 += st.CellArea0[c]; shed += st.CellArea0[c] - (st.Dead(c) ? 0f : st.CellArea[c]); }
+
+            Console.WriteLine($"── CarveMinArea {minArea:P2}: clips {r.Solver.CarveClips}, "
+                            + $"vanished {cen.Vanished}, peak overlap {peakOv:F1}px, "
+                            + $"total shed {100f * shed / area0:F1}% of body area");
+            Console.WriteLine($"   carve calls {cen.Calls}, no-surface {cen.NoSurface}");
+            Console.WriteLine($"   direction kept exactly {cen.Unturned}, steered {cen.Calls - cen.NoSurface - cen.Unturned}"
+                            + $" (to a corner shared with a covered side: {cen.SteerToCoveredCorner}, to an open corner: {cen.SteerToOpenCorner})");
+            Console.WriteLine($"   v2 dents: calls {r.Solver.DentCalls}, record ends {r.Solver.DentVertices}, corners {r.Solver.DentCorners}, reclips {r.Solver.DentReclips}, "
+                            + $"records spent {r.Solver.DentSpent}, v1 fallbacks {r.Solver.DentFallback}; v1 clips {r.Solver.CarveClips}");
+            Console.WriteLine($"   dent calls that slid nothing: no exposed end at all {r.Solver.DentNoOpenEnd}, all out of reach {r.Solver.DentOutOfReach}");
+            Console.WriteLine($"   propagation: record ends exposed {r.Solver.DentExposed}, vertex splits {r.Solver.DentSplits}, budget refusals {r.Solver.DentBudgetRefused}");
+            Console.WriteLine($"   area removed per unit depth (in CellRad): {Hist(r.Solver.DentWidth, "0", "2R+")}");
+            Console.WriteLine($"   removed / target A*                     : {Hist(r.Solver.DentHit, "0", "2+")}   (guard bound {r.Solver.DentGuarded}, insensitive {r.Solver.DentInsensitive})");
+            Console.WriteLine($"   total removed {r.Solver.DentSumRemoved:F0} vs v1's target depth·perim/4 {r.Solver.DentSumDepthLcw:F0} (ratio {r.Solver.DentSumRemoved / System.Math.Max(1e-9, r.Solver.DentSumDepthLcw):F2})");
+            Console.WriteLine($"   CellRad/4 cap bound on {r.Solver.DbgCapHit} of {r.Solver.DbgCalls} carve calls; when it bound, uncapped depth averaged {r.Solver.DbgCapExcess / System.Math.Max(1, r.Solver.DbgCapHit):F1}x the cap");
+            Console.WriteLine($"   nearest exposed end (in R)    : {Hist(r.Solver.DentNearest, "0", "2R+")}");
+            Console.WriteLine($"   BondedGuard (half-BondLen) moved the plane on {cen.GuardClamped} clips");
+            Console.WriteLine($"   shield: clamped {cen.ShieldClamped} clips, refused {cen.ShieldRefused}; clamped clips wanted "
+                            + $"{cen.ClampedWant:F0} area and removed {cen.ClampedArea:F0} ({100.0 * cen.ClampedArea / System.Math.Max(1e-9, cen.TotalRemoved):F1}% of all removed)");
+            Console.WriteLine($"   cos of rotation when steered  : {Hist(cen.Turn, "0", "1")}");
+            Console.WriteLine($"   removed area / cell area (%)  : {Hist(cen.AreaFrac, "0%", "10%+")}");
+            Console.WriteLine($"   cut depth (px)                : {Hist(cen.DepthPx, "0", "0.5px+")}");
+            Console.WriteLine($"   vanished sides {cen.Vanished}, of which the direction had been steered: {cen.VanishAfterTurn}");
+            Console.WriteLine($"   |cos| clip vs vanished bisect : {Hist(cen.VanishCos, "0", "1")}");
+            Console.WriteLine($"   span left on retired adjacency: {Hist(cen.VanishSpan, "0", "5px+")}");
+            Console.WriteLine();
+        }
+    }
+
+    private static string Hist(int[] b, string lo, string hi)
+    {
+        int tot = 0; foreach (int v in b) tot += v;
+        if (tot == 0) return "(none)";
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < b.Length; i++) sb.Append($"{100.0 * b[i] / tot,5:F1}");
+        return sb + $"   [{lo} .. {hi}]  n={tot}";
+    }
+
+    private static void StretchProbe(string[] args)
+    {
+        foreach (bool shield in new[] { false, true })
+        foreach (float minArea in new[] { 0f, 0.005f })
+        {
+            var tune = SimTuning.Default;
+            tune.CarveMinArea = minArea;
+            foreach (var (name, mk) in new (string, Func<SimTuning, Scenarios.Result>)[]
+            {
+                ("projectile", tt => Scenarios.Projectile(tt, Material.Rock)),
+                ("collide",    tt => Scenarios.Collide(tt, Material.Rock, 600f, 170f)),
+            })
+            {
+                var r = mk(tune);
+                r.Solver.CarveShield = shield;
+                float peakStretch = 0f, peakOv = 0f;
+                for (int i = 0; i < 200; i++)
+                {
+                    r.Solver.Step();
+                    SimState s = r.State;
+                    for (int k = 0; k < s.BondCount; k++)
+                    {
+                        if (s.BondBroken[k]) continue;
+                        float st = SimMath.Abs(s.BondSn[k]) / SimMath.Max(1e-3f, s.BondLen[k]);
+                        if (st > peakStretch) peakStretch = st;
+                    }
+                    if (r.Solver.MaxOverlap > peakOv) peakOv = r.Solver.MaxOverlap;
+                }
+                Console.WriteLine($"shield={shield,-5} minArea={minArea:P2} {name,-10}: "
+                    + $"peak stretch {100f * peakStretch,9:F1}%  peak overlap {peakOv,5:F1}px  "
+                    + $"shielded {r.Solver.CcShielded}");
+            }
+        }
+    }
+
+    /// <summary>Carving-created internal surface: collide rock, grain 170, tough 1.1, cont 0.75, confine 0.10.</summary>
+    /// <summary>Every audit fault present at tick 0, with the geometry behind it.</summary>
+    private static void BuildFaults(string[] args)
+    {
+        foreach (string scene in new[] { "collide", "projectile" })
+        {
+            var r = Scene(scene, SimTuning.Default);
+            SimState s = r.State;
+            var rep = new SideAudit.Report { All = new System.Collections.Generic.List<string>() };
+            SideAudit.Audit(s, rep, 0);
+            Console.WriteLine($"── {scene}: {rep.Total} faults at build");
+            foreach (string line in rep.All!) Console.WriteLine("   " + line);
+            foreach (string line in rep.All!)
+            {
+                // pull "cell N side V" and "record R"
+                var m = System.Text.RegularExpressions.Regex.Match(line, @"cell (\d+) side (\d+).*record (\d+)");
+                var m2 = System.Text.RegularExpressions.Regex.Match(line, @"record (\d+) \((\d+) body \d+, (\d+)");
+                int rec = m.Success ? int.Parse(m.Groups[3].Value) : m2.Success ? int.Parse(m2.Groups[1].Value) : -1;
+                if (rec < 0) continue;
+                int a = s.TouchA[rec], b = s.TouchB[rec];
+                Console.WriteLine($"   record {rec}: ({a},{b}) bond {s.TouchBond[rec]} span [{s.TouchT0[rec]:F3},{s.TouchT1[rec]:F3}] open {s.TouchOpen[rec]}");
+                foreach (int c in new[] { a, b })
+                {
+                    int off = s.PolyOff[c], len = s.PolyLen[c];
+                    for (int v = 0; v < len; v++)
+                    {
+                        int w = v + 1 == len ? 0 : v + 1;
+                        float dx = s.PolyX[off + w] - s.PolyX[off + v], dy = s.PolyY[off + w] - s.PolyY[off + v];
+                        var kind = r.Solver.ClassifySide(c, v, out float f0, out float f1);
+                        Console.WriteLine($"      cell {c} side {v}: bond {s.PolyBond[off + v],4} rec {s.SideTouch[off + v],4} {kind,-11} "
+                            + $"cover [{f0:F3},{f1:F3}] len {SimMath.Hypot(dx, dy):F3}");
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>A sample of OpenSideIsCovered faults on collide/rock, with the cells behind them.</summary>
+    private static void OpenCoveredSample(string[] args)
+    {
+        int at = ArgInt(args, "--at", 100), show = ArgInt(args, "--show", 4);
+        var r = Scenarios.Collide(SimTuning.Default, Material.Rock, 600f);
+        SimState s = r.State;
+        for (int i = 0; i < at; i++) r.Solver.Step();
+        var rep = new SideAudit.Report { All = new System.Collections.Generic.List<string>() };
+        SideAudit.Audit(s, rep, at);
+        int shown = 0, total = 0, lone = 0, small = 0;
+        var seen = new System.Collections.Generic.HashSet<int>();
+        foreach (string line in rep.All!)
+        {
+            if (!line.StartsWith("OpenSideIsCovered")) continue;
+            total++;
+            var m = System.Text.RegularExpressions.Regex.Match(line, @"cell (\d+) side (\d+) is open but cell (\d+)");
+            int c = int.Parse(m.Groups[1].Value), v = int.Parse(m.Groups[2].Value), o = int.Parse(m.Groups[3].Value);
+            int b = s.CellBody[c];
+            if (s.BodyCellLen[b] <= 2) lone++;
+            int off = s.PolyOff[c], w = v + 1 == s.PolyLen[c] ? 0 : v + 1;
+            if (SimMath.Hypot(s.PolyX[off + w] - s.PolyX[off + v], s.PolyY[off + w] - s.PolyY[off + v]) < 0.5f) small++;
+            if (shown < show && seen.Add(c))
+            {
+                shown++;
+                Console.WriteLine($"── {line}   (body {b} has {s.BodyCellLen[b]} cells)");
+                DumpCell(r, c); DumpCell(r, o);
+            }
+        }
+        Console.WriteLine($"OpenSideIsCovered at tick {at}: {total}; in bodies of ≤2 cells: {lone}; on sides under 0.5px: {small}");
+    }
+
+    /// <summary>Steel on steel below the fracture threshold: does the surface recede as a dent?</summary>
+    private static void DentProfile(string[] args)
+    {
+        float speed = ArgInt(args, "--speed", 900);
+        int ticks = ArgInt(args, "--ticks", 60);
+        foreach (float dent in new[] { 1.0f, 2.5f, 4.0f })
+        {
+            var steel = new Material("steel", 7850f, 5900f, 0.020f, 50f, 0.35f, 0.50f, 1.0e6f, 0.3f, 0.50f, dent);
+            var r = Scenarios.Projectile(SimTuning.Default, steel, speed, 3f, 180f, impactor: steel);
+            SimState s = r.State;
+            int cells0 = s.CellCount;
+            for (int i = 0; i < ticks; i++) r.Solver.Step();
+
+            int broken = 0; for (int k = 0; k < s.BondCount; k++) if (s.BondBroken[k]) broken++;
+            int dead = 0; for (int c = 0; c < s.CellCount; c++) if (s.Dead(c)) dead++;
+
+            // Shed fraction of the target's cells, binned by distance from the most-eroded cell.
+            int worst = -1; float worstShed = 0f;
+            for (int c = 0; c < s.CellCount; c++)
+            {
+                if (s.Dead(c) || s.CellBody[c] != 0) continue;
+                float sh = 1f - s.CellArea[c] / s.CellArea0[c];
+                if (sh > worstShed) { worstShed = sh; worst = c; }
+            }
+            var bins = new float[8]; var cnt = new int[8];
+            if (worst >= 0)
+                for (int c = 0; c < s.CellCount; c++)
+                {
+                    if (s.Dead(c) || s.CellBody[c] != 0) continue;
+                    float d = SimMath.Hypot(s.CellRx[c] - s.CellRx[worst], s.CellRy[c] - s.CellRy[worst]) / s.CellRad[worst];
+                    int b = (int)SimMath.Min(7f, d);
+                    bins[b] += 1f - s.CellArea[c] / s.CellArea0[c]; cnt[b]++;
+                }
+            var sb = new System.Text.StringBuilder();
+            for (int b = 0; b < 8; b++) sb.Append(cnt[b] > 0 ? $"{100f * bins[b] / cnt[b],5:F1}" : "    -");
+            Console.WriteLine($"dent {dent:F1}: bodies {s.BodyCount}, bonds broken {broken}, cells dead {dead}, "
+                + $"ledger {LedgerPct(r.Solver):F1}%; mean shed % by distance (in cell radii) from the deepest point: {sb}");
+            Console.WriteLine($"          cap bound on {r.Solver.DbgCapHit} of {r.Solver.DbgCalls} calls, uncapped depth avg {r.Solver.DbgCapExcess / System.Math.Max(1, r.Solver.DbgCapHit):F1}x cap; "
+                + $"area/depth (R): {Hist(r.Solver.DentWidth, "0", "2R+")}");
+        }
+    }
+
+    private static float LedgerPct(Solver solver)
+    {
+        solver.TotalMomentum(out float px, out float py);
+        float live = SimMath.Hypot(px, py), led = SimMath.Hypot(solver.ExportedPx, solver.ExportedPy);
+        return live + led < 1f ? 0f : 100f * led / (live + led);
+    }
+
+    /// <summary>Projectile steel-vs-rock, defaults: the 62/49/35 vertex between ticks 15 and 16.</summary>
+    private static void TriRepro(string[] args)
+    {
+        int[] cells = { ArgInt(args, "--a", 62), ArgInt(args, "--b", 49), ArgInt(args, "--c", 35) };
+        int from = ArgInt(args, "--from", 15), to = ArgInt(args, "--to", 16);
+        var r = Scenarios.Projectile(SimTuning.Default, Material.Rock, 900f, 3f, 900f, impactor: Material.Steel);
+        SimState s = r.State;
+        bool Watched(int c) => Array.IndexOf(cells, c) >= 0;
+
+        int tk = 0;
+        r.Solver.RetireSink = (rec, a, b, why) => { if (Watched(a) || Watched(b)) Console.WriteLine($"   tick {tk}: record {rec} ({a},{b}) retired: {why}"); };
+        for (int tick = 0; tick <= to; tick++)
+        {
+            tk = tick;
+            if (tick >= from)
+            {
+                Console.WriteLine($"── start of tick {tick}");
+                foreach (int c in cells) DumpCell(r, c);
+                for (int k = 0; k < s.TouchCount; k++)
+                    if (s.TouchA[k] >= 0 && Watched(s.TouchA[k]) && Watched(s.TouchB[k]))
+                        Console.WriteLine($"   record {k}: ({s.TouchA[k]},{s.TouchB[k]}) bond {s.TouchBond[k]} span [{s.TouchT0[k]:F3},{s.TouchT1[k]:F3}] built [{s.TouchS0[k]:F3},{s.TouchS1[k]:F3}] open {s.TouchOpen[k]}");
+                r.Solver.TraceCell = cells[0];
+                r.Solver.TraceSink = m => { if (m.Contains("dent")) Console.WriteLine(m); };
+            }
+            r.Solver.Step();
+            r.Solver.TraceCell = -1; r.Solver.TraceSink = null;
+        }
+        Console.WriteLine($"── end of tick {to}");
+        foreach (int c in cells) DumpCell(r, c);
+        for (int k = 0; k < s.TouchCount; k++)
+            if (s.TouchA[k] >= 0 && Watched(s.TouchA[k]) && Watched(s.TouchB[k]))
+                Console.WriteLine($"   record {k}: ({s.TouchA[k]},{s.TouchB[k]}) bond {s.TouchBond[k]} span [{s.TouchT0[k]:F3},{s.TouchT1[k]:F3}] built [{s.TouchS0[k]:F3},{s.TouchS1[k]:F3}] open {s.TouchOpen[k]}");
+    }
+
+    /// <summary>Every LengthDisagreement over a run, with what kind of cells are involved.</summary>
+    private static void LengthDisagreements(string[] args)
+    {
+        foreach (string scene in new[] { "glass", "projectile" })
+        {
+            var r = Scene(scene, SimTuning.Default);
+            SimState s = r.State;
+            int total = 0, v1cells = 0, shown = 0;
+            for (int tick = 1; tick <= 200; tick++)
+            {
+                r.Solver.Step();
+                var rep = new SideAudit.Report { All = new System.Collections.Generic.List<string>() };
+                SideAudit.Audit(s, rep, tick);
+                foreach (string line in rep.All!)
+                {
+                    if (!line.StartsWith("LengthDisagreement")) continue;
+                    total++;
+                    var m = System.Text.RegularExpressions.Regex.Match(line, @"bond (\d+) \((\d+),(\d+)\) is ([0-9.]+) long in A but ([0-9.]+)");
+                    int k = int.Parse(m.Groups[1].Value), a = int.Parse(m.Groups[2].Value), b = int.Parse(m.Groups[3].Value);
+                    bool aV1 = CountRecords(s, a) < 2, bV1 = CountRecords(s, b) < 2;
+                    if (aV1 || bV1) v1cells++;
+                    int rec = -1; for (int q = 0; q < s.TouchCount; q++) if (s.TouchBond[q] == k) { rec = q; break; }
+                    if (shown < 3) { shown++; Console.WriteLine($"── {scene} tick {tick}: {line}   [records: {a}→{CountRecords(s, a)}, {b}→{CountRecords(s, b)}; rec {rec} span {(rec >= 0 ? s.TouchLen(rec) : -1f):F3} open {(rec >= 0 ? s.TouchOpen[rec] : 0)}]"); }
+                }
+            }
+            Console.WriteLine($"{scene}: {total} LengthDisagreement over 200 ticks; {v1cells} involve a cell on the v1 path (<2 records)");
+        }
+    }
+
+    private static int CountRecords(SimState s, int c)
+    {
+        int off = s.PolyOff[c], len = s.PolyLen[c], n = 0;
+        for (int v = 0; v < len; v++)
+        {
+            short r = s.SideTouch[off + v];
+            if (r < 0 || s.TouchA[r] < 0) continue;
+            bool dup = false; for (int q = 0; q < v && !dup; q++) dup = s.SideTouch[off + q] == r;
+            if (!dup) n++;
+        }
+        return n;
+    }
+
+    /// <summary>Grain 255, steel-steel, 2250 px/s, mass 5.5, toughness 1.7, crush thr x2, crush energy x0.0625.</summary>
+    private static void FiveRepro(string[] args)
+    {
+        int[] cells = { 291, 292, 267, 268, 243 };
+        int from = ArgInt(args, "--from", 7), to = ArgInt(args, "--to", 8);
+        var tune = SimTuning.Default;
+        tune.ToughnessScale = 1.7f;
+        var steel = new Material("steel", 7850f, 5900f, 0.020f, 50f, 0.35f, 0.50f, 1.0e6f * 2.0f, 0.3f * 0.0625f, 0.50f, 2.5f);
+        var r = Scenarios.Projectile(tune, steel, 2250f, 5.5f, 255f, impactor: steel);
+        SimState s = r.State;
+        bool Watched(int c) => Array.IndexOf(cells, c) >= 0;
+
+        int tk = 0;
+        r.Solver.RetireSink = (rec, a, b, why) => { if (Watched(a) || Watched(b)) Console.WriteLine($"   tick {tk}: record {rec} ({a},{b}) retired: {why}"); };
+        void Records()
+        {
+            for (int k = 0; k < s.TouchCount; k++)
+                if (s.TouchA[k] >= 0 && Watched(s.TouchA[k]) && Watched(s.TouchB[k]))
+                    Console.WriteLine($"   record {k}: ({s.TouchA[k]},{s.TouchB[k]}) bond {s.TouchBond[k]} span [{s.TouchT0[k]:F3},{s.TouchT1[k]:F3}] built [{s.TouchS0[k]:F3},{s.TouchS1[k]:F3}] open {s.TouchOpen[k]}");
+        }
+        int[] watchRecs = { 716, 717, 784, 786, 788, 854 };
+        var lastOpen = new byte[s.TouchCount];
+        for (int k = 0; k < s.TouchCount; k++) lastOpen[k] = s.TouchOpen[k];
+        Console.WriteLine("── at build:"); Records();
+        for (int tick = 0; tick <= to; tick++)
+        {
+            tk = tick;
+            for (int k = 0; k < s.TouchCount; k++)
+                if (Array.IndexOf(watchRecs, k) >= 0 && s.TouchOpen[k] != lastOpen[k])
+                { Console.WriteLine($"   tick {tick} start: record {k} ({s.TouchA[k]},{s.TouchB[k]}) open {lastOpen[k]} -> {s.TouchOpen[k]}"); lastOpen[k] = s.TouchOpen[k]; }
+            if (tick >= from)
+            {
+                Console.WriteLine($"── start of tick {tick}");
+                foreach (int c in cells) DumpCell(r, c);
+                Records();
+                r.Solver.TraceCell = cells[0];
+                r.Solver.TraceSink = m => { if (m.Contains("dent")) Console.WriteLine(m); };
+            }
+            r.Solver.Step();
+            r.Solver.TraceCell = -1; r.Solver.TraceSink = null;
+        }
+        Console.WriteLine($"── end of tick {to}");
+        foreach (int c in cells) DumpCell(r, c);
+        Records();
+        var rep = new SideAudit.Report { All = new System.Collections.Generic.List<string>() };
+        SideAudit.Audit(s, rep, to);
+        foreach (string line in rep.All!) if (cells.Any(c => line.Contains($" {c} ") || line.Contains($"({c},") || line.Contains($",{c})"))) Console.WriteLine("   FAULT " + line);
+    }
+
+    private static void ZeroLengthSample(string[] args)
+    {
+        var r = Array.IndexOf(args, "--steelrock") >= 0
+            ? Scenarios.Projectile(SimTuning.Default, Material.Rock, 900f, 3f, 900f, impactor: Material.Steel)
+            : Scenarios.Collide(new SimTuning { }, Material.Rock, 600f, 170f);
+        if (Array.IndexOf(args, "--steelrock") < 0) { var t170 = SimTuning.Default; t170.ToughnessScale = 1.1f; t170.CarveContinuity = 0.75f; t170.CrushConfine = 0.10f; r = Scenarios.Collide(t170, Material.Rock, 600f, 170f); }
+        SimState s = r.State;
+        int shown = 0;
+        for (int tick = 1; tick <= 200 && shown < 3; tick++)
+        {
+            r.Solver.Step();
+            var rep = new SideAudit.Report { All = new System.Collections.Generic.List<string>() };
+            SideAudit.Audit(s, rep, tick);
+            foreach (string line in rep.All!)
+            {
+                if (!line.StartsWith("ZeroLengthSurfaceSide")) continue;
+                int c = int.Parse(System.Text.RegularExpressions.Regex.Match(line, @"cell (\d+)").Groups[1].Value);
+                Console.WriteLine($"── tick {tick}: {line}   (records {CountRecords(s, c)}, body {s.CellBody[c]} has {s.BodyCellLen[s.CellBody[c]]} cells)");
+                DumpCell(r, c);
+                if (++shown >= 3) break;
+            }
+        }
+    }
+
+    private static void Cell36(string[] args)
+    {
+        var r = Scenarios.Projectile(SimTuning.Default, Material.Rock, 900f, 3f, 900f, impactor: Material.Steel);
+        SimState s = r.State; int c = 36;
+        r.Solver.RetireSink = (rec, a, b, why) => { if (a == c || b == c) Console.WriteLine($"      record {rec} ({a},{b}) retired: {why}"); };
+        for (int tick = 0; tick <= 21; tick++)
+        {
+            int off = s.PolyOff[c], len = s.PolyLen[c];
+            var sb = new System.Text.StringBuilder($"tick {tick,2}: len {len} area {s.CellArea[c]:F1} sides:");
+            for (int v = 0; v < len; v++)
+            {
+                int w = v + 1 == len ? 0 : v + 1;
+                float l = SimMath.Hypot(s.PolyX[off + w] - s.PolyX[off + v], s.PolyY[off + w] - s.PolyY[off + v]);
+                short pb = s.PolyBond[off + v], rec = s.SideTouch[off + v];
+                string lab = pb == SimState.SideReal ? "REAL" : pb == SimState.SideCrack ? "CRACK" : pb == SimState.SideSealed ? "SEALED" : $"b{pb}";
+                sb.Append($" [{lab}/r{rec} {l:F2}]");
+            }
+            Console.WriteLine(sb.ToString());
+            r.Solver.Step();
+        }
+    }
+
+    private static void VertexKinds(string[] args)
+    {
+        var t170 = SimTuning.Default; t170.ToughnessScale = 1.1f; t170.CarveContinuity = 0.75f; t170.CrushConfine = 0.10f;
+        var r = Scenarios.Collide(t170, Material.Rock, 600f, 170f);
+        SimState s = r.State;
+        foreach (int at in new[] { 0, 50, 100 })
+        {
+            while (s.Tick < at) r.Solver.Step();
+            int[] n = new int[4]; int openEnds = 0;
+            for (int c = 0; c < s.CellCount; c++)
+            {
+                if (s.Dead(c)) continue;
+                for (int v = 0; v < s.PolyLen[c]; v++) n[(int)r.Solver.ClassifyVertex(c, v)]++;
+            }
+            for (int k = 0; k < s.TouchCount; k++)
+                if (s.TouchA[k] >= 0) openEnds += (s.TouchOpen[k] & 1) + ((s.TouchOpen[k] >> 1) & 1);
+            Console.WriteLine($"tick {at,3}: interior {n[0]}, exposed ends {n[1]} (records report {openEnds} open ends → ≤ {2 * openEnds} vertex marks), corners {n[2]}, fixed corners {n[3]}");
+        }
+    }
+
+    /// <summary>Where the momentum goes in a collide: body speeds, live contacts, comminution routing.</summary>
+    private static void MomentumFlow(string[] args)
+    {
+        bool tough = Array.IndexOf(args, "--toughglass") >= 0;
+        foreach (var m in tough ? new[] { Material.Glass } : new[] { Material.Glass, Material.Rock })
+        {
+            var tn = SimTuning.Default; if (tough) { tn.StrainScale = 3f; }
+            if (Array.IndexOf(args, "--crackpush") >= 0) tn.CrackPush = true;
+            var r = Scenarios.Collide(tn, m, 600f, 170f);
+            SimState s = r.State;
+            float v0 = SimMath.Hypot(s.BodyVx[0], s.BodyVy[0]);
+            float m0 = s.BodyM[0];
+            Console.WriteLine($"── {m.Name}: body 0 starts at {v0:F0} px/s, mass {m0:F0}");
+            Console.WriteLine("   tick  body0 v   mass%   bodies  contacts  dead  dust→nbrs  dust→contacts  dust→ledger  ledger%   |Dv| front / back   stretched bonds front / back");
+            float ux0 = s.BodyVx[0] / SimMath.Max(1e-3f, v0), uy0 = s.BodyVy[0] / SimMath.Max(1e-3f, v0);
+            int lastDead = 0;
+            for (int tick = 1; tick <= 60; tick++)
+            {
+                r.Solver.Step();
+                if (tick % 5 != 0) continue;
+                int dead = 0; for (int c = 0; c < s.CellCount; c++) if (s.Dead(c)) dead++;
+                // Stress reaching the back: deviation speed and stretched bonds, front half vs back half of body 0
+                // along its own direction of travel (front = ahead of the body centre).
+                float dvF = 0f, dvB = 0f; int nF = 0, nB = 0, sbF = 0, sbB = 0;
+                SimMath.SinCos(s.BodyRot[0], out float sn, out float cs);
+                for (int c = 0; c < s.CellCount; c++)
+                {
+                    if (s.Dead(c) || s.CellBody[c] != 0) continue;
+                    float wx = s.CellRx[c] * cs - s.CellRy[c] * sn, wy = s.CellRx[c] * sn + s.CellRy[c] * cs;
+                    bool front = wx * ux0 + wy * uy0 > 0f;
+                    float dv = SimMath.Hypot(s.CellDvx[c], s.CellDvy[c]);
+                    if (front) { dvF += dv; nF++; } else { dvB += dv; nB++; }
+                }
+                for (int k = 0; k < s.BondCount; k++)
+                {
+                    if (s.BondBroken[k] || s.CellBody[s.BondA[k]] != 0) continue;
+                    if (SimMath.Abs(s.BondSn[k]) < 0.25f * s.BondS0[k] * SimMath.Max(1f, s.BondLen[k])) continue;   // carrying real load
+                    int c = s.BondA[k];
+                    float wx = s.CellRx[c] * cs - s.CellRy[c] * sn, wy = s.CellRx[c] * sn + s.CellRy[c] * cs;
+                    if (wx * ux0 + wy * uy0 > 0f) sbF++; else sbB++;
+                }
+                Console.WriteLine($"   {tick,4}  {SimMath.Hypot(s.BodyVx[0], s.BodyVy[0]),7:F0}  {100f * s.BodyM[0] / m0,5:F0}%  {s.BodyCount,6}  {r.Solver.ContactCount,8}  {dead,4}  {r.Solver.DustToNeighbours,9}  {r.Solver.DustToContacts,13}  {r.Solver.DustNoNeighbour,11}  {LedgerPct(r.Solver),6:F1}%   {(nF > 0 ? dvF / nF : 0f),6:F1} / {(nB > 0 ? dvB / nB : 0f),-6:F1}   {sbF,5} / {sbB}");
+                lastDead = dead;
+            }
+            Console.WriteLine($"   comminution momentum: to neighbours (impact share) {r.Solver.DustDevMom:F0}, left with mass (rigid share) {r.Solver.DustRigidMom:F0}, "
+                            + $"into contact partners {r.Solver.DustContactMom:F0}, exported (pressing on nothing) {r.Solver.DustLostMom:F0}; body 0 initial momentum {m0 * v0:F0}");
+        }
+    }
+
+    private static string RunSummary(Scenarios.Result r, int ticks)
+    {
+        SimState s = r.State;
+        float peakOv = 0f;
+        for (int i = 0; i < ticks; i++) { r.Solver.Step(); if (r.Solver.MaxOverlap > peakOv) peakOv = r.Solver.MaxOverlap; }
+        int broken = 0; for (int k = 0; k < s.BondCount; k++) if (s.BondBroken[k]) broken++;
+        int dead = 0, live = 0; float shed = 0f, a0 = 0f;
+        for (int c = 0; c < s.CellCount; c++)
+        {
+            a0 += s.CellArea0[c];
+            if (s.Dead(c)) { dead++; shed += s.CellArea0[c]; } else { live++; shed += s.CellArea0[c] - s.CellArea[c]; }
+        }
+        // fastest body that is not one of the two biggest — a fragment's ejection speed
+        int big1 = -1, big2 = -1;
+        for (int b = 0; b < s.BodyCount; b++)
+        {
+            if (big1 < 0 || s.BodyM[b] > s.BodyM[big1]) { big2 = big1; big1 = b; }
+            else if (big2 < 0 || s.BodyM[b] > s.BodyM[big2]) big2 = b;
+        }
+        float vmax = 0f;
+        for (int b = 0; b < s.BodyCount; b++)
+            if (b != big1 && b != big2) vmax = SimMath.Max(vmax, SimMath.Hypot(s.BodyVx[b], s.BodyVy[b]));
+        return $"bodies {s.BodyCount,3}  broken {broken,4}  dead cells {dead,3} ({100f * dead / (dead + live),4:F1}%)  "
+             + $"shed {100f * shed / a0,5:F1}%  peak overlap {peakOv,5:F1}px  fastest fragment {vmax,6:F0} px/s  ledger {LedgerPct(r.Solver),5:F1}%";
+    }
+
+    private static void BiasSweepV2(string[] args)
+    {
+        foreach (float bias in new[] { 0.2f, 0.1f, 0.05f, 0.02f })
+        foreach (string scene in new[] { "collide g170 600", "projectile g900 900" })
+        {
+            var t = SimTuning.Default; t.ContactBias = bias;
+            var r = scene.StartsWith("collide") ? Scenarios.Collide(t, Material.Rock, 600f, 170f)
+                                                : Scenarios.Projectile(t, Material.Rock, 900f, 3f, 900f);
+            Console.WriteLine($"bias {bias:F2}  {scene,-20}: {RunSummary(r, 200)}");
+        }
+    }
+
+    private static void MaterialCensus(string[] args)
+    {
+        if (Array.IndexOf(args, "--glass") >= 0)
+        {
+            // What the v1→v2 change did to the effective rate, and what restores glass's intent.
+            foreach (var (label, m) in new (string, Material)[]
+            {
+                ("glass as is (rate 2.0, crush 4e5)",     Material.Glass),
+                ("rate x0.4 (v1 effective)",              new Material("glass", 2500f, 5500f, 0.008f, 1.05f, 9f, 0f, 4.0e5f, 0.8f, 0.15f, 0.8f)),
+                ("rate x0.4, crush x2",                   new Material("glass", 2500f, 5500f, 0.008f, 1.05f, 9f, 0f, 8.0e5f, 0.8f, 0.15f, 0.8f)),
+                ("rate x0.4, crush x3",                   new Material("glass", 2500f, 5500f, 0.008f, 1.05f, 9f, 0f, 1.2e6f, 0.8f, 0.15f, 0.8f)),
+                ("rock, rate x0.4 (v1 effective)",        new Material("rock", 3000f, 5000f, 0.010f, 90f, 0.95f, 0.02f, 2.5e5f, 0.4f, 0.35f, 1.5f)),
+            })
+            {
+                var r = Scenarios.Collide(SimTuning.Default, m, 600f, 170f);
+                Console.WriteLine($"{label,-34}: {RunSummary(r, 200)}");
+            }
+            return;
+        }
+        foreach (var m in new[] { Material.Rock, Material.Ice, Material.Sandstone, Material.Glass, Material.Steel })
+        {
+            var r = Scenarios.Collide(SimTuning.Default, m, 600f, 170f);
+            Console.WriteLine($"{m.Name,-9} crush {m.Crush:E1} rate {m.CrushRate:F2} shed {m.ShedLimit:F2} dent {m.Dent:F1}: {RunSummary(r, 200)}");
+        }
+    }
+
+    private static void RecordCensus()
+    {
+        foreach (string scene in new[] { "collide", "projectile", "glass", "five" })
+        {
+            var r = scene == "five"
+                ? Scenarios.Projectile(SimTuning.Default, new Material("steel", 7850f, 5900f, 0.020f, 50f, 0.35f, 0.50f, 2.0e6f, 0.01875f, 0.50f, 2.5f), 2250f, 5.5f, 255f,
+                                       impactor: new Material("steel", 7850f, 5900f, 0.020f, 50f, 0.35f, 0.50f, 2.0e6f, 0.01875f, 0.50f, 2.5f))
+                : Scene(scene, SimTuning.Default);
+            SimState s = r.State;
+            int n0 = 0, n1 = 0, n2 = 0, bonded = 0, sealedN = 0, outlineVerts = 0;
+            for (int k = 0; k < s.TouchCount; k++)
+            {
+                int o = (s.TouchOpen[k] & 1) + ((s.TouchOpen[k] >> 1) & 1);
+                if (o == 0) n0++; else if (o == 1) n1++; else n2++;
+                if (s.TouchBond[k] >= 0) bonded++; else sealedN++;
+            }
+            // outline vertices where a free side meets a non-free side, counted per cell
+            for (int c = 0; c < s.CellCount; c++)
+            {
+                int off = s.PolyOff[c], len = s.PolyLen[c];
+                for (int v = 0; v < len; v++)
+                {
+                    int pv = v == 0 ? len - 1 : v - 1;
+                    bool f = s.PolyBond[off + v] == SimState.SideReal, fp = s.PolyBond[off + pv] == SimState.SideReal;
+                    if (f != fp) outlineVerts++;
+                }
+            }
+            int sliv = 0, slivLinked = 0; float shortest = float.MaxValue;
+            for (int c = 0; c < s.CellCount; c++)
+            {
+                int off = s.PolyOff[c], len = s.PolyLen[c];
+                for (int v = 0; v < len; v++)
+                {
+                    int w = v + 1 == len ? 0 : v + 1;
+                    float l = SimMath.Hypot(s.PolyX[off + w] - s.PolyX[off + v], s.PolyY[off + w] - s.PolyY[off + v]);
+                    if (l < shortest) shortest = l;
+                    if (l < 0.25f) { sliv++; if (s.SideTouch[off + v] >= 0) slivLinked++; }
+                }
+            }
+            Console.WriteLine($"{scene,-11}: sides under 0.25px at build: {sliv} ({slivLinked} carrying a record); shortest side {shortest:F4}px");
+            int realWithRec = 0, bondNoRec = 0, sealedNoRec = 0, wrongBond = 0;
+            for (int c = 0; c < s.CellCount; c++)
+            {
+                int off = s.PolyOff[c], len = s.PolyLen[c];
+                for (int v = 0; v < len; v++)
+                {
+                    short pb = s.PolyBond[off + v], rec = s.SideTouch[off + v];
+                    bool hasRec = rec >= 0 && s.TouchA[rec] >= 0;
+                    if (pb == SimState.SideReal && hasRec) realWithRec++;
+                    else if (pb >= 0 && !hasRec) bondNoRec++;
+                    else if (pb == SimState.SideSealed && !hasRec) sealedNoRec++;
+                    else if (pb >= 0 && hasRec && s.TouchBond[rec] != pb) wrongBond++;
+                }
+            }
+            Console.WriteLine($"{scene,-11}: label/record contradictions at build: REAL-with-record {realWithRec}, bond-without-record {bondNoRec}, sealed-without-record {sealedNoRec}, record names a different bond {wrongBond}");
+            Console.WriteLine($"{scene,-11}: {s.TouchCount} records ({bonded} bonded, {sealedN} sealed); "
+                + $"open ends: none {n0}, one {n1}, both {n2}; free/non-free vertex transitions per cell {outlineVerts} "
+                + $"(≈ 2 per exposed record end → {2 * (n1 + 2 * n2)})");
+        }
+    }
+
+    private static void LoopRepro(string[] args)
+    {
+        int watch = ArgInt(args, "--cell", 245), other = ArgInt(args, "--other", 224);
+        int from = ArgInt(args, "--from", 42), to = ArgInt(args, "--to", 42);
+
+        var tune = SimTuning.Default;
+        tune.ToughnessScale = 1.1f;
+        tune.CarveContinuity = 0.75f;
+        tune.CrushConfine = 0.10f;
+        var r = Scenarios.Collide(tune, Material.Rock, 600f, 170f);
+        SimState s = r.State;
+
+        int third = ArgInt(args, "--third", 244);
+        int tk = 0;
+        r.Solver.RetireSink = (rec, a, b, why) =>
+        {
+            if (a == watch || b == watch || a == third || b == third)
+                Console.WriteLine($"   tick {tk}: record {rec} ({a},{b}) retired: {why}");
+        };
+        Console.WriteLine("── build-time records of the watched cell:");
+        for (int k = 0; k < s.TouchCount; k++)
+            if (s.TouchA[k] == watch || s.TouchB[k] == watch)
+                Console.WriteLine($"   record {k}: ({s.TouchA[k]},{s.TouchB[k]}) bond {s.TouchBond[k]}");
+
+        for (int tick = 0; tick <= to; tick++)
+        {
+            tk = tick;
+            bool on = tick >= from;
+            if (on)
+            {
+                Console.WriteLine($"── start of tick {tick}");
+                DumpCell(r, watch);
+                DumpCell(r, third);
+                r.Solver.TraceCell = watch;
+                r.Solver.TraceSink = msg => Console.WriteLine(msg);
+            }
+            r.Solver.Step();
+            if (on)
+            {
+                r.Solver.TraceCell = -1; r.Solver.TraceSink = null;
+                Console.WriteLine($"── end of tick {tick}");
+                DumpCell(r, watch);
+                DumpCell(r, other);
+            }
+        }
+    }
+
+    private static void SteelRepro(string[] args)
+    {
+        int ca = ArgInt(args, "--a", 218), cb = ArgInt(args, "--b", 248);
+        int from = ArgInt(args, "--from", 5), to = ArgInt(args, "--to", 6);
+
+        var tune = SimTuning.Default;
+        tune.StrainScale = 2.0f;
+        tune.ToughnessScale = 1.8f;
+        tune.CarveMinArea = 0.005f;
+        tune.CrushConfine = 0.04f;                 // the user's value: 0.04, not 0.4
+        var r = Scenarios.Projectile(tune, Material.Steel, 4000f, 8f, 180f, impactor: Material.Steel);
+        SimState s = r.State;
+
+        for (int tick = 0; tick <= to; tick++)
+        {
+            if (tick >= from)
+            {
+                Console.WriteLine($"── tick {tick}");
+                foreach (int c in new[] { ca, cb }) DumpCell(r, c);
+                for (int k = 0; k < s.TouchCount; k++)
+                {
+                    int a = s.TouchA[k], b = s.TouchB[k];
+                    if (a != ca && a != cb && b != ca && b != cb) continue;
+                    Console.WriteLine($"   record {k}: A={a} B={b} bond={s.TouchBond[k]} "
+                        + $"span [{s.TouchT0[k]:F3},{s.TouchT1[k]:F3}]");
+                }
+                var rep = new SideAudit.Report { All = new System.Collections.Generic.List<string>() };
+                SideAudit.Audit(s, rep, tick);
+                foreach (string line in rep.All!)
+                    if (line.Contains($" {ca} ") || line.Contains($" {cb} ")
+                        || line.Contains($"({ca},") || line.Contains($"({cb},")
+                        || line.Contains($",{ca})") || line.Contains($",{cb})"))
+                        Console.WriteLine($"   FAULT {line}");
+                Console.WriteLine();
+            }
+            r.Solver.Step();
+        }
+    }
+
+    private static void DumpCell(Scenarios.Result r, int c)
+    {
+        SimState s = r.State;
+        int off = s.PolyOff[c], len = s.PolyLen[c];
+        Console.WriteLine($"   cell {c}: body {s.CellBody[c]} dead {s.Dead(c)} len {len} "
+            + $"area {s.CellArea[c]:F1}/{s.CellArea0[c]:F1}");
+        for (int v = 0; v < len; v++)
+        {
+            var kind = r.Solver.ClassifySide(c, v, out float f0, out float f1);
+            short k = s.PolyBond[off + v], rec = s.SideTouch[off + v];
+            string bond = k == SimState.SideReal ? "REAL" : k == SimState.SideCrack ? "CRACK"
+                        : k == SimState.SideSealed ? "SEALED" : $"bond{k}";
+            int w = v + 1 == len ? 0 : v + 1;
+            float dx = s.PolyX[off + w] - s.PolyX[off + v], dy = s.PolyY[off + w] - s.PolyY[off + v];
+            World(s, c, off + v, out float x0, out float y0);
+            World(s, c, off + w, out float x1, out float y1);
+            Console.WriteLine($"      side {v}: {bond,-7} rec {rec,4} {kind,-11} "
+                + $"cover [{f0:F3},{f1:F3}] len {SimMath.Hypot(dx, dy):F2}  "
+                + $"({x0,7:F2},{y0,7:F2})->({x1,7:F2},{y1,7:F2})");
+        }
+    }
+
+    private static void World(SimState s, int c, int i, out float wx, out float wy)
+    {
+        int b = s.CellBody[c];
+        float co = SimMath.Cos(s.BodyRot[b]), si = SimMath.Sin(s.BodyRot[b]);
+        float lx = s.CellRx[c] + s.PolyX[i], ly = s.CellRy[c] + s.PolyY[i];
+        wx = s.BodyX[b] + lx * co - ly * si;
+        wy = s.BodyY[b] + lx * si + ly * co;
+    }
+
+    private static float ProbeDist = 0.03f;
+
+    private static Material Retune(in Material m, float crush, float energy)
+        => new(m.Name, m.Rho, m.C, m.Strain, m.Chi, m.Yield, m.Duct, crush, energy, m.ShedLimit);
 
     /// <summary>
     /// Calibrates the comminution pair against BEHAVIOUR in four regimes at once, rather than
@@ -637,11 +1766,11 @@ internal static class Program
                                       Material.Glass, Material.Steel })
         {
             Console.WriteLine($"── {baseM.Name}   (authored thr {baseM.Crush.ToString("E1", ci)}, "
-                            + $"capacity {baseM.CrushCap.ToString("E1", ci)}) ──");
+                            + $"capacity {baseM.CrushRate.ToString("E1", ci)}) ──");
             Console.WriteLine("     threshold    rest   drift    press/cap    proj");
             foreach (float mul in new[] { 0.25f, 0.5f, 1f, 2f, 4f, 8f })
             {
-                var m = Retune(baseM, baseM.Crush * mul, baseM.CrushCap);
+                var m = Retune(baseM, baseM.Crush * mul, baseM.CrushRate);
 
                 var rest = Scenarios.Field(t, m, 5, 5, 60f, 125f, 0f);
                 for (int i = 0; i < 600; i++) rest.Solver.Step();
@@ -651,15 +1780,13 @@ internal static class Program
 
                 var press = Scenarios.Collide(t, m, speed: 150f);
                 for (int i = 0; i < 400; i++) press.Solver.Step();
-                float dose = 0f;
-                for (int c = 0; c < press.State.CellCount; c++)
-                    if (press.State.CellCrush[c] > dose) dose = press.State.CellCrush[c];
+                float dose = MaxShed(press.State);
 
                 var proj = Scenarios.Projectile(t, m, 900f, 3f);
                 for (int i = 0; i < 200; i++) proj.Solver.Step();
 
                 Console.WriteLine($"   {(m.Crush).ToString("E2", ci),11} {rest.Solver.Crushed,7} "
-                    + $"{drift.Solver.Crushed,7} {(dose / m.CrushCap).ToString("F2", ci),12} "
+                    + $"{drift.Solver.Crushed,7} {dose.ToString("F2", ci),12} "
                     + $"{proj.Solver.Crushed,7}");
             }
             Console.WriteLine();
@@ -998,7 +2125,7 @@ internal static class Program
             var r = WithJobs(Scene(scene, SimTuning.Default));
             for (int i = 0; i < 400; i++) r.Solver.Step();
             string hex = SimFingerprint.Hex(r.State);
-            Console.Error.WriteLine($"{scene,-12} {hex}");
+            Console.Error.WriteLine($"{scene,-12} {hex}   (without records: {SimFingerprint.HexWithoutRecords(r.State)})");
             foreach (char ch in hex) combined.Add(ch);
         }
 

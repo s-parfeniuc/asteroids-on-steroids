@@ -57,6 +57,7 @@ public partial class Viewer : Node2D
     // Comminution multipliers on the selected materials' authored pair. See Crushed().
     private float _crushThrMul = 1f;
     private float _crushCapMul = 1f;
+    private float _shedMul = 1f;
     private Scenarios.Result _scene;
 
     // Build-time knobs. Grain is cell AREA, so cell size is its square root: 30 gives 5.5 px cells,
@@ -92,18 +93,38 @@ public partial class Viewer : Node2D
     private bool _drawOutlines = true;
 
     /// <summary>
+    /// Cell indices drawn in place — the same numbers the bench diagnostics print.
+    /// </summary>
+    /// <remarks>
+    /// Drawn through the Node2D's own canvas rather than the batched RenderingServer path, because
+    /// text is not something that path does and this is a debugging aid rather than a hot path. It
+    /// is capped and viewport-culled so turning it on in a shattered scene does not stall the frame.
+    /// </remarks>
+    private bool _showIds;
+
+    /// <summary>
     /// How bonds are coloured. A mode rather than a set of flags because a line carries one colour:
     /// damage and stress answer different questions about the same segment and cannot share it.
     /// </summary>
     private enum BondView { Off, Damage, Stress }
 
     /// <summary>How cell interiors are coloured.</summary>
-    private enum FillView { Body, Flat, Crush }
+    /// <summary>How cell interiors are coloured. Surface shows which sides face open space.</summary>
+    private enum FillView { Body, Flat, Crush, Surface }
     private FillView _fillView = FillView.Body;
     private BondView _bondView = BondView.Damage;
 
     /// <summary>The prototype's flat cell fill when body colouring is off: <c>#232a34</c>.</summary>
     private static readonly Color FlatFill = new(0.137f, 0.165f, 0.204f);
+
+    /// <summary>The body's real boundary: silhouette, or a face erosion has cut.</summary>
+    private static readonly Color RealSurface = new(1.00f, 0.72f, 0.20f);
+    /// <summary>Surface a crack opened — drawn fine, so cracks read as cracks.</summary>
+    private static readonly Color CrackSurface = new(0.95f, 0.32f, 0.28f);
+    /// <summary>A side still carrying a bond. Dim: it is the material, not the boundary.</summary>
+    private static readonly Color InteriorSide = new(0.20f, 0.26f, 0.36f);
+    /// <summary>Touching material with no bond — too short to build one. Interior, but unbonded.</summary>
+    private static readonly Color SealedSide = new(0.34f, 0.24f, 0.44f);
 
     // ── render resources ─────────────────────────────────────────────────────
 
@@ -117,11 +138,14 @@ public partial class Viewer : Node2D
     private HSlider _crushThrSlider = null!;
     private HSlider _crushCapSlider = null!;
     private HSlider _confineSlider = null!;
+    private HSlider _shedSlider = null!;
+    private HSlider _biasSlider = null!, _maxBiasSlider = null!;
+    private CheckBox _crackPushBox = null!;
     private OptionButton _impactorPick = null!;
     private HSlider _grainSlider = null!, _speedSlider = null!, _massSlider = null!;
     private HSlider _strainSlider = null!, _toughSlider = null!, _substepSlider = null!;
     private HSlider _slowSlider = null!;
-    private CheckBox _fillBox = null!, _outlineBox = null!;
+    private CheckBox _fillBox = null!, _outlineBox = null!, _idBox = null!;
     private OptionButton _fillPick = null!;
     private OptionButton _bondPick = null!;
 
@@ -133,6 +157,14 @@ public partial class Viewer : Node2D
     private Vector2[] _linePts = Array.Empty<Vector2>();
     private Color[] _lineCols = Array.Empty<Color>();
     private int _lineCount;
+
+    // A second batch submitted at a heavier width. CanvasItemAddMultiline takes one width per call,
+    // so weight is per batch, not per segment — which is exactly enough to tell the two kinds of
+    // open side apart at a glance.
+    private Vector2[] _boldPts = Array.Empty<Vector2>();
+    private Rid _marks;
+    private Color[] _boldCols = Array.Empty<Color>();
+    private int _boldCount;
 
     private float[] _polyX = new float[64];
     private float[] _polyY = new float[64];
@@ -190,6 +222,8 @@ public partial class Viewer : Node2D
         RenderingServer.CanvasItemSetParent(_fills, GetCanvasItem());
         _lines = RenderingServer.CanvasItemCreate();
         RenderingServer.CanvasItemSetParent(_lines, GetCanvasItem());
+        _marks = RenderingServer.CanvasItemCreate();          // created last: draws over the lines
+        RenderingServer.CanvasItemSetParent(_marks, GetCanvasItem());
 
         _hud = new Label
         {
@@ -328,12 +362,39 @@ public partial class Viewer : Node2D
             v => { _crushThrMul = MathF.Pow(2f, (float)v); _needsReset = true; },
             v => $"x{MathF.Pow(2f, (float)v):G3}  ({ActiveMaterial.Crush:E1})");
 
-        // Capacity is the time constant: below roughly the wave transit time of a body the contact
-        // powders before the interior is ever loaded, and the target stops fracturing altogether.
-        // That transition is what this slider is for, so its range spans it.
-        _crushCapSlider = AddSlider(box, "crush capacity", -5, 5, 1, 0,
+        // Energy per unit area destroyed: how expensive carving is. Raise it and a cell survives a
+        // longer contact, because the impactor has to do more work to remove the same material.
+        _crushCapSlider = AddSlider(box, "erosion rate", -6, 6, 1, 0,
             v => { _crushCapMul = MathF.Pow(2f, (float)v); _needsReset = true; },
-            v => $"x{MathF.Pow(2f, (float)v):G3}  ({ActiveMaterial.CrushCap:E1})");
+            v => $"x{MathF.Pow(2f, (float)v):G3}  ({ActiveMaterial.CrushRate:E1})");
+
+        // How much of its ORIGINAL area a cell may lose before it comminutes — not what it shrinks
+        // to. Glass sheds little and then shatters; steel erodes a long way first.
+        // MULTIPLIER, not an absolute. Setting one value forced every material to the same shed
+        // limit, which silently erased the per-material difference this knob exists to explore —
+        // glass shedding 15% before it shatters and steel 50% became one number for both.
+        _shedSlider = AddSlider(box, "shed limit", -3, 3, 1, 0,
+            v => { _shedMul = MathF.Pow(2f, (float)v); _needsReset = true; },
+            v => $"x{MathF.Pow(2f, (float)v):G3}  ({ActiveMaterial.ShedLimit * 100f:F0}% of area)");
+
+        // The Baumgarte positional bias. Numerical, not physical: it pushes overlapping cells apart
+        // at a velocity proportional to their overlap. Carving now owns overlap relief (peak overlap
+        // does not move with the bias any more), so what the bias still controls is how hard
+        // fragments are thrown apart — 241 px/s at 0.20 down to 36 px/s at 0.02 on the grain-170
+        // collide. Live, so it can be swept while watching a break-up.
+        _biasSlider = AddSlider(box, "contact bias", 0, 0.5, 0.01, _tune.ContactBias,
+            v => _tune.ContactBias = (float)v, v => $"{v:F2}");
+        _maxBiasSlider = AddSlider(box, "contact max bias", 0, 8, 0.25, _tune.ContactMaxBias,
+            v => _tune.ContactMaxBias = (float)v, v => $"{v:F2}");
+
+        // A crack can push but not pull: broken bonds between live cells keep their compressive
+        // normal force. Without it a detached front row slides into the row behind it with no
+        // resistance until the body is split at the end of the tick. Live; read every substep.
+        _crackPushBox = new CheckBox { Text = "cracks transmit compression", ButtonPressed = _tune.CrackPush };
+        _crackPushBox.Toggled += on => _tune.CrackPush = on;
+        box.AddChild(_crackPushBox);
+
+        // (min clip area: v1 only, lone cells; removed from the panel with carving v2)
 
         // The one free constant in the pressure measure, weighting penetration strain against the
         // braking impulse. Live rather than reset-on-change: it is read every substep, so it can be
@@ -353,7 +414,7 @@ public partial class Viewer : Node2D
         box.AddChild(_fillBox);
 
         _fillPick = new OptionButton();
-        foreach (string n in new[] { "body colour", "flat", "crush dose" }) _fillPick.AddItem(n);
+        foreach (string n in new[] { "body colour", "flat", "shed fraction", "surface" }) _fillPick.AddItem(n);
         _fillPick.Selected = (int)_fillView;
         _fillPick.ItemSelected += i => _fillView = (FillView)i;
         AddRow(box, "fill", _fillPick);
@@ -361,6 +422,10 @@ public partial class Viewer : Node2D
         _outlineBox = new CheckBox { Text = "cell outlines", ButtonPressed = _drawOutlines };
         _outlineBox.Toggled += on => _drawOutlines = on;
         box.AddChild(_outlineBox);
+
+        _idBox = new CheckBox { Text = "cell ids (I)", ButtonPressed = _showIds };
+        _idBox.Toggled += on => _showIds = on;
+        box.AddChild(_idBox);
 
         _bondPick = new OptionButton();
         foreach (string n in new[] { "off", "damage", "stress" }) _bondPick.AddItem(n);
@@ -462,6 +527,7 @@ public partial class Viewer : Node2D
     {
         if (_fills.IsValid) { RenderingServer.FreeRid(_fills); _fills = default; }
         if (_lines.IsValid) { RenderingServer.FreeRid(_lines); _lines = default; }
+        if (_marks.IsValid) { RenderingServer.FreeRid(_marks); _marks = default; }
     }
 
     /// <summary>
@@ -479,7 +545,8 @@ public partial class Viewer : Node2D
     /// </remarks>
     private SimMaterial Crushed(in SimMaterial m)
         => new(m.Name, m.Rho, m.C, m.Strain, m.Chi, m.Yield, m.Duct,
-               m.Crush * _crushThrMul, m.CrushCap * _crushCapMul);
+               m.Crush * _crushThrMul, m.CrushRate * _crushCapMul,
+               SimMath.Min(0.95f, m.ShedLimit * _shedMul), m.Dent);
 
     /// <summary>The material the current scenario actually built with — scenarios 4 and 5 force
     /// their own, and a readout that showed the selected one instead would be lying.</summary>
@@ -591,6 +658,7 @@ public partial class Viewer : Node2D
 
         _sw.Restart();
         Submit();
+        if (_showIds) QueueRedraw();
         _sw.Stop();
         _msSubmit = Smooth(_msSubmit, _sw.Elapsed.TotalMilliseconds);
 
@@ -637,7 +705,7 @@ public partial class Viewer : Node2D
         EnsureFillCapacity(s.CellCount * maxLen, s.CellCount * (maxLen - 2) * 3);
         EnsureLineCapacity((s.BondCount + s.CellCount * maxLen) * 2);
 
-        _ptCount = 0; _idxCount = 0; _lineCount = 0;
+        _ptCount = 0; _idxCount = 0; _lineCount = 0; _boldCount = 0;
 
         var outlineColor = new Color(0f, 0f, 0f, 0.45f);
 
@@ -655,7 +723,12 @@ public partial class Viewer : Node2D
                 int n = solver.CellLocalPolygon(c, _polyX, _polyY);
                 if (n < 3) continue;
 
-                Color fill = _fillView == FillView.Crush ? CrushColour(s, c) : bodyFill;
+                Color fill = _fillView switch
+                {
+                    FillView.Crush => CrushColour(s, c),
+                    FillView.Surface => FlatFill,
+                    _ => bodyFill,
+                };
 
                 int baseVert = _ptCount;
                 for (int v = 0; v < n; v++)
@@ -676,11 +749,48 @@ public partial class Viewer : Node2D
                     }
 
                 if (_drawOutlines)
+                {
+                    // In the surface view each edge is drawn for what it IS: a side facing open
+                    // space, or one shared with a live cell of the same body. That distinction is
+                    // what decides where a crack may separate and how far carving may cut, so being
+                    // able to see it directly is the point of the view.
+                    int poff = s.PolyOff[c];
                     for (int v = 0; v < n; v++)
                     {
                         int w = v + 1 == n ? 0 : v + 1;
-                        AddSegment(_pts[baseVert + v], _pts[baseVert + w], outlineColor);
+                        Vector2 p0 = _pts[baseVert + v], p1 = _pts[baseVert + w];
+
+                        if (_fillView != FillView.Surface)
+                        {
+                            AddSegment(p0, p1, outlineColor);
+                            continue;
+                        }
+
+                        // Sides, drawn for what they ARE — classified from the touch records, so
+                        // the picture is the same function the rules read. A side can be PARTLY
+                        // covered: erosion on the far cell leaves this one's side facing material
+                        // over only part of its length, and the rest has become real surface. Both
+                        // parts are drawn, which is the thing a per-side flag could never show.
+                        var kind = _scene.Solver.ClassifySide(c, v, out float cf0, out float cf1);
+                        if (kind == Solver.SideKind.RealSurface)
+                        {
+                            AddBoldSegment(p0, p1, RealSurface);
+                            continue;
+                        }
+
+                        Vector2 m0 = p0.Lerp(p1, cf0), m1 = p0.Lerp(p1, cf1);
+                        if (cf0 > 1e-3f) AddBoldSegment(p0, m0, RealSurface);
+                        if (cf1 < 1f - 1e-3f) AddBoldSegment(m1, p1, RealSurface);
+
+                        Color cc = kind switch
+                        {
+                            Solver.SideKind.Crack => CrackSurface,
+                            Solver.SideKind.Sealed => SealedSide,
+                            _ => InteriorSide,
+                        };
+                        AddSegment(m0, m1, cc);
                     }
+                }
             }
         }
 
@@ -754,9 +864,14 @@ public partial class Viewer : Node2D
     /// </remarks>
     private Color CrushColour(SimState s, int c)
     {
-        int bi = s.CellBody[c];
-        if (bi < 0 || bi >= s.BodyCount) return FlatFill;
-        float t = SimMath.Min(1f, s.CellCrush[c] / SimMath.Max(1e-6f, s.BodyCrushCap[bi]));
+        // Shed fraction: how much of its original area this cell has lost, against the limit at
+        // which it comminutes. This is the number to tune against — a scene that never carves and
+        // one that carves constantly both show zero crushed cells, at opposite extremes.
+        float a0 = s.CellArea0[c];
+        if (a0 <= 0f) return FlatFill;
+        float shed = 1f - s.CellArea[c] / a0;
+        float lim = SimMath.Max(0.01f, s.Mat(c).ShedLimit);
+        float t = SimMath.Min(1f, SimMath.Max(0f, shed) / lim);
         if (t <= 0f) return FlatFill;
         return Hsl((40f - 40f * t) / 360f, 0.85f, 0.25f + 0.35f * t, 1f);
     }
@@ -769,14 +884,29 @@ public partial class Viewer : Node2D
         _linePts[_lineCount++] = b;
     }
 
+    private void AddBoldSegment(Vector2 a, Vector2 b, Color colour)
+    {
+        if (_boldPts.Length < _linePts.Length)
+        {
+            _boldPts = new Vector2[System.Math.Max(64, _linePts.Length)];
+            _boldCols = new Color[_boldPts.Length >> 1];
+        }
+        if (_boldCount + 2 > _boldPts.Length) return;
+        _boldCols[_boldCount >> 1] = colour;
+        _boldPts[_boldCount++] = a;
+        _boldPts[_boldCount++] = b;
+    }
+
     private void Submit()
     {
         var xform = new Transform2D(0f, new Vector2(_zoom, _zoom), 0f, _pan);
         RenderingServer.CanvasItemSetTransform(_fills, xform);
         RenderingServer.CanvasItemSetTransform(_lines, xform);
+        RenderingServer.CanvasItemSetTransform(_marks, xform);
 
         RenderingServer.CanvasItemClear(_fills);
         RenderingServer.CanvasItemClear(_lines);
+        RenderingServer.CanvasItemClear(_marks);
 
         if (_idxCount > 0)
             RenderingServer.CanvasItemAddTriangleArray(
@@ -796,6 +926,99 @@ public partial class Viewer : Node2D
                 _linePts.AsSpan(0, _lineCount),
                 _lineCols.AsSpan(0, _lineCount >> 1),
                 -1f);
+
+        if (_boldCount > 0)
+            RenderingServer.CanvasItemAddMultiline(
+                _lines,
+                _boldPts.AsSpan(0, _boldCount),
+                _boldCols.AsSpan(0, _boldCount >> 1),
+                2.5f);
+
+        if (_fillView == FillView.Surface) BuildVertexMarks(_scene.State);
+    }
+
+    /// <summary>
+    /// What carving v2 can move, drawn over the surface. Every polygon vertex is marked for what it
+    /// is to the driver, through the same classification the driver uses: a filled amber dot is an
+    /// EXPOSED RECORD END (slides along its interface), a cyan ring is a CORNER (moves toward the
+    /// centroid), a small grey ring is a triangle's corner (cannot recede); interior vertices are
+    /// not marked. A loaded vertex with no mark is one the driver will not move — which is the thing
+    /// worth being able to see. Sizes are in screen pixels, so zooming in does not shrink them, and
+    /// each mark sits on a dark disc so it reads over any side colour.
+    /// </summary>
+    private void BuildVertexMarks(SimState s)
+    {
+        var exposed = new Color(1f, 0.78f, 0.2f, 1f);
+        var corner = new Color(0.3f, 0.92f, 1f, 1f);
+        var fixedCorner = new Color(0.65f, 0.65f, 0.65f, 0.9f);
+        var backing = new Color(0.02f, 0.03f, 0.05f, 0.85f);
+        float px = 1f / SimMath.Max(1e-3f, _zoom);              // one screen pixel, in world units
+        int marks = 0;
+
+        for (int c = 0; c < s.CellCount && marks < 6000; c++)
+        {
+            if (s.Dead(c)) continue;
+            int b = s.CellBody[c];
+            if (b < 0 || b >= s.BodyCount) continue;
+            float si = SimMath.Sin(s.BodyRot[b]), co = SimMath.Cos(s.BodyRot[b]);
+            int off = s.PolyOff[c], len = s.PolyLen[c];
+            for (int v = 0; v < len; v++)
+            {
+                var kind = _scene.Solver.ClassifyVertex(c, v);
+                if (kind == Solver.VertexKind.Interior) continue;
+                float lx = s.CellRx[c] + s.PolyX[off + v], ly = s.CellRy[c] + s.PolyY[off + v];
+                var p = new Vector2(s.BodyX[b] + lx * co - ly * si, s.BodyY[b] + lx * si + ly * co);
+                switch (kind)
+                {
+                    case Solver.VertexKind.ExposedEnd:
+                        RenderingServer.CanvasItemAddCircle(_marks, p, 5.0f * px, backing);
+                        RenderingServer.CanvasItemAddCircle(_marks, p, 3.4f * px, exposed);
+                        break;
+                    case Solver.VertexKind.Corner:
+                        RenderingServer.CanvasItemAddCircle(_marks, p, 5.4f * px, backing);
+                        RenderingServer.CanvasItemAddCircle(_marks, p, 4.0f * px, corner);
+                        RenderingServer.CanvasItemAddCircle(_marks, p, 2.2f * px, backing);
+                        break;
+                    default:
+                        RenderingServer.CanvasItemAddCircle(_marks, p, 3.6f * px, backing);
+                        RenderingServer.CanvasItemAddCircle(_marks, p, 2.6f * px, fixedCorner);
+                        RenderingServer.CanvasItemAddCircle(_marks, p, 1.4f * px, backing);
+                        break;
+                }
+                marks++;
+            }
+        }
+    }
+
+    /// <summary>Cell indices, so a number in a diagnostic can be found on screen.</summary>
+    public override void _Draw()
+    {
+        SimState s = _scene.State;
+        int w = GetViewportRect().Size.X > 0 ? (int)GetViewportRect().Size.X : 1920;
+        int h = GetViewportRect().Size.Y > 0 ? (int)GetViewportRect().Size.Y : 1080;
+
+        if (!_showIds) return;
+        var font = ThemeDB.FallbackFont;
+        if (font == null) return;
+
+        int drawn = 0;
+        for (int c = 0; c < s.CellCount && drawn < 900; c++)
+        {
+            if (s.Dead(c)) continue;
+            int b = s.CellBody[c];
+            if (b < 0 || b >= s.BodyCount) continue;
+
+            float si = SimMath.Sin(s.BodyRot[b]), co = SimMath.Cos(s.BodyRot[b]);
+            float wx = s.BodyX[b] + s.CellRx[c] * co - s.CellRy[c] * si;
+            float wy = s.BodyY[b] + s.CellRx[c] * si + s.CellRy[c] * co;
+
+            var p = new Vector2(wx * _zoom + _pan.X, wy * _zoom + _pan.Y);
+            if (p.X < -40f || p.Y < -40f || p.X > w + 40f || p.Y > h + 40f) continue;
+
+            DrawString(font, p, c.ToString(), HorizontalAlignment.Center,
+                       -1f, 11, new Color(1f, 1f, 1f, 0.75f));
+            drawn++;
+        }
     }
 
     private void EnsureFillCapacity(int verts, int indices)
@@ -854,6 +1077,7 @@ public partial class Viewer : Node2D
                 case Key.Bracketleft: Nudge(_slowSlider, +1); break;
                 case Key.Bracketright: Nudge(_slowSlider, -1); break;
                 case Key.O: Toggle(_outlineBox, ref _drawOutlines); break;
+                case Key.I: Toggle(_idBox, ref _showIds); break;
                 case Key.F: Toggle(_fillBox, ref _drawFills); break;
                 case Key.C: CycleFillView(); break;
                 case Key.B: CycleBondView(); break;
@@ -1083,8 +1307,9 @@ public partial class Viewer : Node2D
         {
             if (s.Dead(c)) continue;
             int bi = s.CellBody[c];
-            if (bi < 0 || bi >= s.BodyCount || s.BodyCrushCap[bi] <= 0f) continue;
-            float f = s.CellCrush[c] / s.BodyCrushCap[bi];
+            if (bi < 0 || bi >= s.BodyCount || s.CellArea0[c] <= 0f) continue;
+            float lim = SimMath.Max(0.01f, s.Mat(c).ShedLimit);
+            float f = (1f - s.CellArea[c] / s.CellArea0[c]) / lim;
             if (f > worst) worst = f;
         }
 
@@ -1094,9 +1319,10 @@ public partial class Viewer : Node2D
         float tot = live + led;
 
         return $"crush thr {ActiveMaterial.Crush:E1} (x{_crushThrMul:G3})"
-             + $"   cap {ActiveMaterial.CrushCap:E1} (x{_crushCapMul:G3})"
-             + $"   confine {_tune.CrushConfine:F3}"
-             + $"   peak dose {worst * 100f,5:F1}% of cap"
+             + $"   erosion rate {ActiveMaterial.CrushRate:G3} (x{_crushCapMul:G3})"
+             + $"   shed limit {ActiveMaterial.ShedLimit * 100f:F0}%"
+             + $"   peak shed {worst * 100f,5:F1}% of limit"
+             + $"   carved {solver.ShedArea:F2} cells"
              + $"   ledger {(tot < 1f ? 0f : 100f * led / tot),5:F1}%\n";
     }
 
@@ -1127,9 +1353,9 @@ public partial class Viewer : Node2D
           + $"   strain x{_tune.StrainScale:F1}  toughness x{_tune.ToughnessScale:F1}"
           + $"  substeps {_tune.Substeps}   zoom {_zoom:F2}\n"
           + $"view: fills {(_drawFills ? "on" : "off")} · {_fillView.ToString().ToLowerInvariant()}"
-          + $" · outlines {(_drawOutlines ? "on" : "off")} · bonds {_bondView.ToString().ToLowerInvariant()}\n"
+          + $" · ids {(_showIds ? "on" : "off")} · outlines {(_drawOutlines ? "on" : "off")} · bonds {_bondView.ToString().ToLowerInvariant()}\n"
           + "\n1-6 scenario · M/N body,impactor material · R reset · space pause · . step · [ ] slow-mo\n"
-          + "F fills · C fill view · O outlines · B bond view · G/H grain\n"
+          + "F fills · C fill view · O outlines · I cell ids · B bond view · G/H grain\n"
           + "-/= strain · ,/ toughness · ;/' substeps\n"
           + "left-click fires · right-drag pans · wheel zooms · Z refits · esc quits";
     }

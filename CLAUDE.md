@@ -201,3 +201,33 @@ static class AsteroidPrefab {
 - `ForEachParallel` is safe only when the body reads/writes only its own entity's components and calls no `CreateEntity`/`DestroyEntity`. `EventBus.Publish` is safe inside parallel bodies; `Flush()` must be called sequentially afterward.
 - The engine spawns no entities during fracture — `FractureService` returns a `FractureResult`; the game layer is responsible for spawning fragment entities. This keeps the destruction engine free of game-specific logic.
 - `GameLoop` (in `Engine/Core/`) is not wired into the main game — it is used by demos. The game's timing and loop are in `GameCore/GameHost.cs` (shared by both the SDL and WinForms executables).
+
+## Working agreement for the `ported/` simulation (AsteroidsSim + AsteroidsGame)
+
+The fracture model in `ported/AsteroidsSim` is a design in progress, and its behaviour IS the game's feel.
+Treat the following as rules, not preferences:
+
+- **Decide together.** Anything that could change how destruction looks or feels — a gate, a rule about
+  when bonds may break or cells may carve, a threshold, a default in `SimTuning`, how surface is
+  classified — is proposed first and built only after agreement. Diagnosing and measuring is always
+  fine; changing the model is not, until it has been discussed. When a fix is unambiguous (a label left
+  inconsistent, a counter measuring the wrong thing) say so and do it, but say what it was.
+- **Measure before proposing a mechanism.** Reproduce with the exact configuration (print every
+  parameter — `SimTuning`, materials, scenario args — so it can be diffed), trace the specific cell/bond/
+  tick, and establish WHICH code path did it. Geometry inferred from a dump is not a measurement.
+- **One problem at a time.** Two symptoms that look related are separate until a trace shows one
+  causing the other. Do not fold a second fix into the first.
+- **No band-aids.** A tolerance widened, a record re-attached, a guard added "for now" — these hide the
+  cut that should not have happened. Find why it happened.
+- **Hard constraints of the model:** mass and material never transfer between cells; no body-level
+  positional response; determinism (`SimMath`, `BannedSymbols.txt`, no hash-container iteration, no
+  static mutable state in the tick, parallel == sequential bit-for-bit).
+- **Answer each point, exactly and directly.** When the user raises several points, number them and
+  answer every one in its own paragraph. Lead with the direct answer ("No.", "It binds on 20 of 37,294
+  calls."), then the mechanism, then what it means and what is proposed. Give the context a reader
+  needs: what was measured, on which scene, and why the number matters. Never summarise around a
+  question or answer a neighbouring one. If a proposal of the user's is being adopted, changed, or
+  declined, say which, and exactly why.
+- **Tools:** `tools/FractureBench` holds the diagnostic modes (`--audit`, `--census`, `--steel`, `--cell`,
+  `--pair`, …); `AsteroidsSim/Fracture/SideAudit.cs` is the specification of the side/touch-record
+  invariants. Add a bench mode for a repro rather than reasoning from memory.

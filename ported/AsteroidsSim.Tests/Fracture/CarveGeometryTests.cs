@@ -163,6 +163,49 @@ public class CarveGeometryTests
     }
 
     [Fact]
+    public void NoCellComesLooseInsideABodyThatStillEnclosesIt()
+    {
+        // The contract that actually matters, asserted on a real impact rather than on an
+        // adversarial synthetic carve.
+        //
+        // A cell with material on every side must never end up with no bonds: that is a piece
+        // rattling around inside a solid, and it is what happens when a crack is allowed to tunnel
+        // inward one cell at a time. Carving shortens the outer end of shared edges — that is what
+        // erosion is — but it must never disconnect one.
+        foreach (var (name, r) in new[]
+        {
+            ("collide", Scenarios.Collide(SimTuning.Default, Material.Rock, speed: 600f)),
+            ("projectile", Scenarios.Projectile(SimTuning.Default, Material.Rock)),
+            ("glass", Scenarios.Projectile(SimTuning.Default, Material.Glass)),
+        })
+        {
+            for (int i = 0; i < 200; i++) r.Solver.Step();
+            SimState s = r.State;
+
+            int buriedLoose = 0;
+            for (int c = 0; c < s.CellCount; c++)
+            {
+                if (s.Dead(c)) continue;
+                int b = s.CellBody[c];
+                if (b < 0 || b >= s.BodyCount || s.BodyCellLen[b] <= 1) continue;
+
+                bool bonded = false;
+                int off = s.AdjOff[c], len = s.AdjLen[c];
+                for (int j = 0; j < len && !bonded; j++)
+                    if (!s.BondBroken[s.AdjBond[off + j]]) bonded = true;
+                if (bonded) continue;
+
+                // No bonds left. Legitimate only if it is genuinely on the boundary.
+                if (!r.Solver.HasFreeEdge(c)) buriedLoose++;
+            }
+
+            _out.WriteLine($"{name}: {s.BodyCount} bodies, {buriedLoose} buried cells with no bonds");
+            Assert.True(buriedLoose == 0,
+                $"{name}: {buriedLoose} cells came loose inside a body that still encloses them");
+        }
+    }
+
+    [Fact]
     public void AClipThatCannotReachTheCellIsExactlyANoOp()
     {
         // The skip has to be bit-exact, not merely harmless: carving runs inside the substep loop, so

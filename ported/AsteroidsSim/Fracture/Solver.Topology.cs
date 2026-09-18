@@ -13,8 +13,6 @@ public sealed partial class Solver
     private float[] _oldRho = Array.Empty<float>(), _oldCpx = Array.Empty<float>();
     private float[] _oldChi = Array.Empty<float>(), _oldVCrit = Array.Empty<float>();
     private float[] _oldDuct = Array.Empty<float>(), _oldCell = Array.Empty<float>();
-    private float[] _oldCrush = Array.Empty<float>();
-    private float[] _oldCrushCap = Array.Empty<float>();
     private int[] _srcBody = Array.Empty<int>();
 
     private void EnsureSplitScratch(int oldCount, int comps)
@@ -26,8 +24,6 @@ public sealed partial class Solver
             _oldVx = new float[n]; _oldVy = new float[n]; _oldW = new float[n];
             _oldRho = new float[n]; _oldCpx = new float[n]; _oldChi = new float[n];
             _oldVCrit = new float[n]; _oldDuct = new float[n]; _oldCell = new float[n];
-            _oldCrush = new float[n];
-            _oldCrushCap = new float[n];
         }
         if (_srcBody.Length < comps) _srcBody = new int[comps < 16 ? 16 : comps * 2];
     }
@@ -91,8 +87,7 @@ public sealed partial class Solver
             _oldVx[b] = _s.BodyVx[b]; _oldVy[b] = _s.BodyVy[b]; _oldW[b] = _s.BodyW[b];
             _oldRho[b] = _s.BodyRho[b]; _oldCpx[b] = _s.BodyCpx[b]; _oldChi[b] = _s.BodyChi[b];
             _oldVCrit[b] = _s.BodyVCrit[b]; _oldDuct[b] = _s.BodyDuct[b];
-            _oldCell[b] = _s.BodyCellSize[b]; _oldCrush[b] = _s.BodyCrush[b];
-            _oldCrushCap[b] = _s.BodyCrushCap[b];
+            _oldCell[b] = _s.BodyCellSize[b];
         }
         if (dirtyProcessed == 0) { C.SplitNoChange++; return; }
 
@@ -158,6 +153,20 @@ public sealed partial class Solver
 
         for (int i = 0; i < _touchedCount; i++) RecomputeBody(_touched[i]);
 
+        // A fragment's cut faces are its outline now: the material across them left with another
+        // body. Until they are promoted they stay crack surface, so the new boundary neither draws
+        // as boundary nor lets a fresh crack start from it.
+        for (int i = 0; i < _touchedCount; i++)
+        {
+            int tb = _touched[i];
+            int coff = _s.BodyCellOff[tb], clen = _s.BodyCellLen[tb];
+            for (int j = 0; j < clen; j++) ExposeSeparatedSides(_s.BodyCells[coff + j]);
+        }
+
+        // Two cells that ended up in different bodies are no longer adjacent — whatever held them
+        // together has gone, and the sides facing each other are now each fragment's own outline.
+        RetireSeparatedTouches();
+
         // Re-anchor only the bonds of touched bodies. This used to scan every bond in the world.
         for (int i = 0; i < _touchedCount; i++)
         {
@@ -205,8 +214,6 @@ public sealed partial class Solver
                 _s.BodyRho[w] = _s.BodyRho[r]; _s.BodyCpx[w] = _s.BodyCpx[r];
                 _s.BodyChi[w] = _s.BodyChi[r]; _s.BodyVCrit[w] = _s.BodyVCrit[r];
                 _s.BodyDuct[w] = _s.BodyDuct[r]; _s.BodyCellSize[w] = _s.BodyCellSize[r];
-                _s.BodyCrush[w] = _s.BodyCrush[r];
-                _s.BodyCrushCap[w] = _s.BodyCrushCap[r];
                 _s.BodyDirty[w] = _s.BodyDirty[r];
 
                 int off = _s.BodyCellOff[r], len = _s.BodyCellLen[r];
@@ -244,8 +251,6 @@ public sealed partial class Solver
         _s.BodyRho[dst] = _oldRho[parent]; _s.BodyCpx[dst] = _oldCpx[parent];
         _s.BodyChi[dst] = _oldChi[parent]; _s.BodyVCrit[dst] = _oldVCrit[parent];
         _s.BodyDuct[dst] = _oldDuct[parent]; _s.BodyCellSize[dst] = _oldCell[parent];
-        _s.BodyCrush[dst] = _oldCrush[parent];
-        _s.BodyCrushCap[dst] = _oldCrushCap[parent];
         _s.BodyEulL[dst] = 0f;
         _s.BodyDirty[dst] = false;
         _parentOf[dst] = parent;
@@ -391,22 +396,30 @@ public sealed partial class Solver
         if (!_tune.Dust) return false;
         C.DustScans++;
         bool did = false;
+        EnsureCrushScratch();
 
-        // ── PRESSURE-GATED COMMINUTION ────────────────────────────────────────
-        // This replaces a trigger that keyed on penetration DEPTH and required the cell to already
-        // be a single-cell body. Depth is geometry: it cannot tell a slow heavy press from a fast
-        // light impact, so no single value covered the range and the behaviour was all-or-nothing.
-        // Requiring the cell to be detached first meant comminution could only ever run downstream
-        // of a fracture it should have been participating in.
+        // ── COMMINUTION IS THE LIMIT OF CARVING ───────────────────────────────
+        // Nothing is selected here on a dose or a timer any more. A cell is carved back continuously
+        // by the contacts pressing on it, shedding mass to whatever is doing the pressing, and it
+        // comminutes when it has lost its material's share of its original area. So the graceful low
+        // end and the terminal case are one mechanism rather than two: a shallow contact shaves a
+        // sliver, a sustained one runs the cell out.
         //
-        // Four passes, because the transfer needs every contact's weight before it can hand out any
-        // share. Pass 1 marks and prices the cells that have reached capacity; 2 totals the weights;
-        // 3 distributes; 4 removes. Passes 2 and 3 are O(contacts) regardless of how many cells
-        // crush, so a violent tick costs the same two sweeps as a quiet one.
-        // The cells were selected, priced and paid out during the substeps, by ChargeCell and
-        // AccumulateCrushDose — see the note there on why the transfer cannot wait until now. What
-        // is left is the part that must happen at a topology boundary: severing bonds and removing
-        // material.
+        // The momentum has already gone, continuously and locally, as the mass left. What remains
+        // here is only what has to happen at a topology boundary: severing bonds and removing the
+        // cell.
+        for (int c = 0; c < _s.CellCount; c++)
+        {
+            if (_s.Dead(c) || _s.Solo(c)) continue;
+            float a0 = _s.CellArea0[c];
+            if (a0 <= 0f) continue;
+            float shed = 1f - _s.CellArea[c] / a0;
+            if (shed < _s.Mat(c).ShedLimit) continue;
+            if (_crushMark[c]) continue;
+            _crushMark[c] = true;
+            _crushList[_crushCount++] = c;
+        }
+
         for (int i = 0; i < _crushCount; i++)
         {
             int c = _crushList[i];
@@ -414,7 +427,8 @@ public sealed partial class Solver
             if (_s.Dead(c)) continue;
             C.DustSinglesSeen++;
             int bi = _s.CellBody[c];
-            float vx = _crushVx[c], vy = _crushVy[c];
+            if (bi < 0 || bi >= _s.BodyCount) continue;
+            CellVelocity(c, bi, out float vx, out float vy);
 
             // Powder is not attached to anything: sever the cell before removing it, so the body
             // re-partitions around the hole rather than keeping bonds to material that is gone.
@@ -425,20 +439,112 @@ public sealed partial class Solver
                 if (_s.BondBroken[k]) continue;
                 _s.BondBroken[k] = true;
                 _s.BondSn[k] = 0f; _s.BondSt[k] = 0f; _s.BondSa[k] = 0f;
+                // The cell is about to vanish, so the neighbour is left facing empty space.
+                OpenBondSides(k);
+                ExposeSide(_s.BondA[k] == c ? _s.BondB[k] : _s.BondA[k], k);
                 int other = _s.BondA[k] == c ? _s.BondB[k] : _s.BondA[k];
                 if (other >= 0 && other < _s.CellCount) _s.SetFlag(other, CellFlag.Cracked, true);
             }
 
-            // Whatever the partners could not take. With no partners at all this is the cell's whole
-            // momentum, which is the old behaviour and the right one: nothing was pressing on it.
-            ExportedPx += _s.CellM[c] * vx - _crushJx[c];
-            ExportedPy += _s.CellM[c] * vy - _crushJy[c];
+            // ── THE POWDER COMPACTS INTO THE CRATER ──────────────────────────
+            // The cell's momentum has two shares. The rigid share — what it carried because it was
+            // part of the body — leaves with its mass: mass leaving at the body's own velocity
+            // changes nothing about the body, and keeping that momentum while dropping the mass
+            // would speed the body up, creating energy of order m/M (serious for a small fragment).
+            // The deviation share is what the impact put into it, and that is what the powder
+            // presses into the crater floor: it goes to the cell's live neighbours, mass-weighted,
+            // in the cell layer where DecomposeMotion already knows how to promote it.
+            SimMath.SinCos(_s.BodyRot[bi], out float csn, out float ccs);
+            float dvx = _s.CellDvx[c], dvy = _s.CellDvy[c];                  // deviation, body-local
+            float rvx = vx - (dvx * ccs - dvy * csn), rvy = vy - (dvx * csn + dvy * ccs);   // rigid share, world
+            float mc = _s.CellM[c];
+            float mN = 0f;
+            for (int j = 0; j < alen; j++)
+            {
+                int k = _s.AdjBond[aoff + j];
+                int o = _s.BondA[k] == c ? _s.BondB[k] : _s.BondA[k];
+                if (o >= 0 && o < _s.CellCount && !_s.Dead(o) && _s.CellBody[o] == bi) mN += _s.CellM[o];
+            }
+            if (mN > 0f)
+            {
+                DustToNeighbours++; DustDevMom += mc * SimMath.Hypot(dvx, dvy); DustRigidMom += mc * SimMath.Hypot(rvx, rvy);
+                float fx = mc * dvx / mN, fy = mc * dvy / mN;               // per unit neighbour mass
+                for (int j = 0; j < alen; j++)
+                {
+                    int k = _s.AdjBond[aoff + j];
+                    int o = _s.BondA[k] == c ? _s.BondB[k] : _s.BondA[k];
+                    if (o < 0 || o >= _s.CellCount || _s.Dead(o) || _s.CellBody[o] != bi) continue;
+                    _s.CellDvx[o] += fx; _s.CellDvy[o] += fy;
+                }
+                ExportedPx += mc * rvx; ExportedPy += mc * rvy;
+            }
+            else
+            {
+                // ── NO SAME-BODY NEIGHBOUR: PRESS INTO WHAT IT IS TOUCHING ────
+                // A cell that comminutes inside a fragment — glass cracks first and crushes
+                // second, so this is most of glass — has its old neighbours in other bodies,
+                // geometrically right there and interpenetrating. Routing only to the same body
+                // exported 414 of 504 glass comminutions whole: half the body's momentum left the
+                // simulation and the back rows never felt the impact. So the powder presses into
+                // its CONTACT partners, whatever body they are in. Into a different body the whole
+                // momentum can go — that is an inelastic transfer into another mass, not momentum
+                // kept while its own mass is dropped, so no energy is created.
+                float mP = 0f, pvx = 0f, pvy = 0f;          // partners' mass and momentum
+                for (int ci = 0; ci < _contactCount; ci++)
+                {
+                    ref Contact ct = ref _contacts[ci];
+                    int o = ct.A == c ? ct.B : ct.B == c ? ct.A : -1;
+                    if (o < 0 || o >= _s.CellCount || _s.Dead(o)) continue;
+                    int bo = _s.CellBody[o];
+                    if (bo < 0 || bo >= _s.BodyCount) continue;
+                    CellVelocity(o, bo, out float ovx, out float ovy);
+                    mP += _s.CellM[o]; pvx += _s.CellM[o] * ovx; pvy += _s.CellM[o] * ovy;
+                }
+                if (mP > 0f)
+                {
+                    // Inelastic, by the same rule ShedMass uses: a reduced-mass impulse toward the
+                    // partners' mean velocity. Giving them the WHOLE momentum instead created energy
+                    // when they were lighter than the dying cell — 116.6% on the glass projectile.
+                    // What the impulse does not carry leaves with the mass, at the speed the powder
+                    // ends up moving: co-moving with what it was pressed into.
+                    // Perfectly inelastic: the dying cell and everything it presses on end at ONE
+                    // velocity, and each partner is moved to it — m_o·(V − v_o). The total impulse is
+                    // the same reduced-mass J as before; the distribution is not. Splitting J by
+                    // partner mass pushed a partner that was already moving with the cell FORWARD
+                    // (the row behind, in a collide) instead of decelerating the one moving against
+                    // it, which is where the shock has to go.
+                    float V_x = (mc * vx + pvx) / (mc + mP), V_y = (mc * vy + pvy) / (mc + mP);
+                    float jx = mc * (vx - V_x), jy = mc * (vy - V_y);
+                    DustToContacts++; DustContactMom += SimMath.Hypot(jx, jy);
+                    for (int ci = 0; ci < _contactCount; ci++)
+                    {
+                        ref Contact ct = ref _contacts[ci];
+                        int o = ct.A == c ? ct.B : ct.B == c ? ct.A : -1;
+                        if (o < 0 || o >= _s.CellCount || _s.Dead(o)) continue;
+                        int bo = _s.CellBody[o];
+                        if (bo < 0 || bo >= _s.BodyCount) continue;
+                        CellVelocity(o, bo, out float ovx, out float ovy);
+                        SimMath.SinCos(_s.BodyRot[bo], out float so, out float coo);
+                        float ax = V_x - ovx, ay = V_y - ovy;               // Σ m_o·(V − v_o) = J
+                        _s.CellDvx[o] += ax * coo + ay * so;
+                        _s.CellDvy[o] += -ax * so + ay * coo;
+                    }
+                    ExportedPx += mc * vx - jx; ExportedPy += mc * vy - jy;
+                }
+                else
+                {
+                    // Pressing on nothing: free spall, and the ledger is the honest place for it.
+                    DustNoNeighbour++; DustLostMom += mc * SimMath.Hypot(vx, vy);
+                    ExportedPx += mc * vx; ExportedPy += mc * vy;
+                }
+            }
             // Translational energy at the cell's own velocity, plus the spin it carries away with
-            // it, less whatever the partners gained. Its share of the body's rotational energy is
-            // already in the w x r above.
-            float cw = _crushW[c];
+            // it. Its share of the body's rotational energy is already in the w x r above. What the
+            // neighbours gained is second order in the share they received and is left as
+            // dissipation.
+            float cw = _s.BodyW[bi] + _s.CellDw[c];
             ExportedKe += 0.5f * _s.CellM[c] * (vx * vx + vy * vy)
-                          + 0.5f * _s.CellIc[c] * cw * cw - _crushGain[c];
+                          + 0.5f * _s.CellIc[c] * cw * cw;
             Dust++; Crushed++; C.DustConverted++; DustMass += _s.CellM[c];
             _s.SetFlag(c, CellFlag.Dead, true);
             MarkDirty(bi);

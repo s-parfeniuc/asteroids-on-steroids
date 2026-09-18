@@ -62,7 +62,7 @@ public sealed partial class Solver
             BondForces(h);
             Mark(SolverPhase.BondForces);
             for (int i = 0; i < _contactCount; i++) SolveContact(ref _contacts[i], h);
-            AccumulateCrushDose(h);            // per CELL, after every contact on it has been seen
+            ApplyCarving(h);                   // geometry changes AFTER every contact is solved
             Mark(SolverPhase.Contacts);
             BondIntegrate(h);
             Mark(SolverPhase.BondIntegrate);

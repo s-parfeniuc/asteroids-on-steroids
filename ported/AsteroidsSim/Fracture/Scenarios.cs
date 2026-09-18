@@ -174,6 +174,9 @@ public static class Scenarios
         BodyBuilder.AddBody(s, ref rng, tuning, shot,
             dx / L * speed, dy / L * speed, 0f, material, grain);
         s.Reindex();
+        // NOT LabelPolyEdges over every cell. AddBody has already labelled the cells it created and
+        // built their touch records; relabelling from 0 resets SideTouch on every EXISTING cell, so
+        // firing a shot made the whole scene read as real surface in one frame.
 
         solver.TotalMomentum(out float pxAfter, out float pyAfter);
         float keAfter = solver.BodyKineticEnergy();
