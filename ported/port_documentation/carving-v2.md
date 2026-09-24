@@ -161,6 +161,43 @@ carries 0–2, and its front half 1–3, at 1× and at 3× failure strain alike.
 load comminute (`Crush` 4e5, `CrushRate` 2.0, `ShedLimit` 0.15) before the bond network transmits
 anything. That is a material tuning fact, not a routing one — the retune item.
 
+### Cracks transmit compression (`SimTuning.CrackPush`, on) — 2026-09-18
+
+A broken bond transmitted nothing and same-body cells never contact, so from the substep a bond broke
+until the body split at tick end the two sides of a crack had no interaction: a detached front row
+slid into the row behind with no resistance. Now a broken bond between live cells keeps its
+compressive normal force — only the closing part of its stretch is remembered, so it meets from
+zero — and no tension or shear. Rock is unchanged by it (its bonds hold), the correct null result.
+
+### Persistent rubble — tried and removed (2026-09-18)
+
+Comminuted cells were kept as single-cell powder bodies (no carving, no bias) that left when
+compacted past a bury depth or when free. It worked as specified (bounded population; compaction the
+exit that bound it) and was strictly worse: it did not rescue the glass back rows (body 0 still
+powdered by tick 40), and on rock it raised comminution (231 vs 145), raised the ledger (36 → 45%)
+and *lowered* the back-row load (97 → 38 loaded bonds) — bias-free powder pressed on its neighbours
+and carved them instead of transmitting. Removed entirely; the merge-to-common-velocity comminution
+routing it shared stays.
+
+### Delaying fracture so the impact can traverse (2026-09-18)
+
+Tested two physical forms of "let the wave pass before the body lets go":
+- **Rate sensitivity** (`RateSens`, existing, off): even at 400% — threshold ×8 at this loading rate —
+  glass loses ~300 cells by tick 40 exactly as at 0%. It also cannot work as written: it keys on the
+  instantaneous relative velocity, which is zero when a bond's stretch peaks.
+- **Split only when the crack opens** (`SimTuning.SplitOnOpen`, off, viewer checkbox): with `CrackPush`
+  tracking the closing across a broken bond, a body's components are walked over broken-but-pressed
+  bonds too, and the body re-partitions when a pressed crack opens. A pressed fragment is still
+  mechanically coupled, so contact impulses on it reach the whole body. Glass keeps more of itself
+  in one body (94 fragments vs 122) but body 0 still runs at 281 px/s at tick 30 and is gone by 40;
+  rock is unchanged.
+
+Why neither helps glass: over 30 ticks glass body 0 absorbs ~2.5M of impulse, rock ~29M. Glass's
+front cells last about one tick of contact before they comminute (`Crush` 4e5 hugely exceeded at
+1,150 m/s, rate 2.0, shed 0.15), and every replacement row starts a fresh contact from zero. Delaying
+fracture is the right lever for a body that **cracks**; the glass scene **crushes**, and its lever
+is `Crush`/`ShedLimit`.
+
 ## Unchanged, explicitly
 
 - `ShedLimit` per material: the fraction of built area a cell may lose before comminuting.

@@ -36,6 +36,7 @@ public partial class Viewer : Node2D
     private static readonly string[] ScenarioNames =
     {
         "collide", "projectile", "spin", "glass projectile", "steel projectile", "field",
+        "steel shell + rock core", "blast",
     };
 
     private static readonly SimMaterial[] Materials =
@@ -55,9 +56,26 @@ public partial class Viewer : Node2D
     private SimTuning _tune = SimTuning.Default;
 
     // Comminution multipliers on the selected materials' authored pair. See Crushed().
-    private float _crushThrMul = 1f;
-    private float _crushCapMul = 1f;
-    private float _shedMul = 1f;
+    /// <summary>
+    /// Per-role multipliers over every authored material field, so a material can be tuned in the
+    /// viewer without editing the table.
+    /// </summary>
+    /// <remarks>
+    /// Multipliers rather than absolute values, because they compose with whichever base material is
+    /// picked: x2 crush means the same thing for ice as for steel. Index 0 is the body, 1 the
+    /// impactor (and the round left-click fires), so a round can be tuned against a target without
+    /// changing the target.
+    /// </remarks>
+    private enum MatField { Rho, C, Strain, Chi, Crush, Rate, Shed, Dent }
+    private static readonly string[] MatFieldNames =
+        { "density", "wave speed", "failure strain", "chi (softening)", "crush threshold", "erosion rate", "shed limit", "dent width" };
+    private const int MatRoles = 2;
+    private static readonly string[] MatRoleNames = { "body", "impactor / round" };
+    private readonly float[,] _matMul = new float[MatRoles, 8];
+    private int _matRole;
+    private OptionButton _matRolePick = null!;
+    private readonly HSlider[] _matSliders = new HSlider[8];
+    private readonly Label[] _matLabels = new Label[8];
     private Scenarios.Result _scene;
 
     // Build-time knobs. Grain is cell AREA, so cell size is its square root: 30 gives 5.5 px cells,
@@ -66,6 +84,8 @@ public partial class Viewer : Node2D
     private float _grain = 900f;
     private float _impactorSpeed = 900f;
     private float _impactorMass = 3f;
+    /// Round radius in px, independent of its mass. 0 keeps the legacy 15*sqrt(mass).
+    private float _impactorSize = 10f;
 
     /// <summary>
     /// Set when a build-time knob moves. The rebuild is deferred to <see cref="_Process"/> and held
@@ -135,12 +155,24 @@ public partial class Viewer : Node2D
     // Controls, kept as fields so the keyboard shortcuts can move them and the two stay in step.
     private OptionButton _scenarioPick = null!;
     private OptionButton _materialPick = null!;
-    private HSlider _crushThrSlider = null!;
-    private HSlider _crushCapSlider = null!;
     private HSlider _confineSlider = null!;
-    private HSlider _shedSlider = null!;
     private HSlider _biasSlider = null!, _maxBiasSlider = null!;
-    private CheckBox _crackPushBox = null!;
+    private CheckBox _crackPushBox = null!, _splitBox = null!, _grainLockBox = null!;
+    private HSlider _crackCapSlider = null!;
+    private OptionButton _roundPick = null!;
+    private HSlider _blastPresSlider = null!, _blastRadSlider = null!, _fuseSlider = null!;
+    private HSlider _weibullSlider = null!, _anisoSlider = null!, _grainSlider2 = null!, _flawSlider = null!;
+
+    /// <summary>What left-click fires. The material model is the same for all of them; what differs
+    /// is how the load arrives — a lump of matter, a rod, a pressure front, or a lump then a front.</summary>
+    private enum Round { Bullet, Pierce, Blast, Explosive }
+    private static readonly string[] RoundNames = { "bullet", "piercing rod", "blast", "explosive" };
+    private Round _round = Round.Bullet;
+    private float _blastPressure = 3e5f, _blastRadius = 260f;
+    private int _fuseTicks = 150;
+    private int _pendingFuse = -1;                       // ticks left before an explosive round goes off
+    private float _fuseBodyX, _fuseBodyY;
+    private int _fuseBody = -1;
     private OptionButton _impactorPick = null!;
     private HSlider _grainSlider = null!, _speedSlider = null!, _massSlider = null!;
     private HSlider _strainSlider = null!, _toughSlider = null!, _substepSlider = null!;
@@ -236,6 +268,7 @@ public partial class Viewer : Node2D
         AddChild(_hud);
 
         RenderingServer.SetDefaultClearColor(new Color(0.027f, 0.039f, 0.055f));
+        for (int r = 0; r < MatRoles; r++) for (int f = 0; f < 8; f++) _matMul[r, f] = 1f;
         _headless = DisplayServer.GetName() == "headless";
         ParseArgs();
         if (!_headless) BuildUi();
@@ -332,11 +365,22 @@ public partial class Viewer : Node2D
         // two. The caption carries the square root, which is the number that is actually intuitive.
         _grainSlider = AddSlider(box, "grain", 30, 2500, 5, _grain,
             v => { _grain = (float)v; _needsReset = true; },
-            v => $"{v:F0}  ({MathF.Sqrt((float)v):F0} px cells)");
+            v =>
+            {
+                // Bodies are never built finer than their material can be integrated at the current
+                // substep count (BodyBuilder.MinGrain), so say when the slider asks for less.
+                float floor = BodyBuilder.MinGrain(ActiveMaterial, _tune);
+                return v < floor
+                    ? $"{v:F0} -> {floor:F0}, the floor for {ActiveMaterial.Name}  ({MathF.Sqrt(floor):F0} px cells)"
+                    : $"{v:F0}  ({MathF.Sqrt((float)v):F0} px cells)";
+            });
 
         _speedSlider = AddSlider(box, "impactor speed", 100, 4000, 50, _impactorSpeed,
             v => { _impactorSpeed = (float)v; _needsReset = true; }, v => $"{v:F0} px/s");
 
+        AddSlider(box, "impactor size", 0, 60, 1, _impactorSize,
+            v => { _impactorSize = (float)v; _needsReset = true; },
+            v => v <= 0 ? "from mass" : $"{v:F0} px");
         _massSlider = AddSlider(box, "impactor mass", 0.5, 24, 0.5, _impactorMass,
             v => { _impactorMass = (float)v; _needsReset = true; },
             v => $"x{v:F1}  (r {15f * MathF.Sqrt((float)v):F0} px)");
@@ -353,29 +397,41 @@ public partial class Viewer : Node2D
             v => { _tune.Substeps = (int)v; _needsReset = true; }, v => $"{v:F0}");
 
         box.AddChild(new HSeparator());
-        box.AddChild(new Label { Text = "comminution" });
+        box.AddChild(new Label { Text = "material (multipliers over the authored table)" });
 
-        // Log2 multipliers: the useful range is multiplicative, and a linear slider over a 64x span
-        // wastes nine tenths of its travel above x8. Captions carry the ABSOLUTE value for the
-        // currently selected body material, since that is the number to copy back into Materials.cs.
-        _crushThrSlider = AddSlider(box, "crush threshold", -4, 4, 1, 0,
-            v => { _crushThrMul = MathF.Pow(2f, (float)v); _needsReset = true; },
-            v => $"x{MathF.Pow(2f, (float)v):G3}  ({ActiveMaterial.Crush:E1})");
+        // Which material the sliders below edit. Body and round are separate sets, so a round can be
+        // tuned against a target without changing the target.
+        _matRolePick = new OptionButton();
+        foreach (string n in MatRoleNames) _matRolePick.AddItem(n);
+        _matRolePick.Selected = _matRole;
+        _matRolePick.ItemSelected += i => { _matRole = (int)i; RefreshMatSliders(); };
+        box.AddChild(_matRolePick);
 
-        // Energy per unit area destroyed: how expensive carving is. Raise it and a cell survives a
-        // longer contact, because the impactor has to do more work to remove the same material.
-        _crushCapSlider = AddSlider(box, "erosion rate", -6, 6, 1, 0,
-            v => { _crushCapMul = MathF.Pow(2f, (float)v); _needsReset = true; },
-            v => $"x{MathF.Pow(2f, (float)v):G3}  ({ActiveMaterial.CrushRate:E1})");
-
-        // How much of its ORIGINAL area a cell may lose before it comminutes — not what it shrinks
-        // to. Glass sheds little and then shatters; steel erodes a long way first.
-        // MULTIPLIER, not an absolute. Setting one value forced every material to the same shed
-        // limit, which silently erased the per-material difference this knob exists to explore —
-        // glass shedding 15% before it shatters and steel 50% became one number for both.
-        _shedSlider = AddSlider(box, "shed limit", -3, 3, 1, 0,
-            v => { _shedMul = MathF.Pow(2f, (float)v); _needsReset = true; },
-            v => $"x{MathF.Pow(2f, (float)v):G3}  ({ActiveMaterial.ShedLimit * 100f:F0}% of area)");
+        // Log2, because the useful range is multiplicative and a linear slider over a 64x span
+        // wastes nine tenths of its travel. Captions carry the ABSOLUTE value for the material the
+        // role currently resolves to, since that is the number to copy back into Materials.cs.
+        for (int f = 0; f < MatFieldNames.Length; f++)
+        {
+            int fi = f;
+            var caption = new Label();
+            box.AddChild(caption);
+            _matLabels[fi] = caption;
+            var sl = new HSlider
+            {
+                MinValue = -6, MaxValue = 6, Step = 0.25,
+                Value = MathF.Log2(_matMul[_matRole, fi]),
+                CustomMinimumSize = new Vector2(0, 18),
+            };
+            sl.ValueChanged += v =>
+            {
+                _matMul[_matRole, fi] = MathF.Pow(2f, (float)v);
+                _needsReset = true;
+                MatCaption(fi);
+            };
+            box.AddChild(sl);
+            _matSliders[fi] = sl;
+            MatCaption(fi);
+        }
 
         // The Baumgarte positional bias. Numerical, not physical: it pushes overlapping cells apart
         // at a velocity proportional to their overlap. Carving now owns overlap relief (peak overlap
@@ -390,17 +446,73 @@ public partial class Viewer : Node2D
         // A crack can push but not pull: broken bonds between live cells keep their compressive
         // normal force. Without it a detached front row slides into the row behind it with no
         // resistance until the body is split at the end of the tick. Live; read every substep.
+        box.AddChild(new HSeparator());
+        box.AddChild(new Label { Text = "round (left-click fires)" });
+
+        // The material model is identical for all four; what differs is how the load arrives.
+        _roundPick = new OptionButton();
+        foreach (string n in RoundNames) _roundPick.AddItem(n);
+        _roundPick.Selected = (int)_round;
+        _roundPick.ItemSelected += i => _round = (Round)i;
+        box.AddChild(_roundPick);
+
+        _blastPresSlider = AddSlider(box, "blast pressure", 1e4, 2e6, 1e4, _blastPressure,
+            v => _blastPressure = (float)v, v => $"{v:E1}");
+        _blastRadSlider = AddSlider(box, "blast radius", 40, 600, 10, _blastRadius,
+            v => _blastRadius = (float)v, v => $"{v:F0} px");
+        _fuseSlider = AddSlider(box, "explosive max flight", 10, 400, 10, _fuseTicks,
+            v => _fuseTicks = (int)v, v => $"{v:F0} ticks");
+
+        box.AddChild(new HSeparator());
+        box.AddChild(new Label { Text = "structure (per body, at build)" });
+
+        // Heterogeneity: what decides WHERE a body cracks, as opposed to how hard that is. All of it
+        // is applied once at build and scales bond strength only, so every one of these resets.
+        _weibullSlider = AddSlider(box, "weibull m", 0, 30, 0.5, _tune.WeibullM,
+            v => { _tune.WeibullM = (float)v; _needsReset = true; },
+            v => v <= 0 ? "off (uniform)" : $"{v:F1}");
+        _anisoSlider = AddSlider(box, "anisotropy", 0, 0.9, 0.05, _tune.Aniso,
+            v => { _tune.Aniso = (float)v; _needsReset = true; },
+            v => v <= 0 ? "off (isotropic)" : $"{v:F2}");
+        _grainSlider2 = AddSlider(box, "grain angle", 0, 180, 5, _tune.GrainAngle * 180f / MathF.PI,
+            v => { _tune.GrainAngle = (float)v * MathF.PI / 180f; _needsReset = true; },
+            v => $"{v:F0}°");
+        _grainLockBox = new CheckBox { Text = "lock grain (else random per body)", ButtonPressed = _tune.GrainLock };
+        _grainLockBox.Toggled += on => { _tune.GrainLock = on; _needsReset = true; };
+        box.AddChild(_grainLockBox);
+        _flawSlider = AddSlider(box, "surface flaws", 0, 0.9, 0.05, _tune.SurfFlaw,
+            v => { _tune.SurfFlaw = (float)v; _needsReset = true; },
+            v => v <= 0 ? "off" : $"-{v * 100:F0}% at the boundary");
+
+        box.AddChild(new HSeparator());
         _crackPushBox = new CheckBox { Text = "cracks transmit compression", ButtonPressed = _tune.CrackPush };
         _crackPushBox.Toggled += on => _tune.CrackPush = on;
         box.AddChild(_crackPushBox);
+
+        // MUST stay above zero while cracks push. A broken bond can only push, and same-body pairs
+        // never reach the contact solver, so nothing else bounds how far two cells can be driven
+        // together: uncapped it diverged to 1e18 px/s within a tick.
+        _crackCapSlider = AddSlider(box, "crack push cap", 0, 20, 0.5, _tune.CrackPushCap,
+            v => _tune.CrackPushCap = (float)v,
+            v => v <= 0 ? "UNCAPPED (diverges)" : $"{v:F1}x failure stretch");
+
+        // A body splits along a crack only once it has opened: while a broken bond's faces are still
+        // pressed together the two sides are one body, so contact impulses on a pressed fragment go
+        // to the whole body. Needs "cracks transmit compression". Live.
+        _splitBox = new CheckBox { Text = "split only when cracks open", ButtonPressed = _tune.SplitOnOpen };
+        _splitBox.Toggled += on => _tune.SplitOnOpen = on;
+        box.AddChild(_splitBox);
 
         // (min clip area: v1 only, lone cells; removed from the panel with carving v2)
 
         // The one free constant in the pressure measure, weighting penetration strain against the
         // braking impulse. Live rather than reset-on-change: it is read every substep, so it can be
         // moved while watching a contact.
-        _confineSlider = AddSlider(box, "confine weight", 0, 0.5, 0.005, _tune.CrushConfine,
+        _confineSlider = AddSlider(box, "confine weight", 0, 4, 0.05, _tune.CrushConfine,
             v => _tune.CrushConfine = (float)v, v => $"{v:F3}");
+        AddSlider(box, "overlap ceiling", 0, 1, 0.05, _tune.OverlapBackstop,
+            v => _tune.OverlapBackstop = (float)v,
+            v => v <= 0 ? "off" : $"{v:F2} of the thinner cell's half-extent");
 
         box.AddChild(new HSeparator());
 
@@ -508,6 +620,15 @@ public partial class Viewer : Node2D
                 case "--fills": _drawFills = v != 0; break;
                 case "--bonds": _bondView = (BondView)System.Math.Clamp(v, 0, 2); break;
                 case "--fill": _fillView = (FillView)System.Math.Clamp(v, 0, 2); break;
+                // --matmul <role*100 + field> <log2 x100>, so the material editor can be driven
+                // headless and its plumbing checked without a window.
+                case "--matmul":
+                {
+                    int role = System.Math.Clamp(v / 100, 0, MatRoles - 1), field = System.Math.Clamp(v % 100, 0, 7);
+                    if (i + 2 < args.Length && int.TryParse(args[i + 2], out int lg))
+                        _matMul[role, field] = MathF.Pow(2f, lg / 100f);
+                    break;
+                }
             }
         }
     }
@@ -543,19 +664,66 @@ public partial class Viewer : Node2D
     /// applying it to one only would silently change the ratio between them, which is exactly the
     /// thing being tuned.</para>
     /// </remarks>
-    private SimMaterial Crushed(in SimMaterial m)
-        => new(m.Name, m.Rho, m.C, m.Strain, m.Chi, m.Yield, m.Duct,
-               m.Crush * _crushThrMul, m.CrushRate * _crushCapMul,
-               SimMath.Min(0.95f, m.ShedLimit * _shedMul), m.Dent);
+    /// <summary>Applies one role's multipliers to a base material.</summary>
+    private SimMaterial Tuned(in SimMaterial m, int role)
+        => new(m.Name,
+               m.Rho * _matMul[role, (int)MatField.Rho],
+               m.C * _matMul[role, (int)MatField.C],
+               m.Strain * _matMul[role, (int)MatField.Strain],
+               SimMath.Max(1.001f, 1f + (m.Chi - 1f) * _matMul[role, (int)MatField.Chi]),
+               m.Yield, m.Duct,
+               m.Crush * _matMul[role, (int)MatField.Crush],
+               m.CrushRate * _matMul[role, (int)MatField.Rate],
+               SimMath.Min(0.95f, m.ShedLimit * _matMul[role, (int)MatField.Shed]),
+               m.Dent * _matMul[role, (int)MatField.Dent]);
+
+    private SimMaterial Crushed(in SimMaterial m) => Tuned(m, 0);
+
+    /// <summary>The material a role currently resolves to, with its multipliers applied.</summary>
+    private SimMaterial RoleMaterial(int role)
+        => role == 0 ? ActiveMaterial
+         : _round == Round.Pierce ? Tuned(SimMaterial.Penetrator, 1) : ImpactorMaterial;
+
+    /// <summary>Caption for one material slider: the multiplier, and the absolute it produces.</summary>
+    private void MatCaption(int f)
+    {
+        if (_matLabels[f] == null) return;
+        SimMaterial m = RoleMaterial(_matRole);
+        float mul = _matMul[_matRole, f];
+        string abs = (MatField)f switch
+        {
+            MatField.Rho => $"{m.Rho:F0} kg/m3",
+            MatField.C => $"{m.C:F0} m/s",
+            MatField.Strain => $"{m.Strain:F4}",
+            MatField.Chi => $"{m.Chi:F1}",
+            MatField.Crush => $"{m.Crush:E1}",
+            MatField.Rate => $"{m.CrushRate:G3}",
+            MatField.Shed => $"{m.ShedLimit * 100f:F0}% of area",
+            _ => $"{m.Dent:F1} radii",
+        };
+        _matLabels[f].Text = $"{MatFieldNames[f]}   x{mul:G3}  ({m.Name}: {abs})";
+    }
+
+    /// <summary>Points the material sliders at whichever role is now selected.</summary>
+    private void RefreshMatSliders()
+    {
+        for (int f = 0; f < _matSliders.Length; f++)
+        {
+            if (_matSliders[f] == null) continue;
+            _matSliders[f].SetValueNoSignal(MathF.Log2(_matMul[_matRole, f]));
+            MatCaption(f);
+        }
+    }
 
     /// <summary>The material the current scenario actually built with — scenarios 4 and 5 force
     /// their own, and a readout that showed the selected one instead would be lying.</summary>
-    private SimMaterial ImpactorMaterial => Crushed(Materials[_impactorMaterialIndex]);
+    private SimMaterial ImpactorMaterial => Tuned(Materials[_impactorMaterialIndex], 1);
 
     private SimMaterial ActiveMaterial => _scenario switch
     {
         3 => Crushed(SimMaterial.Glass),
         4 => Crushed(SimMaterial.Steel),
+        6 => Crushed(SimMaterial.Rock),                 // the core; the shell is steel
         _ => Crushed(Materials[_materialIndex]),
     };
 
@@ -572,6 +740,13 @@ public partial class Viewer : Node2D
                                       impactor: ImpactorMaterial),
             4 => Scenarios.Projectile(_tune, m, _impactorSpeed, _impactorMass, _grain,
                                       impactor: ImpactorMaterial),
+            // Shell and core are both parts of the BODY, so both take the body role's multipliers;
+            // the round that hits them takes the impactor role. Passing the raw table entries here
+            // made every material knob inert in this scenario.
+            6 => Scenarios.Shell(_tune, Tuned(SimMaterial.Steel, 0), m,
+                                 _impactorSpeed, _impactorMass, _grain, impactor: ImpactorMaterial),
+            7 => Scenarios.Blast(Scenarios.Collide(_tune, m, 0f, _grain), _tune,
+                                 370f, 350f, _blastPressure, _blastRadius),
             _ => Scenarios.Field(_tune, m, _fieldCols, _fieldRows, 60f, _fieldSpacing, 60f, _grain),
         };
         _needsReset = false;
@@ -610,6 +785,7 @@ public partial class Viewer : Node2D
         _sw.Restart();
         _phaseSw.Restart();
         _scene.Solver.Step();
+        AdvanceFuse();
         _sw.Stop();
         _msTick = Smooth(_msTick, _sw.Elapsed.TotalMilliseconds);
         for (int i = 0; i < _phaseMs.Length; i++) _phaseMs[i] = Smooth(_phaseMs[i], _phaseAcc[i]);
@@ -1083,8 +1259,8 @@ public partial class Viewer : Node2D
                 case Key.B: CycleBondView(); break;
                 case Key.M: Pick(_materialPick, ref _materialIndex, Materials.Length); break;
                 case Key.N: Pick(_impactorPick, ref _impactorMaterialIndex, Materials.Length); break;
-                case Key.Key1: case Key.Key2: case Key.Key3:
-                case Key.Key4: case Key.Key5: case Key.Key6:
+                case Key.Key1: case Key.Key2: case Key.Key3: case Key.Key4:
+                case Key.Key5: case Key.Key6: case Key.Key7: case Key.Key8:
                     Select(_scenarioPick, ref _scenario, (int)(key.Keycode - Key.Key1));
                     break;
                 case Key.Minus: Nudge(_strainSlider, -1); break;
@@ -1211,16 +1387,69 @@ public partial class Viewer : Node2D
     /// </remarks>
     private void FireAt(Vector2 world)
     {
+        _shots++;
+        _poseComparable = false;
+
+        // A blast needs no round at all: the front arrives where you clicked.
+        if (_round == Round.Blast)
+        {
+            _scene = Scenarios.Blast(_scene, _tune, world.X, world.Y, _blastPressure, _blastRadius);
+            return;
+        }
+
         float fromX = world.X - 600f;
         float fromY = world.Y;
-        _shots++;
         // Radius from mass the same way Scenarios.Projectile derives it, so the slider means the
         // same thing whether the impactor is built into the scene or fired into it.
-        float radius = 15f * MathF.Sqrt(_impactorMass);
-        _scene = Scenarios.FireAt(_scene, _tune, ImpactorMaterial,
+        // SIZE AND MASS ARE SEPARATE. The mass slider still means what it always did — the round
+        // weighs what a 15*sqrt(mass) blob of this material weighs — but the round is now BUILT at
+        // whatever size is asked for, and its density is solved to carry that mass. A small, dense
+        // round is the result. Measured on a rock target: holding mass while shrinking kept the
+        // damage and then raised it (0.7% of the target at radius 26, 0.9% at 8.7, 2.9% at 4.3),
+        // where shrinking without it collapsed to 0.2%.
+        float massRadius = 15f * MathF.Sqrt(_impactorMass);
+        float radius = _impactorSize > 0f ? _impactorSize : massRadius;
+
+        // The rod is the same mass redistributed: a small face, and a material that resists its own
+        // comminution, so it stays a rod instead of mushrooming into a wide crater.
+        SimMaterial round = _round == Round.Pierce ? Tuned(SimMaterial.Penetrator, 1) : ImpactorMaterial;
+        float rx = _round == Round.Pierce ? radius * 3.5f : radius;
+        float ry = _round == Round.Pierce ? radius / 3.5f : radius;
+        float mrx = _round == Round.Pierce ? massRadius * 3.5f : 0f;
+        float mry = _round == Round.Pierce ? massRadius / 3.5f : 0f;
+        float wantMass = Scenarios.RoundMass(round, massRadius, mrx, mry, _shots);
+
+        _scene = Scenarios.FireAt(_scene, _tune, round,
             fromX, fromY, world.X, world.Y,
-            speed: _impactorSpeed, radius: radius, grain: _grain, seed: _shots);
-        _poseComparable = false;
+            speed: _impactorSpeed, radius: radius, grain: _grain, seed: _shots,
+            radiusX: rx, radiusY: ry, roundMass: wantMass);
+
+        // An explosive round is the bullet path plus a front, a few ticks later, wherever it got to.
+        // Scheduled here rather than inside Scenarios, so Blast stays a primitive with no fuse in it.
+        if (_round == Round.Explosive)
+        {
+            _fuseBody = _scene.State.BodyCount - 1;
+            _pendingFuse = _fuseTicks;
+        }
+    }
+
+    /// <summary>Sets an explosive round off where it actually strikes something.</summary>
+    /// <remarks>
+    /// A fixed countdown from the spawn detonated in mid-air whenever the flight took longer than
+    /// the fuse, and inside the target whenever it took less — the blast landed wherever the timer
+    /// happened to expire, which is why it read as arbitrary. The round now goes off on its FIRST
+    /// contact, which the solver reports directly. The fuse slider stays as a flight-time limit, so
+    /// a round that misses everything still detonates instead of sailing on forever.
+    /// </remarks>
+    private void AdvanceFuse()
+    {
+        if (_pendingFuse < 0) return;
+        SimState s = _scene.State;
+        if (_fuseBody >= 0 && _fuseBody < s.BodyCount) { _fuseBodyX = s.BodyX[_fuseBody]; _fuseBodyY = s.BodyY[_fuseBody]; }
+        bool struck = _fuseBody >= 0 && _fuseBody < s.BodyCount && _scene.Solver.BodyTouchedThisTick(_fuseBody);
+        if (!struck && --_pendingFuse > 0) return;
+        _pendingFuse = -1;
+        _scene = Scenarios.Blast(_scene, _tune, _fuseBodyX, _fuseBodyY, _blastPressure, _blastRadius);
     }
 
     // ── readout ──────────────────────────────────────────────────────────────
@@ -1318,8 +1547,8 @@ public partial class Viewer : Node2D
         float led = SimMath.Hypot(solver.ExportedPx, solver.ExportedPy);
         float tot = live + led;
 
-        return $"crush thr {ActiveMaterial.Crush:E1} (x{_crushThrMul:G3})"
-             + $"   erosion rate {ActiveMaterial.CrushRate:G3} (x{_crushCapMul:G3})"
+        return $"crush thr {ActiveMaterial.Crush:E1}"
+             + $"   erosion rate {ActiveMaterial.CrushRate:G3}"
              + $"   shed limit {ActiveMaterial.ShedLimit * 100f:F0}%"
              + $"   peak shed {worst * 100f,5:F1}% of limit"
              + $"   carved {solver.ShedArea:F2} cells"
@@ -1352,9 +1581,16 @@ public partial class Viewer : Node2D
           + $"grain {_grain:F0} ({MathF.Sqrt(_grain):F0} px)  impactor {_impactorSpeed:F0} px/s x{_impactorMass:F1}"
           + $"   strain x{_tune.StrainScale:F1}  toughness x{_tune.ToughnessScale:F1}"
           + $"  substeps {_tune.Substeps}   zoom {_zoom:F2}\n"
+          + $"round {RoundNames[(int)_round]}"
+          + (_round == Round.Blast || _round == Round.Explosive
+              ? $" (p {_blastPressure:E1}, r {_blastRadius:F0}px{(_round == Round.Explosive ? $", max flight {_fuseTicks}" : "")})" : "")
+          + $"   structure: weibull {(_tune.WeibullM <= 0 ? "off" : _tune.WeibullM.ToString("F1"))}"
+          + $" · aniso {(_tune.Aniso <= 0 ? "off" : _tune.Aniso.ToString("F2"))}"
+          + $" · flaws {(_tune.SurfFlaw <= 0 ? "off" : _tune.SurfFlaw.ToString("F2"))}"
+          + $" · grain {(_tune.GrainLock ? $"{_tune.GrainAngle * 180f / MathF.PI:F0}° locked" : "random per body")}\n"
           + $"view: fills {(_drawFills ? "on" : "off")} · {_fillView.ToString().ToLowerInvariant()}"
           + $" · ids {(_showIds ? "on" : "off")} · outlines {(_drawOutlines ? "on" : "off")} · bonds {_bondView.ToString().ToLowerInvariant()}\n"
-          + "\n1-6 scenario · M/N body,impactor material · R reset · space pause · . step · [ ] slow-mo\n"
+          + "\n1-8 scenario · M/N body,impactor material · R reset · space pause · . step · [ ] slow-mo\n"
           + "F fills · C fill view · O outlines · I cell ids · B bond view · G/H grain\n"
           + "-/= strain · ,/ toughness · ;/' substeps\n"
           + "left-click fires · right-drag pans · wheel zooms · Z refits · esc quits";

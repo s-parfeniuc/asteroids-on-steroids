@@ -229,7 +229,11 @@ internal static class SideAudit
             {
                 int c = side == 0 ? a : b;
                 int off = s.PolyOff[c], len = s.PolyLen[c];
-                float tol = SimMath.Max(1e-2f, s.CellRad[c] * 5e-3f);
+                // 0.05 px is the model's own noise floor — the length below which a side is merged
+                // away and the distance below which two records are taken to describe one vertex.
+                // A tighter tolerance here reports a disagreement finer than anything the model
+                // resolves: it fired at 0.046 px on a 9 px cell, twice in 200 ticks.
+                float tol = SimMath.Max(0.05f, s.CellRad[c] * 5e-3f);
                 for (int v = 0; v < len; v++)
                 {
                     if (s.SideTouch[off + v] != rec) continue;

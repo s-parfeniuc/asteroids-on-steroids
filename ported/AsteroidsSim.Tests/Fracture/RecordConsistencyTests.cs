@@ -31,6 +31,7 @@ public class RecordConsistencyTests
         yield return new object[] { "collide/rock g170" };
         yield return new object[] { "steel/steel g255 2250" };
         yield return new object[] { "steel/rock g900 900" };
+        yield return new object[] { "steel shell / rock core" };
     }
 
     private static Scenarios.Result Build(string name)
@@ -51,6 +52,7 @@ public class RecordConsistencyTests
                 return Scenarios.Projectile(t, hard, 2250f, 5.5f, 255f, impactor: hard);
             }
             case "steel/rock g900 900": return Scenarios.Projectile(t, Material.Rock, 900f, 3f, 900f, impactor: Material.Steel);
+            case "steel shell / rock core": return Scenarios.Shell(t, Material.Steel, Material.Rock);
             default: throw new ArgumentOutOfRangeException(nameof(name));
         }
     }

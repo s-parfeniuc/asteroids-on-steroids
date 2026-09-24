@@ -77,6 +77,9 @@ public sealed partial class Solver
     /// substep, so it never survives into a snapshot and never reaches the fingerprint.
     /// </summary>
     private float[] _cellPress = Array.Empty<float>();
+    /// <summary>Last tick on which each body was party to a contact, or -1. Indexed by body, but
+    /// sized by cell count, which bounds it since every body owns at least one cell.</summary>
+    private int[] _bodyTouchTick = Array.Empty<int>();
     private float[] _skinMinX = Array.Empty<float>(), _skinMaxX = Array.Empty<float>();
     private float[] _skinMinY = Array.Empty<float>(), _skinMaxY = Array.Empty<float>();
 
@@ -120,6 +123,15 @@ public sealed partial class Solver
     /// <summary>Candidate pairs and surviving contacts last substep. Diagnostics.</summary>
     public int PairCount => _pairCount / 2;
     public int ContactCount => _contactCount;
+    /// <summary>Diagnostic read of one live contact.</summary>
+    public Contact ContactAt(int i) => _contacts[i];
+
+    /// <summary>Was this body party to a contact on the tick just stepped?</summary>
+    /// <remarks>For callers that need to know a projectile has actually struck something, rather
+    /// than guessing from a timer. Set where contact pressure is accumulated, so it sees every
+    /// contact the solve saw; never cleared, only stamped, so it costs one store per contact.</remarks>
+    public bool BodyTouchedThisTick(int body)
+        => body >= 0 && body < _bodyTouchTick.Length && _bodyTouchTick[body] == _s.Tick;
 
     /// <summary>Per-tick work counters. Diagnostics only; never read by the simulation.</summary>
     public SolverCounters C;
@@ -461,7 +473,8 @@ public sealed partial class Solver
     private void EnsureSkin()
     {
         if (_skinX.Length >= _s.PolyCount && _skinStamp.Length >= _s.CellCount
-            && _skinMinX.Length >= _s.CellCount && _cellPress.Length >= _s.CellCount) return;
+            && _skinMinX.Length >= _s.CellCount && _cellPress.Length >= _s.CellCount
+            && _bodyTouchTick.Length >= _s.CellCount) return;
         int np = System.Math.Max(1, _s.PolyCount);
         _skinX = new float[np];
         _skinY = new float[np];
@@ -469,6 +482,9 @@ public sealed partial class Solver
         _skinMinX = new float[nc]; _skinMaxX = new float[nc];
         _skinMinY = new float[nc]; _skinMaxY = new float[nc];
         _cellPress = new float[nc];
+        var bt = new int[nc];
+        for (int i = 0; i < nc; i++) bt[i] = -1;
+        _bodyTouchTick = bt;
         var st = new int[nc];
         for (int i = 0; i < nc; i++) st[i] = -1;
         _skinStamp = st;
@@ -996,7 +1012,6 @@ public sealed partial class Solver
     /// for why per-body iteration is bit-identical to the global loop.</summary>
     private void BondIntegrate(float h, int bodyLo, int bodyHi, ref SolverCounters c)
     {
-        bool rateSens = _tune.RateSens > 0f;
         for (int bi = bodyLo; bi < bodyHi; bi++)
         {
         int bondOff = _s.BodyBondOff[bi], bondLen = _s.BodyBondLen[bi];
@@ -1020,14 +1035,21 @@ public sealed partial class Solver
             float vby = _s.CellDvy[b] + _s.CellDw[b] * rbx;
             float rvx = vbx - vax, rvy = vby - vay, rva = _s.CellDw[b] - _s.CellDw[a];
 
-            if (rateSens)
-                _s.BondRate[k] = SimMath.Hypot(rvx, rvy) / SimMath.Max(1f, _s.BondLen[k]);
 
             if (broken)
             {
                 // Across a crack only closing is remembered: the faces part freely, and meet again
                 // from zero. Tension and shear across a crack do not exist.
-                _s.BondSn[k] = SimMath.Min(0f, _s.BondSn[k] + (rvx * nx + rvy * ny) * h);
+                float snOld = _s.BondSn[k];
+                float snNew = SimMath.Min(0f, snOld + (rvx * nx + rvy * ny) * h);
+                // Bounded, or it diverges — see SimTuning.CrackPushCap. BondSn and BondS0 are both
+                // stretches in px, so the cap is a pure multiple; the earlier version multiplied by
+                // BondLen as well, which is dimensionally wrong and left the bound far too loose.
+                if (_tune.CrackPushCap > 0f) snNew = SimMath.Max(snNew, -_tune.CrackPushCap * _s.BondS0[k]);
+                _s.BondSn[k] = snNew;
+                // A pressed crack that has just opened may have been the last thing holding two
+                // pieces in one body: the body needs re-partitioning at the end of the tick.
+                if (_tune.SplitOnOpen && snOld < 0f && snNew >= 0f) _s.BodyDirty[bi] = true;
                 continue;
             }
             _s.BondSn[k] += (rvx * nx + rvy * ny) * h;
@@ -1062,6 +1084,21 @@ public sealed partial class Solver
     }
 
     /// <summary>Inertial loads for a contiguous range of bodies; each body is independent.</summary>
+    /// <remarks>
+    /// <para><b>Neither load may create energy.</b> Both used to, and together they were the
+    /// high-speed crash: a fragment spinning fast enough had its angular velocity flip sign and grow
+    /// every substep (+1.1e3, -6.6e3, +5.9e4, -9.4e7, +2.0e12, then non-finite), and switching off
+    /// any one inertial load stopped it on the sandstone repro.</para>
+    /// <para><b>Coriolis</b> is 2w x v on the deviation velocity: a pure rotation of it, at rate
+    /// -2w. Stepping a rotation explicitly scales the speed by sqrt(1 + (2wh)^2) every substep — an
+    /// energy pump, x3.07 per substep at the w*h of 0.72 the diverging fragment reached. It is now
+    /// applied as the exact rotation by -2wh, which does no work, as Coriolis must not.</para>
+    /// <para><b>Centrifugal</b> does work on the deviation field that the spin pays for, and the
+    /// spin was reduced to match. But when the work asked for exceeded the rotational energy the
+    /// full kick was still applied and the spin was only zeroed: energy (work - E) appeared from
+    /// nothing, and the jump in w fed a spurious spike into the finite-difference alpha that drives
+    /// the Euler load. The kick is now scaled so it never does more work than the spin holds.</para>
+    /// </remarks>
     private void ApplyInertialLoads(float h, int bodyLo, int bodyHi, ref SolverCounters ctr)
     {
         for (int b = bodyLo; b < bodyHi; b++)
@@ -1072,8 +1109,27 @@ public sealed partial class Solver
             ctr.InertialBodies++;
             if (w2 < 1e-12f && SimMath.Abs(a) < 1e-12f) { ctr.InertialSkipped++; continue; }
 
-            float work = 0f, ip = 0f;
             int off = _s.BodyCellOff[b], len = _s.BodyCellLen[b];
+
+            // Centrifugal work at this substep's velocities, first, so the kick can be sized to what
+            // the rotation can pay before any of it is applied.
+            float cenScale = 1f, work = 0f;
+            if (_tune.Centrifugal)
+            {
+                for (int i = 0; i < len; i++)
+                {
+                    int c = _s.BodyCells[off + i];
+                    if (_s.Dead(c)) continue;
+                    work += _s.CellM[c] * w2 * (_s.CellRx[c] * _s.CellDvx[c] + _s.CellRy[c] * _s.CellDvy[c]) * h;
+                }
+                float budget = 0.5f * _s.BodyI[b] * w2;
+                if (work > budget && work > 0f) cenScale = budget / work;
+            }
+
+            float cr = 1f, sr = 0f;
+            if (_tune.Coriolis) SimMath.SinCos(2f * w * h, out sr, out cr);
+
+            float ip = 0f;
             for (int i = 0; i < len; i++)
             {
                 int c = _s.BodyCells[off + i];
@@ -1082,20 +1138,21 @@ public sealed partial class Solver
                 float rx = _s.CellRx[c], ry = _s.CellRy[c];
                 float ax = 0f, ay = 0f;
 
-                if (_tune.Centrifugal)
-                {
-                    ax += w2 * rx; ay += w2 * ry;
-                    work += _s.CellM[c] * (w2 * rx * vx + w2 * ry * vy) * h;
-                }
+                if (_tune.Centrifugal) { ax += cenScale * w2 * rx; ay += cenScale * w2 * ry; }
                 if (_tune.Euler)
                 {
                     ax += a * ry; ay -= a * rx;
                     ip += _s.CellM[c] * (rx * rx + ry * ry);
                 }
-                if (_tune.Coriolis) { ax += 2f * w * vy; ay -= 2f * w * vx; }
+                if (_tune.Coriolis)
+                {
+                    float nvx = vx * cr + vy * sr;          // exact rotation of v by -2wh
+                    vy = -vx * sr + vy * cr;
+                    vx = nvx;
+                }
 
-                _s.CellDvx[c] += ax * h;
-                _s.CellDvy[c] += ay * h;
+                _s.CellDvx[c] = vx + ax * h;
+                _s.CellDvy[c] = vy + ay * h;
                 ctr.InertialCells++;
             }
 
@@ -1103,7 +1160,7 @@ public sealed partial class Solver
 
             if (work != 0f && _s.BodyI[b] > 0f)
             {
-                float w2n = w * w - 2f * work / _s.BodyI[b];
+                float w2n = w2 - 2f * cenScale * work / _s.BodyI[b];
                 _s.BodyW[b] = w2n > 0f ? SimMath.Sign(w) * SimMath.Sqrt(w2n) : 0f;
             }
         }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using System;
 using System.Diagnostics;
@@ -60,7 +61,7 @@ internal static class Program
         if (Array.IndexOf(args, "--crushdiag") >= 0) { CrushDiag(args); return; }
         if (Array.IndexOf(args, "--polycensus") >= 0) { PolyCensus(); return; }
         if (Array.IndexOf(args, "--sidecensus") >= 0) { SideCensus(); return; }
-        if (Array.IndexOf(args, "--audit") >= 0) { SideAuditRun(); return; }
+        if (Array.IndexOf(args, "--audit") >= 0) { SideAuditRun(Array.IndexOf(args, "--v1lone") < 0); return; }
         if (Array.IndexOf(args, "--carvetrace") >= 0) { CarveTrace(); return; }
         if (Array.IndexOf(args, "--tick69") >= 0) { Tick69(args); return; }
         if (Array.IndexOf(args, "--normals") >= 0) { NormalSpread(args); return; }
@@ -81,6 +82,39 @@ internal static class Program
         if (Array.IndexOf(args, "--vkinds") >= 0) { VertexKinds(args); return; }
         if (Array.IndexOf(args, "--bias") >= 0) { BiasSweepV2(args); return; }
         if (Array.IndexOf(args, "--momflow") >= 0) { MomentumFlow(args); return; }
+        if (Array.IndexOf(args, "--shell") >= 0) { ShellRun(args); return; }
+        if (Array.IndexOf(args, "--impact") >= 0) { ImpactTypes(args); return; }
+        if (Array.IndexOf(args, "--structure") >= 0) { StructureRun(args); return; }
+        if (Array.IndexOf(args, "--crashhunt") >= 0) { CrashHunt(args); return; }
+        if (Array.IndexOf(args, "--bondlen") >= 0) { BondLenRun(args); return; }
+        if (Array.IndexOf(args, "--spawnin") >= 0) { SpawnInside(args); return; }
+        if (Array.IndexOf(args, "--rodshape") >= 0) { RodShape(args); return; }
+        if (Array.IndexOf(args, "--backstop") >= 0) { BackstopRun(args); return; }
+        if (Array.IndexOf(args, "--overlapgate") >= 0) { OverlapGateRun(args); return; }
+        if (Array.IndexOf(args, "--subablate") >= 0) { SubstepAblationRun(args); return; }
+        if (Array.IndexOf(args, "--ablate") >= 0) { InertialAblationRun(args); return; }
+        if (Array.IndexOf(args, "--drained") >= 0) { DrainedCellRun(args); return; }
+        if (Array.IndexOf(args, "--bondomega") >= 0) { BondOmegaRun(args); return; }
+        if (Array.IndexOf(args, "--energystage") >= 0) { EnergyStageRun(args); return; }
+        if (Array.IndexOf(args, "--diverge") >= 0) { DivergeRun(args); return; }
+        if (Array.IndexOf(args, "--nanstage") >= 0) { NanStageRun(args); return; }
+        if (Array.IndexOf(args, "--nantrap") >= 0) { NanTrapRun(args); return; }
+        if (Array.IndexOf(args, "--overlap") >= 0) { OverlapCensusRun(args); return; }
+        if (Array.IndexOf(args, "--nansweep") >= 0) { NanSweepRun(args); return; }
+        if (Array.IndexOf(args, "--pairwatch") >= 0) { PairWatchRun(args); return; }
+        if (Array.IndexOf(args, "--guardspread") >= 0) { GuardrailSpreadRun(args); return; }
+        if (Array.IndexOf(args, "--smallround") >= 0) { SmallRoundRun(args); return; }
+        if (Array.IndexOf(args, "--fusecheck") >= 0) { FuseCheckRun(args); return; }
+        if (Array.IndexOf(args, "--bondiface") >= 0) { BondInterfaceRun(args); return; }
+        if (Array.IndexOf(args, "--partb") >= 0) { PartBRun(args); return; }
+        if (Array.IndexOf(args, "--dentcap") >= 0) { DentCapacityRun(args); return; }
+        if (Array.IndexOf(args, "--dentbudget") >= 0) { DentBudgetRun(args); return; }
+        if (Array.IndexOf(args, "--dentpick") >= 0) { DentPickRun(args); return; }
+        if (Array.IndexOf(args, "--dentscale") >= 0) { DentScaleRun(args); return; }
+        if (Array.IndexOf(args, "--tiptrace") >= 0) { TipTraceRun(args); return; }
+        if (Array.IndexOf(args, "--carveangle") >= 0) { CarveAngleRun(args); return; }
+        if (Array.IndexOf(args, "--viewerrod") >= 0) { ViewerRodRun(args); return; }
+        if (Array.IndexOf(args, "--tip") >= 0) { TipRun(args); return; }
         if (Array.IndexOf(args, "--mats") >= 0) { MaterialCensus(args); return; }
         if (Array.IndexOf(args, "--stretch") >= 0) { StretchProbe(args); return; }
         if (Array.IndexOf(args, "--crushcap") >= 0) { CrushCapSweep(args); return; }
@@ -677,7 +711,7 @@ internal static class Program
     }
 
     /// <summary>Runs the side-classification audit per tick and reports where it first breaks.</summary>
-    private static void SideAuditRun()
+    private static void SideAuditRun(bool loneCells = true)
     {
         var t = SimTuning.Default;
         var t170 = SimTuning.Default; t170.ToughnessScale = 1.1f; t170.CarveContinuity = 0.75f; t170.CrushConfine = 0.10f;
@@ -691,8 +725,10 @@ internal static class Program
             ("collide/rock g170", Scenarios.Collide(t170, Material.Rock, 600f, 170f)),
             ("steel/steel g255 2250", Scenarios.Projectile(t255, hardSteel, 2250f, 5.5f, 255f, impactor: hardSteel)),
             ("steel/rock g900 900", Scenarios.Projectile(t, Material.Rock, 900f, 3f, 900f, impactor: Material.Steel)),
+            ("steel shell / rock core", Scenarios.Shell(t, Material.Steel, Material.Rock)),
         })
         {
+            r.Solver.DentLoneCells = loneCells;
             var rep = new SideAudit.Report();
             SideAudit.Audit(r.State, rep, 0);
             SideAudit.AuditGeometry(r.State, rep, 0);
@@ -1446,13 +1482,15 @@ internal static class Program
         foreach (var m in tough ? new[] { Material.Glass } : new[] { Material.Glass, Material.Rock })
         {
             var tn = SimTuning.Default; if (tough) { tn.StrainScale = 3f; }
+            int ts = ArgInt(args, "--tscale", -1); if (ts >= 0) tn.ToughnessScale = ts / 10f;
             if (Array.IndexOf(args, "--crackpush") >= 0) tn.CrackPush = true;
+            if (Array.IndexOf(args, "--splitopen") >= 0) tn.SplitOnOpen = true;
             var r = Scenarios.Collide(tn, m, 600f, 170f);
             SimState s = r.State;
             float v0 = SimMath.Hypot(s.BodyVx[0], s.BodyVy[0]);
             float m0 = s.BodyM[0];
             Console.WriteLine($"── {m.Name}: body 0 starts at {v0:F0} px/s, mass {m0:F0}");
-            Console.WriteLine("   tick  body0 v   mass%   bodies  contacts  dead  dust→nbrs  dust→contacts  dust→ledger  ledger%   |Dv| front / back   stretched bonds front / back");
+            Console.WriteLine("   tick  body0 v   mass%   bodies  contacts  dead  dust→nbrs  dust→contacts  ledger%   |Dv| front / back   loaded bonds front / back");
             float ux0 = s.BodyVx[0] / SimMath.Max(1e-3f, v0), uy0 = s.BodyVy[0] / SimMath.Max(1e-3f, v0);
             int lastDead = 0;
             for (int tick = 1; tick <= 60; tick++)
@@ -1480,11 +1518,2152 @@ internal static class Program
                     float wx = s.CellRx[c] * cs - s.CellRy[c] * sn, wy = s.CellRx[c] * sn + s.CellRy[c] * cs;
                     if (wx * ux0 + wy * uy0 > 0f) sbF++; else sbB++;
                 }
-                Console.WriteLine($"   {tick,4}  {SimMath.Hypot(s.BodyVx[0], s.BodyVy[0]),7:F0}  {100f * s.BodyM[0] / m0,5:F0}%  {s.BodyCount,6}  {r.Solver.ContactCount,8}  {dead,4}  {r.Solver.DustToNeighbours,9}  {r.Solver.DustToContacts,13}  {r.Solver.DustNoNeighbour,11}  {LedgerPct(r.Solver),6:F1}%   {(nF > 0 ? dvF / nF : 0f),6:F1} / {(nB > 0 ? dvB / nB : 0f),-6:F1}   {sbF,5} / {sbB}");
+                Console.WriteLine($"   {tick,4}  {SimMath.Hypot(s.BodyVx[0], s.BodyVy[0]),7:F0}  {100f * s.BodyM[0] / m0,5:F0}%  {s.BodyCount,6}  {r.Solver.ContactCount,8}  {dead,4}  {r.Solver.DustToNeighbours,9}  {r.Solver.DustToContacts,13}  {LedgerPct(r.Solver),6:F1}%   {(nF > 0 ? dvF / nF : 0f),6:F1} / {(nB > 0 ? dvB / nB : 0f),-6:F1}   {sbF,5} / {sbB}");
                 lastDead = dead;
             }
             Console.WriteLine($"   comminution momentum: to neighbours (impact share) {r.Solver.DustDevMom:F0}, left with mass (rigid share) {r.Solver.DustRigidMom:F0}, "
                             + $"into contact partners {r.Solver.DustContactMom:F0}, exported (pressing on nothing) {r.Solver.DustLostMom:F0}; body 0 initial momentum {m0 * v0:F0}");
+        }
+    }
+
+    /// <summary>The rod's tip: what the driver sees there, and what it does about it.</summary>
+    /// Builds the rod exactly as the viewer's left-click does and reports whether carving v2 even
+    /// runs on it, or whether it falls back to v1 for want of a live touch record.
+    /// Steps a scene tick by tick and reports the first NaN, and where it appeared.
+    private static bool FirstNaN(Scenarios.Result r, int ticks, string label)
+    {
+        SimState s = r.State;
+        for (int i = 0; i < ticks; i++)
+        {
+            r.Solver.Step();
+            for (int b = 0; b < s.BodyCount; b++)
+            {
+                if (!float.IsNaN(s.BodyX[b]) && !float.IsNaN(s.BodyY[b])
+                    && !float.IsNaN(s.BodyVx[b]) && !float.IsNaN(s.BodyVy[b])
+                    && !float.IsNaN(s.BodyRot[b])) continue;
+                Console.WriteLine($"  {label}: NaN at tick {i} in body {b} "
+                    + $"(x {s.BodyX[b]}, y {s.BodyY[b]}, vx {s.BodyVx[b]}, vy {s.BodyVy[b]}, rot {s.BodyRot[b]})");
+                return true;
+            }
+            int bad = 0;
+            for (int c = 0; c < s.CellCount; c++)
+                if (float.IsNaN(s.CellRx[c]) || float.IsNaN(s.CellRy[c])
+                    || float.IsNaN(s.CellDvx[c]) || float.IsNaN(s.CellDvy[c])) bad++;
+            if (bad > 0)
+            {
+                Console.WriteLine($"  {label}: NaN at tick {i} in {bad} cell(s) (rx/ry/dvx/dvy), bodies still finite");
+                return true;
+            }
+        }
+        Console.WriteLine($"  {label}: clean through {ticks} ticks");
+        return false;
+    }
+
+    private static void CarveAngleRun(string[] args)
+    {
+        {
+            var tune0 = SimTuning.Default;
+            void Probe(string label, Scenarios.Result cs0)
+            {
+                SimState st0 = cs0.State;
+                int b0 = st0.BodyCount;
+                int firstSplit = -1, firstNan = -1;
+                for (int i = 0; i < 30 && firstNan < 0; i++)
+                {
+                    cs0.Solver.Step();
+                    if (firstSplit < 0 && st0.BodyCount > b0) firstSplit = i;
+                    for (int b = 0; b < st0.BodyCount; b++)
+                        if (float.IsNaN(st0.BodyX[b])) { firstNan = i; break; }
+                }
+                Console.WriteLine($"  {label,-34} start {b0,3} bodies -> first split at tick "
+                    + $"{(firstSplit < 0 ? "never" : firstSplit.ToString()),5}, first NaN at tick "
+                    + $"{(firstNan < 0 ? "never" : firstNan.ToString()),5}, now {st0.BodyCount} bodies");
+            }
+            void Angles(string label, Scenarios.Result cs, int ticks)
+            {
+                cs.Solver.MeasureCarveAngles = true;
+                for (int i = 0; i < ticks; i++) cs.Solver.Step();
+                int tot = 0; foreach (int v in cs.Solver.CarveNormalAngle) tot += v;
+                if (tot == 0) { Console.WriteLine($"  {label}: no carves"); return; }
+                var sb = new System.Text.StringBuilder();
+                for (int b = 0; b < 9; b++) sb.Append($"{100.0 * cs.Solver.CarveNormalAngle[b] / tot,5:F1}");
+                Console.WriteLine($"  {label,-30} {sb}   ({tot} carves)");
+            }
+            Console.WriteLine("  carve-normal vs approach direction, % of carves per 10 deg bucket");
+            Console.WriteLine($"  {"",-30}  0-10 10-20 20-30 30-40 40-50 50-60 60-70 70-80 80-90");
+            Angles("Collide(rock 600 g900)", Scenarios.Collide(tune0, Material.Rock, 600f, 900f), 120);
+            Angles("Collide(rock 600 g255)", Scenarios.Collide(tune0, Material.Rock, 600f, 255f), 120);
+            Angles("Projectile(rock 900 g900)", Scenarios.Projectile(tune0, Material.Rock, 900f, 8f, 900f), 120);
+            {
+                var rr = Scenarios.Collide(tune0, Material.Rock, 0f, 900f);
+                float tx2 = rr.State.BodyX[0], ty2 = rr.State.BodyY[0];
+                rr = Scenarios.FireAt(rr, tune0, Material.Penetrator, tx2 - 420f, ty2, tx2, ty2,
+                    speed: 1800f, radius: 15f, grain: 900f, seed: 1, radiusX: 52.5f, radiusY: 4.3f);
+                Angles("viewer ROD (1 cell)", rr, 120);
+            }
+            Console.WriteLine();
+            Probe("Collide(rock, 600, g900)", Scenarios.Collide(tune0, Material.Rock, 600f, 900f));
+            Probe("Collide(rock, 0, g900)", Scenarios.Collide(tune0, Material.Rock, 0f, 900f));
+            Probe("Collide(steel, 600, g900)", Scenarios.Collide(tune0, Material.Steel, 600f, 900f));
+            Probe("Projectile(rock, 900, g900)", Scenarios.Projectile(tune0, Material.Rock, 900f, 8f, 900f));
+            Probe("Spin(rock, g900)", Scenarios.Spin(tune0, Material.Rock, grain: 900f));
+            Probe("Field(rock, 3x3, g900)", Scenarios.Field(tune0, Material.Rock, 3, 3, 60f, 150f, 60f, 900f));
+            Console.WriteLine();
+        }
+        float grain = ArgFloat(args, "--grain", 900f), speed = ArgFloat(args, "--speed", 1800f);
+        float mass = ArgFloat(args, "--mass", 1f);
+        float radius = 15f * MathF.Sqrt(mass);
+        var tune = SimTuning.Default;
+        Console.WriteLine($"grain {grain}, speed {speed}, mass {mass} (radius {radius:F1}), CrackPush {tune.CrackPush}, CrackPushCap {tune.CrackPushCap}");
+
+        foreach (float sp in new[] { 0f, 1f, 100f, 600f })
+        {
+            var cs = Scenarios.Collide(tune, Material.Rock, sp, grain);
+            SimState st = cs.State;
+            int badAtBuild = 0;
+            for (int b = 0; b < st.BodyCount; b++)
+                if (float.IsNaN(st.BodyX[b]) || float.IsNaN(st.BodyY[b]) || float.IsNaN(st.BodyVx[b])
+                    || float.IsNaN(st.BodyVy[b]) || float.IsNaN(st.BodyRot[b]) || float.IsNaN(st.BodyW[b])) badAtBuild++;
+            Console.WriteLine($"  Collide(speed {sp}): {badAtBuild} of {st.BodyCount} bodies NaN AT BUILD "
+                + $"(b0 v {st.BodyVx[0]},{st.BodyVy[0]} rot {st.BodyRot[0]} omega {st.BodyW[0]})");
+            FirstNaN(cs, 40, $"    Collide(speed {sp}) stepped");
+        }
+
+        foreach (var (name, mat, rx, ry) in new (string, Material, float, float)[]
+        {
+            ("round bullet, Rock", Material.Rock, radius, radius),
+            ("round bullet, Penetrator", Material.Penetrator, radius, radius),
+            ("ROD, Rock", Material.Rock, radius * 3.5f, radius / 3.5f),
+            ("ROD, Penetrator", Material.Penetrator, radius * 3.5f, radius / 3.5f),
+        })
+        {
+            var r = Scenarios.Collide(tune, Material.Rock, 0f, grain);
+            float tx = r.State.BodyX[0], ty = r.State.BodyY[0];
+            r = Scenarios.FireAt(r, tune, mat, tx - 420f, ty, tx, ty,
+                speed: speed, radius: radius, grain: grain, seed: 1, radiusX: rx, radiusY: ry);
+            int n0 = r.State.CellCount;
+            int rodCells = 0; int rb = r.State.CellBody[n0 - 1];
+            for (int c = 0; c < n0; c++) if (r.State.CellBody[c] == rb) rodCells++;
+            FirstNaN(r, 40, $"{name} ({rodCells} cell rod)");
+        }
+    }
+
+    /// The viewer's piercing round at its real defaults (grain 900, speed 900, mass 3), with the
+    /// material knobs the report used to exaggerate erosion: min crush threshold (x1/64), max
+    /// erosion rate (x64), max shed limit. Traces every dent on the rod's front cell.
+    /// Which per-cell length scale lets ONE global Dent constant resolve a cell's own vertices?
+    /// For each cell: the typical spacing between neighbouring vertices is the feature the kernel
+    /// must tell apart. A scale is good if scale/spacing is the SAME for every cell shape, because
+    /// then a single multiplier works everywhere. Reported as coefficient of variation (lower better).
+    /// Sweeps Material.Dent on a normal collide and reports what the population of cells does,
+    /// so the retune is chosen on more than the one rod cell that exposed the bug.
+    /// A/B for the iterated budget solve: how much of the area the crush law asks for is actually
+    /// removed, with the iteration on and off, at the kernel width the model now ships.
+    /// Controlled test of "more vertices = more capacity": take each cell's real outline, measure
+    /// its one-step recession capacity, then insert a midpoint on a surface edge and measure again.
+    /// Capacity = sum over free corners of (area per unit slide) x (slide before the corner crosses
+    /// the chord joining its neighbours) — the two quantities GatherCornersOf already computes.
+    /// State of part B: how much carving still goes through the v1 fallback, how far its clip
+    /// direction sits from the actual approach, and whether the rebuild ever retires a vertex.
+    /// Part D: does a bond's strength still describe the interface that is actually left?
+    /// Checks three things the carved-interface rescale claims: that stiffness telescopes exactly
+    /// with length, that nothing holds two cells together after its interface is gone, and what a
+    /// two-cell body does when its single interface is eroded away.
+    /// C3: does the solver report a projectile's first contact on the tick it actually strikes?
+    /// Cross-checked against two independent signals: the round's speed dropping, and its world
+    /// AABB first overlapping the target's.
+    /// C2: can a round be made much smaller and still do the same damage, and by which lever?
+    /// Baseline is today's round. Then the same round shrunk, with mass restored by raising the
+    /// material's density (a dense slug), and shrunk with mass left to fall and speed raised to
+    /// hold kinetic energy. Damage is what the target actually loses.
+    /// E: the morphology guardrails' ensembles, printed rather than asserted, so a band can be
+    /// re-derived from the spread the scene actually has instead of from one run.
+    /// Point 3's repro: collide rock/rock at defaults, watch a named pair overlap and see when
+    /// (and whether) carving responds. Reports the contact between them every tick with the gate
+    /// decision, so "deep overlap but nothing recedes" can be attributed to a specific test.
+    /// Point 2: sweep viewer-like configurations looking for a state that goes non-finite.
+    /// Point 1: how deep does overlap actually get, as a fraction of the cells involved?
+    /// Point 2, narrowing: run the smallest failing configuration and name the FIRST quantity that
+    /// goes non-finite, so the blow-up can be attributed to a stage rather than guessed at.
+    /// Point 2, pass 1: hook every solver stage and report the FIRST stage after which any LIVE
+    /// quantity is non-finite — with every category that is bad at that moment, counted, so the
+    /// order the checks run in cannot pass for causation.
+    /// Point 2, pass 2: the non-finite value is the END of a divergence. Find where it STARTS:
+    /// the first stage after which a live body spins or moves faster than anything in the scene
+    /// could legitimately make it, and dump that body's rotational state.
+    /// Point 2, ablation: which inertial load is necessary for the blow-up? Each crashing
+    /// configuration is run with each load switched off, and live state checked for 60 ticks.
+    /// Point 2: is it a stability limit? The same configurations at more substeps, with the
+    /// acoustic CFL number each one runs at (wave speed x substep / cell size).
+    /// Point 1: at each depth of penetration, how often does the carve gate open? Then the one
+    /// existing knob that ties pressure to depth (CrushConfine), swept, with what it does to
+    /// penetration and to morphology.
+    private static float HalfExtent(SimState s, int c, float nx, float ny)
+    {
+        int len = s.PolyLen[c];
+        if (len <= 0) return s.CellRad[c];
+        int b = s.CellBody[c];
+        float si = MathF.Sin(s.BodyRot[b]), co = MathF.Cos(s.BodyRot[b]);
+        float lx = nx * co + ny * si, ly = -nx * si + ny * co;
+        int off = s.PolyOff[c];
+        float lo = float.PositiveInfinity, hi = float.NegativeInfinity;
+        for (int v = 0; v < len; v++)
+        {
+            float pr = s.PolyX[off + v] * lx + s.PolyY[off + v] * ly;
+            lo = MathF.Min(lo, pr); hi = MathF.Max(hi, pr);
+        }
+        return 0.5f * (hi - lo);
+    }
+
+    /// Point 1, after the change: penetration against the backstop's own yardstick (the thinner
+    /// cell's half-extent along the normal), how often the backstop fires, and what it costs.
+    private static void BackstopRun(string[] args)
+    {
+        int ticks = ArgInt(args, "--ticks", 200);
+        var variants = new (string, float, float)[]
+        {
+            ("old defaults (0.05, no backstop)", 0.05f, 0f),
+            ("CrushConfine 1.0, no backstop", 1.0f, 0f),
+            ("CrushConfine 1.0, backstop 0.3", 1.0f, 0.3f),
+            ("CrushConfine 1.0, backstop 0.2", 1.0f, 0.2f),
+        };
+        foreach (var (sname, make) in new (string, Func<SimTuning, Scenarios.Result>)[]
+        {
+            ("collide rock g900", t2 => Scenarios.Collide(t2, Material.Rock, 600f, 900f)),
+            ("collide rock g255", t2 => Scenarios.Collide(t2, Material.Rock, 600f, 255f)),
+            ("collide glass g255", t2 => Scenarios.Collide(t2, Material.Glass, 600f, 255f)),
+            ("projectile rock", t2 => Scenarios.Projectile(t2, Material.Rock, 900f, 8f, 900f)),
+            ("projectile steel->rock 2500", t2 => Scenarios.Projectile(t2, Material.Rock, 2500f, 8f, 900f, impactor: Material.Steel)),
+        })
+        {
+            Console.WriteLine($"\n── {sname} ──");
+            Console.WriteLine("  variant                           | pen/halfext p50  p90    p99    max   | backstop contact-substeps | bodies | area kept");
+            foreach (var (vname, cc, bs) in variants)
+            {
+                var tune = SimTuning.Default; tune.CrushConfine = cc; tune.OverlapBackstop = bs;
+                var r = make(tune);
+                SimState s = r.State;
+                float area0 = 0f; for (int c = 0; c < s.CellCount; c++) area0 += s.CellArea[c];
+                var frac = new List<double>();
+                bool fresh = true;
+                // The tick's own narrow phase runs once, before the substeps, from current geometry:
+                // sampling there reads the TRUE penetration at every tick boundary, not the solver's
+                // per-substep bookkeeping of it.
+                r.Solver.PhaseMark = ph =>
+                {
+                    if (ph == SolverPhase.Inertial) fresh = false;
+                    if (ph != SolverPhase.BuildContacts || !fresh) return;
+                    for (int q = 0; q < r.Solver.ContactCount; q++)
+                    {
+                        Contact ct = r.Solver.ContactAt(q);
+                        if (ct.A >= s.CellCount || ct.B >= s.CellCount || s.Dead(ct.A) || s.Dead(ct.B)) continue;
+                        if (ct.Depth <= 0f) continue;
+                        float he = MathF.Min(HalfExtent(s, ct.A, ct.Nx, ct.Ny), HalfExtent(s, ct.B, ct.Nx, ct.Ny));
+                        if (he > 1e-3f) frac.Add(ct.Depth / he);
+                    }
+                };
+                for (int i = 0; i < ticks; i++) { fresh = true; r.Solver.Step(); }
+                frac.Sort();
+                double Q(double f) => frac.Count == 0 ? 0 : frac[(int)(f * (frac.Count - 1))];
+                float area1 = 0f; for (int c = 0; c < s.CellCount; c++) if (!s.Dead(c)) area1 += s.CellArea[c];
+                Console.WriteLine($"  {vname,-33} | {Q(0.5),6:F3} {Q(0.9),6:F3} {Q(0.99),6:F3} {(frac.Count > 0 ? frac[^1] : 0),6:F3} | "
+                    + $"{r.Solver.BackstopContacts,10}                | {s.BodyCount,6} | {100f * area1 / area0,7:F1}%");
+                if (r.Solver.BackstopContacts > 0)
+                    Console.WriteLine($"      forced: asked {r.Solver.BackstopAsked:F1} px, got {r.Solver.BackstopGot:F1} px; "
+                        + $"removed nothing on {r.Solver.BackstopNothing} of {r.Solver.BackstopContacts}; "
+                        + $"a side stuck {r.Solver.BackstopOutOfReach}, "
+                        + $"v1 {r.Solver.BackstopV1}; overrode the rate law {r.Solver.BackstopRecessions}x; "
+                        + $"COMMINUTED {r.Solver.BackstopComminuted}, solo exempt {r.Solver.BackstopSoloExempt}"
+                        + $"\n      right after the carve: both sides receded -> worst {r.Solver.BackstopWorstAfterBoth:F3}, still over {r.Solver.BackstopStillOverBoth}; "
+                        + $"a side could not -> worst {r.Solver.BackstopWorstAfterStuck:F3}, still over {r.Solver.BackstopStillOverStuck}");
+            }
+        }
+    }
+
+    private static void OverlapGateRun(string[] args)
+    {
+        int ticks = ArgInt(args, "--ticks", 200);
+        string[] bins = { "<0.1", "0.1-0.25", "0.25-0.5", "0.5-1", ">1" };
+        foreach (float cc in new[] { 0.05f, 0.2f, 0.5f, 1.0f, 2.0f })
+        {
+            Console.WriteLine($"\n══ CrushConfine {cc} ══");
+            foreach (var (name, make) in new (string, Func<SimTuning, Scenarios.Result>)[]
+            {
+                ("collide rock g900", t2 => Scenarios.Collide(t2, Material.Rock, 600f, 900f)),
+                ("collide rock g255", t2 => Scenarios.Collide(t2, Material.Rock, 600f, 255f)),
+                ("projectile rock", t2 => Scenarios.Projectile(t2, Material.Rock, 900f, 8f, 900f)),
+            })
+            {
+                var tune = SimTuning.Default; tune.CrushConfine = cc;
+                var r = make(tune);
+                r.Solver.MeasureCarveAngles = true;
+                SimState s = r.State;
+                float area0 = 0f; for (int c = 0; c < s.CellCount; c++) area0 += s.CellArea[c];
+                var frac = new List<double>();
+                for (int i = 0; i < ticks; i++)
+                {
+                    r.Solver.Step();
+                    for (int q = 0; q < r.Solver.ContactCount; q++)
+                    {
+                        Contact ct = r.Solver.ContactAt(q);
+                        if (ct.Depth <= 0f || ct.A >= s.CellCount || ct.B >= s.CellCount) continue;
+                        float rad = MathF.Min(s.CellRad[ct.A], s.CellRad[ct.B]);
+                        if (rad > 1e-3f) frac.Add(ct.Depth / rad);
+                    }
+                }
+                frac.Sort();
+                double Q(double f) => frac.Count == 0 ? 0 : frac[(int)(f * (frac.Count - 1))];
+                float area1 = 0f; int live = 0;
+                for (int c = 0; c < s.CellCount; c++) if (!s.Dead(c)) { area1 += s.CellArea[c]; live++; }
+                var sb = new System.Text.StringBuilder();
+                for (int b = 0; b < 5; b++)
+                {
+                    long o = r.Solver.GateOpenByPen[b], sh = r.Solver.GateShutByPen[b];
+                    sb.Append(o + sh == 0 ? $" {bins[b]}: -" : $" {bins[b]}: {100.0 * o / (o + sh):F0}% of {o + sh}");
+                    sb.Append(" |");
+                }
+                Console.WriteLine($"  {name,-18} pen p50 {Q(0.5):F3} p90 {Q(0.9):F3} p99 {Q(0.99):F3} max {(frac.Count > 0 ? frac[^1] : 0):F3}"
+                    + $" | bodies {s.BodyCount,3}, area kept {100f * area1 / area0:F1}%");
+                Console.WriteLine($"     gate open by penetration:{sb}");
+            }
+        }
+    }
+
+    private static void SubstepAblationRun(string[] args)
+    {
+        var cfgs = new (string, Material, float, float, float)[]
+        {
+            ("rock g30 v2500 m24", Material.Rock, 30f, 2500f, 24f),
+            ("sandstone g60 v4000 m8", Material.Sandstone, 60f, 4000f, 8f),
+            ("steel g30 v4000 m24", Material.Steel, 30f, 4000f, 24f),
+            ("steel g30 v1500 m1", Material.Steel, 30f, 1500f, 1f),
+            ("steel g30 v2500 m8", Material.Steel, 30f, 2500f, 8f),
+        };
+        int[] subs = { 9, 12, 16, 24 };
+        Console.Write("  config                    ");
+        foreach (int n in subs) Console.Write($"| {n,2} substeps (CFL)   ");
+        Console.WriteLine();
+        foreach (var (name, mat, grain, speed, mass) in cfgs)
+        {
+            Console.Write($"  {name,-25} ");
+            foreach (int n in subs)
+            {
+                var tune = SimTuning.Default;
+                tune.Substeps = n;
+                var r = Scenarios.Projectile(tune, mat, speed, mass, grain);
+                SimState s = r.State;
+                // The grain actually built (bodies are floored at BodyBuilder.MinGrain), and the CFL
+                // the suite defines: wave speed x (Solver.Dt / substeps) / cell size.
+                float built = MathF.Max(grain, BodyBuilder.MinGrain(mat, tune));
+                float cellPx = SimMath.Sqrt(built);
+                float cpx = mat.C * tune.PxPerMetre;
+                float cfl = cpx * (Solver.Dt / n) / cellPx;
+                string res = "ok";
+                for (int i = 0; i < 60 && res == "ok"; i++)
+                {
+                    r.Solver.Step();
+                    for (int b = 0; b < s.BodyCount; b++)
+                    {
+                        if (s.BodyCellLen[b] <= 0) continue;
+                        if (!float.IsFinite(s.BodyW[b]) || !float.IsFinite(s.BodyVx[b])) { res = $"NaN t{i}"; break; }
+                    }
+                }
+                Console.Write($"| {res,-8} ({cfl,5:F2})   ");
+            }
+            Console.WriteLine();
+        }
+    }
+
+    private static void InertialAblationRun(string[] args)
+    {
+        var cfgs = new (string, Material, float, float, float)[]
+        {
+            ("rock g30 v2500 m24", Material.Rock, 30f, 2500f, 24f),
+            ("sandstone g60 v4000 m8", Material.Sandstone, 60f, 4000f, 8f),
+            ("steel g30 v4000 m24", Material.Steel, 30f, 4000f, 24f),
+            ("steel g30 v1500 m1", Material.Steel, 30f, 1500f, 1f),
+            ("ice g30 v4000 m24", Material.Ice, 30f, 4000f, 24f),
+        };
+        Console.WriteLine("  config                    | all loads | no centrifugal | no Euler | no Coriolis");
+        foreach (var (name, mat, grain, speed, mass) in cfgs)
+        {
+            string Run(bool cen, bool eul, bool cor)
+            {
+                var tune = SimTuning.Default;
+                tune.Centrifugal = cen; tune.Euler = eul; tune.Coriolis = cor;
+                var r = Scenarios.Projectile(tune, mat, speed, mass, grain);
+                SimState s = r.State;
+                for (int i = 0; i < 60; i++)
+                {
+                    r.Solver.Step();
+                    for (int b = 0; b < s.BodyCount; b++)
+                    {
+                        if (s.BodyCellLen[b] <= 0) continue;
+                        if (!float.IsFinite(s.BodyW[b]) || !float.IsFinite(s.BodyVx[b]) || !float.IsFinite(s.BodyVy[b]))
+                            return $"NaN t{i}";
+                    }
+                }
+                return "ok";
+            }
+            Console.WriteLine($"  {name,-25} | {Run(true, true, true),9} | {Run(false, true, true),14} | "
+                + $"{Run(true, false, true),8} | {Run(true, true, false),11}");
+        }
+    }
+
+    /// Point 2, the head of the divergence: total kinetic energy (rigid + deviation) after every
+    /// stage, and the stages that raise it most. Carving, contacts and dust should only lose energy
+    /// or trade it with the bonds; a stage that creates a large multiple of it is the source.
+    /// Point 2: each live bond's explicit-stability number w*h = sqrt(K0*(1/mA+1/mB)) * h, over
+    /// time, against how much mass its cells have lost. The grain cap bounds this at build; the
+    /// question is whether carving drives it up afterwards.
+    /// Point 2: is the drained-but-bonded cell something the new carving settings produce? The
+    /// crashing configuration on each combination of CrushConfine and backstop, counting — inside
+    /// the tick, after every carve — live bonds whose cell is already past its ShedLimit.
+    private static void DrainedCellRun(string[] args)
+    {
+        Console.WriteLine("rock grain 30 (built 93), 2500 px/s, mass 24, 60 ticks\n");
+        Console.WriteLine("  CrushConfine  backstop | result   | substeps with a live bond on a cell past ShedLimit | worst w*h on one");
+        foreach (var (cc, bs) in new (float, float)[] { (0.05f, 0f), (1.0f, 0f), (0.05f, 0.3f), (1.0f, 0.3f) })
+        {
+            var tune = SimTuning.Default; tune.CrushConfine = cc; tune.OverlapBackstop = bs;
+            var r = Scenarios.Projectile(tune, Material.Rock, 2500f, 24f, 30f);
+            SimState s = r.State;
+            float h = Solver.Dt / tune.Substeps;
+            long drainedSubsteps = 0; float worst = 0f; string res = "ok";
+            r.Solver.PhaseMark = ph =>
+            {
+                if (ph != SolverPhase.Contacts) return;          // right after this substep's carving
+                bool any = false;
+                for (int k = 0; k < s.BondCount; k++)
+                {
+                    if (s.BondBroken[k]) continue;
+                    int a = s.BondA[k], b = s.BondB[k];
+                    if (s.Dead(a) || s.Dead(b)) continue;
+                    bool pa = s.CellArea0[a] > 0f && 1f - s.CellArea[a] / s.CellArea0[a] >= s.Mat(a).ShedLimit;
+                    bool pb = s.CellArea0[b] > 0f && 1f - s.CellArea[b] / s.CellArea0[b] >= s.Mat(b).ShedLimit;
+                    if (!pa && !pb) continue;
+                    any = true;
+                    float wh = MathF.Sqrt(MathF.Max(0f, s.BondK0[k] * (1f / s.CellM[a] + 1f / s.CellM[b]))) * h;
+                    if (wh > worst) worst = wh;
+                }
+                if (any) drainedSubsteps++;
+            };
+            for (int i = 0; i < 60 && res == "ok"; i++)
+            {
+                r.Solver.Step();
+                for (int c = 0; c < s.CellCount; c++)
+                {
+                    if (s.Dead(c)) continue;
+                    int b = s.CellBody[c];
+                    if (!float.IsFinite(s.CellDvx[c]) || (b >= 0 && b < s.BodyCount && !float.IsFinite(s.BodyVx[b]))) { res = $"NaN t{i}"; break; }
+                }
+            }
+            Console.WriteLine($"  {cc,12:F2}  {bs,8:F2} | {res,-8} | {drainedSubsteps,10}                                       | {worst,10:G4}");
+        }
+    }
+
+    private static void BondOmegaRun(string[] args)
+    {
+        string mn = ArgStr(args, "--mat", "rock");
+        float grain = ArgFloat(args, "--grain", 30f), speed = ArgFloat(args, "--speed", 2500f), massMul = ArgFloat(args, "--mass", 24f);
+        Material mat = mn switch { "steel" => Material.Steel, "sandstone" => Material.Sandstone, "glass" => Material.Glass, _ => Material.Rock };
+        var tune = SimTuning.Default;
+        var r = Scenarios.Projectile(tune, mat, speed, massMul, grain);
+        SimState s = r.State;
+        float h = Solver.Dt / tune.Substeps;
+        var m0 = new float[s.CellCount];
+        for (int c = 0; c < s.CellCount; c++) m0[c] = s.CellM[c];
+        Console.WriteLine($"{mn} grain {grain} speed {speed} mass {massMul}; h {h:E3}");
+        Console.WriteLine("  tick | bonds | w*h max   p99     p50  | >1   >2   | worst bond: cells' mass left (of build)");
+        for (int tick = 0; tick < 9; tick++)
+        {
+            var wh = new List<float>(); float worst = 0f; int wk = -1; int over1 = 0, over2 = 0;
+            for (int k = 0; k < s.BondCount; k++)
+            {
+                if (s.BondBroken[k]) continue;
+                int a = s.BondA[k], b = s.BondB[k];
+                if (a >= m0.Length || b >= m0.Length || s.Dead(a) || s.Dead(b)) continue;
+                float inv = 1f / s.CellM[a] + 1f / s.CellM[b];
+                float v = MathF.Sqrt(MathF.Max(0f, s.BondK0[k] * inv)) * h;
+                wh.Add(v);
+                if (v > 1f) over1++;
+                if (v > 2f) over2++;
+                if (v > worst) { worst = v; wk = k; }
+            }
+            wh.Sort();
+            string wdesc = wk < 0 ? "" : $"{100f * s.CellM[s.BondA[wk]] / m0[s.BondA[wk]],5:F1}% and {100f * s.CellM[s.BondB[wk]] / m0[s.BondB[wk]],5:F1}%";
+            Console.WriteLine($"  {tick,4} | {wh.Count,5} | {(wh.Count > 0 ? wh[^1] : 0),7:F3} {(wh.Count > 0 ? wh[(int)(0.99 * (wh.Count - 1))] : 0),7:F3} {(wh.Count > 0 ? wh[wh.Count / 2] : 0),7:F3} | {over1,4} {over2,4} | {wdesc}");
+            r.Solver.Step();
+        }
+    }
+
+    private static void EnergyStageRun(string[] args)
+    {
+        string mn = ArgStr(args, "--mat", "rock");
+        float grain = ArgFloat(args, "--grain", 30f), speed = ArgFloat(args, "--speed", 2500f), massMul = ArgFloat(args, "--mass", 24f);
+        int from = ArgInt(args, "--from", 0), to = ArgInt(args, "--to", 12);
+        Material mat = mn switch { "steel" => Material.Steel, "sandstone" => Material.Sandstone, "glass" => Material.Glass, _ => Material.Rock };
+        var r = Scenarios.Projectile(SimTuning.Default, mat, speed, massMul, grain);
+        SimState s = r.State;
+        double KE()
+        {
+            double e = 0;
+            for (int c = 0; c < s.CellCount; c++)
+            {
+                if (s.Dead(c)) continue;
+                int b = s.CellBody[c];
+                if (b < 0 || b >= s.BodyCount) continue;
+                float si = MathF.Sin(s.BodyRot[b]), co = MathF.Cos(s.BodyRot[b]);
+                float rx = s.CellRx[c] * co - s.CellRy[c] * si, ry = s.CellRx[c] * si + s.CellRy[c] * co;
+                float dvx = s.CellDvx[c] * co - s.CellDvy[c] * si, dvy = s.CellDvx[c] * si + s.CellDvy[c] * co;
+                double vx = s.BodyVx[b] - s.BodyW[b] * ry + dvx, vy = s.BodyVy[b] + s.BodyW[b] * rx + dvy;
+                double w = s.BodyW[b] + s.CellDw[c];
+                e += 0.5 * s.CellM[c] * (vx * vx + vy * vy) + 0.5 * s.CellIc[c] * w * w;
+            }
+            return e;
+        }
+        double e0 = KE(), last = e0; int tick = 0, sub = -1; bool dumped = false;
+        Console.WriteLine($"{mn} grain {grain} (built {MathF.Max(grain, BodyBuilder.MinGrain(mat, SimTuning.Default)):F0}) speed {speed} mass {massMul}; initial KE {e0:E3}\n");
+        var gain = new Dictionary<SolverPhase, double>();
+        r.Solver.PhaseMark = ph =>
+        {
+            if (ph == SolverPhase.Inertial) sub++;
+            double e = KE();
+            double d = e - last;
+            last = e;
+            if (tick < from) return;
+            if (d > 0) gain[ph] = (gain.TryGetValue(ph, out double g) ? g : 0) + d;
+            if (d > 0.05 * e0 || !double.IsFinite(e))
+                Console.WriteLine($"  t{tick} s{sub} after {ph,-14} KE {e,11:E3} ({e / e0,8:F2}x initial)   +{d,11:E3}");
+            if (ph == SolverPhase.BondForces && d > 5.0 * e0 && !dumped)
+            {
+                dumped = true;
+                float h2 = Solver.Dt / SimTuning.Default.Substeps;
+                int top = -1; float topv = 0f;
+                for (int c = 0; c < s.CellCount; c++)
+                {
+                    if (s.Dead(c)) continue;
+                    float dv = SimMath.Hypot(s.CellDvx[c], s.CellDvy[c]);
+                    if (dv > topv) { topv = dv; top = c; }
+                }
+                Console.WriteLine($"     hardest-kicked cell {top}: |dv| {topv:E3}, mass {s.CellM[top]:F1}, area {s.CellArea[top]:F1}, bonds:");
+                for (int k = 0; k < s.BondCount; k++)
+                {
+                    if (s.BondA[k] != top && s.BondB[k] != top) continue;
+                    int o = s.BondA[k] == top ? s.BondB[k] : s.BondA[k];
+                    float wh = MathF.Sqrt(MathF.Max(0f, s.BondK0[k] * (1f / s.CellM[top] + 1f / s.CellM[o]))) * h2;
+                    Console.WriteLine($"       bond {k,5} to {o,5}: broken {s.BondBroken[k],-5} w*h {wh:F3}  sn {s.BondSn[k],10:E2} st {s.BondSt[k],10:E2} "
+                        + $"sa {s.BondSa[k],10:E2}  S0 {s.BondS0[k]:E2}  dmg {s.BondDmg[k]:F2}  len {s.BondLen[k]:F1}");
+                }
+            }
+        };
+        for (tick = 0; tick <= to && double.IsFinite(last); tick++) { sub = -1; r.Solver.Step(); }
+        Console.WriteLine("\n  energy CREATED per stage over the window (sum of increases):");
+        foreach (var kv in gain.OrderByDescending(x => x.Value))
+            Console.WriteLine($"    {kv.Key,-15} {kv.Value,12:E3}  ({kv.Value / e0,8:F2}x initial KE)");
+    }
+
+    private static void DivergeRun(string[] args)
+    {
+        string mn = ArgStr(args, "--mat", "sandstone");
+        float grain = ArgFloat(args, "--grain", 60f), speed = ArgFloat(args, "--speed", 4000f);
+        float massMul = ArgFloat(args, "--mass", 8f);
+        float wBound = ArgFloat(args, "--wbound", 300f);
+        Material mat = mn switch
+        {
+            "glass" => Material.Glass, "rock" => Material.Rock, "ice" => Material.Ice,
+            "steel" => Material.Steel, _ => Material.Sandstone,
+        };
+        var r = Scenarios.Projectile(SimTuning.Default, mat, speed, massMul, grain);
+        SimState s = r.State;
+        float vBound = 5f * speed;
+        Console.WriteLine($"{mn} grain {grain:F0} speed {speed:F0} mass {massMul:F0}; tripwire |w| > {wBound} rad/s or |v| > {vBound} px/s\n");
+
+        int tick = 0, sub = -1, watched = -1, lines = 0;
+        int bodiesAtTickStart = s.BodyCount;
+        var createdTick = new Dictionary<int, int>();
+        string Rot(int b) => $"w {s.BodyW[b],12:G5} wPrev {s.BodyWPrev[b],12:G5} alpha {s.BodyAlpha[b],12:G5} "
+            + $"|v| {SimMath.Hypot(s.BodyVx[b], s.BodyVy[b]),10:G4} I {s.BodyI[b],10:G5} M {s.BodyM[b],9:G5} cells {s.BodyCellLen[b]}";
+        float lastW = 0f, lastM = 0f, lastV = 0f;
+        r.Solver.PhaseMark = ph =>
+        {
+            if (ph == SolverPhase.Inertial) sub++;
+            if (watched < 0)
+            {
+                if (ph != SolverPhase.Realize) return;               // a settled point in each substep
+                for (int b = 0; b < s.BodyCount; b++)
+                {
+                    if (s.BodyCellLen[b] <= 0 || s.BodyM[b] < 1e-3f) continue;   // retired / placeholder
+                    float v = SimMath.Hypot(s.BodyVx[b], s.BodyVy[b]);
+                    float gyr = SimMath.Sqrt(SimMath.Max(0f, s.BodyI[b] / s.BodyM[b]));   // radius of gyration
+                    float rim = SimMath.Abs(s.BodyW[b]) * gyr;
+                    if (float.IsFinite(rim) && float.IsFinite(v) && rim <= vBound && v <= vBound) continue;
+                    watched = b;
+                    int born = createdTick.TryGetValue(b, out int bt) ? bt : -1;
+                    Console.WriteLine($"tick {tick} sub {sub}: body {b} tripped (rim speed {rim:G4}, |v| {v:G4}, gyration radius {gyr:F2} px)");
+                    Console.WriteLine($"   created at tick {(born < 0 ? "build" : born.ToString())}");
+                    Console.WriteLine($"   {Rot(b)}");
+                    lastW = s.BodyW[b]; lastM = s.BodyM[b]; lastV = v;
+                    break;
+                }
+                return;
+            }
+            if (ph == SolverPhase.BondIntegrate && lines < 60)          // the state Decompose is about to read
+            {
+                int bb = watched; float M = 0f, mrx = 0f, mry = 0f, px = 0f, py = 0f, L = 0f;
+                int o2 = s.BodyCellOff[bb], l2 = s.BodyCellLen[bb];
+                for (int i2 = 0; i2 < l2; i2++)
+                {
+                    int c = s.BodyCells[o2 + i2];
+                    if (s.Dead(c)) continue;
+                    float mc = s.CellM[c];
+                    M += mc; mrx += mc * s.CellRx[c]; mry += mc * s.CellRy[c];
+                    px += mc * s.CellDvx[c]; py += mc * s.CellDvy[c];
+                    L += mc * (s.CellRx[c] * s.CellDvy[c] - s.CellRy[c] * s.CellDvx[c]) + s.CellIc[c] * s.CellDw[c];
+                }
+                if (M > 0f)
+                {
+                    float rcx = mrx / M, rcy = mry / M;
+                    float spur = rcx * py - rcy * px;                     // r_com x P
+                    float Icom = s.BodyI[bb] - M * (rcx * rcx + rcy * rcy);
+                    Console.WriteLine($"        before Decompose: COM off origin by {SimMath.Hypot(rcx, rcy),7:F2} px, |P| {SimMath.Hypot(px, py),10:G4}, "
+                        + $"L {L,11:G4}, of which r_com x P {spur,11:G4}  ->  w += {L / MathF.Max(1f, s.BodyI[bb]),10:G4} "
+                        + $"(about the COM it would be {(L - spur) / MathF.Max(1f, Icom),10:G4})");
+                }
+            }
+            if (lines >= 60) return;
+            float w = s.BodyW[watched], m = s.BodyM[watched], vv = SimMath.Hypot(s.BodyVx[watched], s.BodyVy[watched]);
+            bool changed = SimMath.Abs(w - lastW) > 0.02f * SimMath.Max(1f, SimMath.Abs(lastW))
+                        || SimMath.Abs(m - lastM) > 1e-4f * SimMath.Max(1f, lastM)
+                        || SimMath.Abs(vv - lastV) > 0.02f * SimMath.Max(1f, lastV)
+                        || !float.IsFinite(w) || !float.IsFinite(vv);
+            if (!changed) return;
+            lines++;
+            Console.WriteLine($"   t{tick} s{sub} after {ph,-14} {Rot(watched)}");
+            lastW = w; lastM = m; lastV = vv;
+            if (!float.IsFinite(w) || !float.IsFinite(vv)) lines = 60;
+        };
+        for (tick = 0; tick < 60 && lines < 60; tick++)
+        {
+            bodiesAtTickStart = s.BodyCount;
+            sub = -1;
+            r.Solver.Step();
+            for (int b = bodiesAtTickStart; b < s.BodyCount; b++) if (!createdTick.ContainsKey(b)) createdTick[b] = tick;
+        }
+        if (watched < 0) Console.WriteLine("nothing tripped in 60 ticks");
+    }
+
+    private static void NanStageRun(string[] args)
+    {
+        string mn = ArgStr(args, "--mat", "steel");
+        float grain = ArgFloat(args, "--grain", 30f), speed = ArgFloat(args, "--speed", 4000f);
+        float massMul = ArgFloat(args, "--mass", 24f);
+        Material mat = mn switch
+        {
+            "glass" => Material.Glass, "rock" => Material.Rock, "ice" => Material.Ice,
+            "sandstone" => Material.Sandstone, _ => Material.Steel,
+        };
+        var r = Scenarios.Projectile(SimTuning.Default, mat, speed, massMul, grain);
+        SimState s = r.State;
+        Console.WriteLine($"{mn} grain {grain:F0} speed {speed:F0} mass {massMul:F0}: {s.CellCount} cells\n");
+
+        int tick = 0, sub = -1; bool done = false;
+        var liveBody = new bool[1];
+        string? Check()
+        {
+            if (liveBody.Length < s.BodyCount) liveBody = new bool[s.BodyCount * 2];
+            System.Array.Clear(liveBody, 0, liveBody.Length);
+            for (int c = 0; c < s.CellCount; c++)
+                if (!s.Dead(c) && s.CellBody[c] >= 0 && s.CellBody[c] < liveBody.Length) liveBody[s.CellBody[c]] = true;
+            int bV = 0, bP = 0, bMI = 0, cDv = 0, cDw = 0, cR = 0, cA = 0, kS = 0;
+            string firstEnt = "";
+            for (int b = 0; b < s.BodyCount; b++)
+            {
+                if (!liveBody[b]) continue;
+                if (!float.IsFinite(s.BodyVx[b]) || !float.IsFinite(s.BodyVy[b]) || !float.IsFinite(s.BodyW[b]))
+                { bV++; if (firstEnt == "") firstEnt = $"body {b} v({s.BodyVx[b]},{s.BodyVy[b]}) w {s.BodyW[b]} M {s.BodyM[b]} I {s.BodyI[b]} cells {s.BodyCellLen[b]}"; }
+                if (!float.IsFinite(s.BodyX[b]) || !float.IsFinite(s.BodyY[b]) || !float.IsFinite(s.BodyRot[b])) bP++;
+                if (!float.IsFinite(s.BodyM[b]) || !float.IsFinite(s.BodyI[b]) || s.BodyM[b] <= 0f || s.BodyI[b] <= 0f)
+                { bMI++; if (firstEnt == "") firstEnt = $"body {b} M {s.BodyM[b]} I {s.BodyI[b]} cells {s.BodyCellLen[b]}"; }
+            }
+            for (int c = 0; c < s.CellCount; c++)
+            {
+                if (s.Dead(c)) continue;
+                if (!float.IsFinite(s.CellDvx[c]) || !float.IsFinite(s.CellDvy[c]))
+                { cDv++; if (firstEnt == "") firstEnt = $"cell {c} body {s.CellBody[c]} dv({s.CellDvx[c]},{s.CellDvy[c]}) area {s.CellArea[c]}"; }
+                if (!float.IsFinite(s.CellDw[c])) { cDw++; if (firstEnt == "") firstEnt = $"cell {c} dw {s.CellDw[c]}"; }
+                if (!float.IsFinite(s.CellRx[c]) || !float.IsFinite(s.CellRy[c])) cR++;
+                if (!float.IsFinite(s.CellArea[c]) || !float.IsFinite(s.CellRad[c])) cA++;
+            }
+            for (int k = 0; k < s.BondCount; k++)
+            {
+                if (s.BondBroken[k]) continue;
+                if (s.Dead(s.BondA[k]) || s.Dead(s.BondB[k])) continue;
+                if (!float.IsFinite(s.BondSn[k]) || !float.IsFinite(s.BondSt[k]) || !float.IsFinite(s.BondSa[k]))
+                { kS++; if (firstEnt == "") firstEnt = $"bond {k} cells {s.BondA[k]},{s.BondB[k]} sn {s.BondSn[k]} st {s.BondSt[k]} sa {s.BondSa[k]}"; }
+            }
+            if (bV + bP + bMI + cDv + cDw + cR + cA + kS == 0) return null;
+            return $"bodyV {bV}, bodyPose {bP}, bodyM/I {bMI}, cellDv {cDv}, cellDw {cDw}, cellR {cR}, cellArea {cA}, bondStretch {kS}"
+                 + $"\n      e.g. {firstEnt}";
+        }
+
+        r.Solver.PhaseMark = ph =>
+        {
+            if (done) return;
+            if (ph == SolverPhase.Inertial) sub++;
+            string? bad = Check();
+            if (bad == null) return;
+            done = true;
+            Console.WriteLine($"tick {tick}, substep {sub}: live state first non-finite after stage {ph}");
+            Console.WriteLine($"   {bad}");
+        };
+        for (tick = 0; tick < 60 && !done; tick++) { sub = -1; r.Solver.Step(); }
+        if (!done) Console.WriteLine("live state stayed finite through 60 ticks");
+    }
+
+    private static void NanTrapRun(string[] args)
+    {
+        string mn = ArgStr(args, "--mat", "steel");
+        float grain = ArgFloat(args, "--grain", 170f);
+        float speed = ArgFloat(args, "--speed", 4000f);
+        float massMul = ArgFloat(args, "--mass", 24f);
+        Material mat = mn switch
+        {
+            "glass" => Material.Glass, "rock" => Material.Rock, "ice" => Material.Ice,
+            "sandstone" => Material.Sandstone, _ => Material.Steel,
+        };
+        int poison = ArgInt(args, "--poison", 0);
+        for (int q = 0; q < poison; q++)
+        {
+            // Run the configurations that precede this one in the sweep, in the same process, to
+            // see whether a scene is affected by what ran before it.
+            var pr = Scenarios.Projectile(SimTuning.Default, Material.Steel, 4000f, 24f, 30f);
+            for (int i = 0; i < 40; i++) pr.Solver.Step();
+        }
+        var r = Scenarios.Projectile(SimTuning.Default, mat, speed, massMul, grain);
+        SimState s = r.State;
+        Console.WriteLine($"{mn} grain {grain:F0} speed {speed:F0} mass {massMul:F0}: {s.CellCount} cells, {s.BondCount} bonds"
+            + $" (after {poison} poison run(s))\n");
+
+        bool reportedAny = false;
+        for (int i = 0; i < 200; i++)
+        {
+            r.Solver.Step();
+            string? first = null; string detail = "";
+            for (int k = 0; k < s.BondCount && first == null; k++)
+            {
+                if (s.BondBroken[k]) continue;
+                if (!float.IsFinite(s.BondSn[k])) { first = "BondSn"; detail = $"bond {k} (cells {s.BondA[k]},{s.BondB[k]}) sn {s.BondSn[k]}"; }
+                else if (!float.IsFinite(s.BondSt[k])) { first = "BondSt"; detail = $"bond {k} st {s.BondSt[k]}"; }
+                else if (!float.IsFinite(s.BondSa[k])) { first = "BondSa"; detail = $"bond {k} sa {s.BondSa[k]}"; }
+            }
+            for (int c = 0; c < s.CellCount && first == null; c++)
+            {
+                string live = s.Dead(c) ? "DEAD" : "live";
+                if (!float.IsFinite(s.CellDvx[c]) || !float.IsFinite(s.CellDvy[c]))
+                { first = "CellDv"; detail = $"{live} cell {c} dv ({s.CellDvx[c]},{s.CellDvy[c]}) body {s.CellBody[c]}"; }
+                else if (!float.IsFinite(s.CellRx[c]) || !float.IsFinite(s.CellRy[c]))
+                { first = "CellR"; detail = $"{live} cell {c} r ({s.CellRx[c]},{s.CellRy[c]}) body {s.CellBody[c]}"; }
+                else if (!float.IsFinite(s.CellArea[c]) || !float.IsFinite(s.CellRad[c]))
+                { first = "CellArea/Rad"; detail = $"{live} cell {c} area {s.CellArea[c]} rad {s.CellRad[c]}"; }
+            }
+            for (int b = 0; b < s.BodyCount && first == null; b++)
+            {
+                int nlive = 0;
+                for (int c = 0; c < s.CellCount; c++) if (s.CellBody[c] == b && !s.Dead(c)) nlive++;
+                if (!float.IsFinite(s.BodyVx[b]) || !float.IsFinite(s.BodyVy[b]) || !float.IsFinite(s.BodyW[b]))
+                { first = "BodyV"; detail = $"body {b} ({nlive} live cells) v ({s.BodyVx[b]},{s.BodyVy[b]}) w {s.BodyW[b]} m {s.BodyM[b]} I {s.BodyI[b]}"; }
+                else if (!float.IsFinite(s.BodyX[b]) || !float.IsFinite(s.BodyY[b]) || !float.IsFinite(s.BodyRot[b]))
+                { first = "BodyPose"; detail = $"body {b} ({nlive} live cells) pose ({s.BodyX[b]},{s.BodyY[b]}) rot {s.BodyRot[b]}"; }
+                else if (!float.IsFinite(s.BodyM[b]) || !float.IsFinite(s.BodyI[b]) || s.BodyM[b] <= 0f || s.BodyI[b] <= 0f)
+                { first = "BodyM/I"; detail = $"body {b} m {s.BodyM[b]} I {s.BodyI[b]} cells {s.BodyCellLen[b]}"; }
+            }
+            if (first != null && !reportedAny)
+            {
+                reportedAny = true;
+                Console.WriteLine($"tick {i}: first non-finite ANYWHERE is {first} -> {detail}");
+            }
+            // Does it ever reach state the tick actually uses?
+            string? liveBad = null; string liveDetail = "";
+            for (int c = 0; c < s.CellCount && liveBad == null; c++)
+            {
+                if (s.Dead(c)) continue;
+                if (!float.IsFinite(s.CellDvx[c]) || !float.IsFinite(s.CellDvy[c]))
+                { liveBad = "CellDv"; liveDetail = $"live cell {c} body {s.CellBody[c]}"; }
+                else if (!float.IsFinite(s.CellRx[c]) || !float.IsFinite(s.CellRy[c]) || !float.IsFinite(s.CellArea[c]))
+                { liveBad = "CellR/Area"; liveDetail = $"live cell {c} body {s.CellBody[c]}"; }
+            }
+            for (int b = 0; b < s.BodyCount && liveBad == null; b++)
+            {
+                int nl = 0;
+                for (int c = 0; c < s.CellCount; c++) if (s.CellBody[c] == b && !s.Dead(c)) nl++;
+                if (nl == 0) continue;
+                if (!float.IsFinite(s.BodyVx[b]) || !float.IsFinite(s.BodyVy[b]) || !float.IsFinite(s.BodyW[b])
+                    || !float.IsFinite(s.BodyX[b]) || !float.IsFinite(s.BodyY[b]) || !float.IsFinite(s.BodyRot[b]))
+                { liveBad = "Body"; liveDetail = $"body {b} with {nl} live cells: v ({s.BodyVx[b]},{s.BodyVy[b]}) pos ({s.BodyX[b]},{s.BodyY[b]})"; }
+            }
+            if (liveBad == null) continue;
+            Console.WriteLine($"tick {i}: LIVE state went non-finite: {liveBad} -> {liveDetail}");
+            Console.WriteLine($"   scene: {s.BodyCount} bodies, {s.CellCount} cells, "
+                + $"broken {r.Solver.Broken}, dust {r.Solver.Dust}, maxOverlap {r.Solver.MaxOverlap:F2}");
+            return;
+        }
+        Console.WriteLine("LIVE state stayed finite through 200 ticks");
+    }
+
+    private static void OverlapCensusRun(string[] args)
+    {
+        int ticks = ArgInt(args, "--ticks", 200);
+        Console.WriteLine($"contact penetration over {ticks} ticks, as a fraction of the smaller cell's radius\n");
+        Console.WriteLine("  scene                | contacts | median | p90    | p99    | max    | max px | worst cell rad");
+        foreach (var (name, make) in new (string, Func<Scenarios.Result>)[]
+        {
+            ("collide rock g900", () => Scenarios.Collide(SimTuning.Default, Material.Rock, 600f, 900f)),
+            ("collide rock g255", () => Scenarios.Collide(SimTuning.Default, Material.Rock, 600f, 255f)),
+            ("collide glass g255", () => Scenarios.Collide(SimTuning.Default, Material.Glass, 600f, 255f)),
+            ("projectile rock", () => Scenarios.Projectile(SimTuning.Default, Material.Rock, 900f, 8f, 900f)),
+            ("projectile rock fast", () => Scenarios.Projectile(SimTuning.Default, Material.Rock, 2500f, 8f, 900f)),
+        })
+        {
+            var r = make();
+            SimState s = r.State;
+            var frac = new List<double>();
+            float maxPx = 0f, atRad = 0f;
+            for (int i = 0; i < ticks; i++)
+            {
+                r.Solver.Step();
+                for (int q = 0; q < r.Solver.ContactCount; q++)
+                {
+                    Contact ct = r.Solver.ContactAt(q);
+                    if (ct.Depth <= 0f) continue;
+                    if (ct.A < 0 || ct.B < 0 || ct.A >= s.CellCount || ct.B >= s.CellCount) continue;
+                    float rad = MathF.Min(s.CellRad[ct.A], s.CellRad[ct.B]);
+                    if (rad < 1e-3f) continue;
+                    frac.Add(ct.Depth / rad);
+                    if (ct.Depth > maxPx) { maxPx = ct.Depth; atRad = rad; }
+                }
+            }
+            frac.Sort();
+            if (frac.Count == 0) { Console.WriteLine($"  {name,-20} | no penetrating contacts sampled"); continue; }
+            double Q(double f) => frac[(int)(f * (frac.Count - 1))];
+            Console.WriteLine($"  {name,-20} | {frac.Count,8} | {Q(0.5),6:F3} | {Q(0.9),6:F3} | {Q(0.99),6:F3} | "
+                + $"{frac[frac.Count - 1],6:F3} | {maxPx,6:F1} | {atRad,6:F1}");
+        }
+    }
+
+    private static void NanSweepRun(string[] args)
+    {
+        int ticks = ArgInt(args, "--ticks", 150);
+        int found = 0, tried = 0;
+        string only = ArgStr(args, "--only", "");
+        var allMats = new (string, Material)[]
+        {
+            ("rock", Material.Rock), ("glass", Material.Glass), ("steel", Material.Steel),
+            ("ice", Material.Ice), ("sandstone", Material.Sandstone),
+        };
+        var mats = only.Length > 0 ? allMats.Where(x => x.Item1 == only).ToArray() : allMats;
+        float onlyG = ArgFloat(args, "--g", 0f), onlyV = ArgFloat(args, "--v", 0f), onlyM = ArgFloat(args, "--m", 0f);
+        foreach (var (mn, mat) in mats)
+        foreach (float grain in onlyG > 0f ? new[] { onlyG } : new[] { 30f, 60f, 170f, 255f, 900f, 1800f })
+        foreach (float speed in onlyV > 0f ? new[] { onlyV } : new[] { 600f, 1500f, 2500f, 4000f })
+        foreach (float massMul in onlyM > 0f ? new[] { onlyM } : new[] { 1f, 8f, 24f })
+        {
+            tried++;
+            Scenarios.Result r;
+            try { r = Scenarios.Projectile(SimTuning.Default, mat, speed, massMul, grain); }
+            catch (Exception e) { Console.WriteLine($"  BUILD THREW {mn} g{grain} v{speed} m{massMul}: {e.GetType().Name}"); found++; continue; }
+            SimState s = r.State;
+            try
+            {
+                for (int i = 0; i < ticks; i++)
+                {
+                    r.Solver.Step();
+                    // LIVE state only: a retired cell may hold anything, and counting it produced a
+                    // false positive the first time this sweep ran.
+                    bool bad = false;
+                    for (int c = 0; c < s.CellCount && !bad; c++)
+                    {
+                        if (s.Dead(c)) continue;
+                        int b = s.CellBody[c];
+                        bad = !float.IsFinite(s.CellRx[c]) || !float.IsFinite(s.CellRy[c])
+                           || !float.IsFinite(s.CellDvx[c]) || !float.IsFinite(s.CellDvy[c])
+                           || (b >= 0 && b < s.BodyCount && (!float.IsFinite(s.BodyX[b]) || !float.IsFinite(s.BodyY[b])
+                               || !float.IsFinite(s.BodyVx[b]) || !float.IsFinite(s.BodyVy[b])
+                               || !float.IsFinite(s.BodyRot[b]) || !float.IsFinite(s.BodyW[b])));
+                    }
+                    if (!bad) continue;
+                    Console.WriteLine($"  NON-FINITE  {mn,-9} grain {grain,6:F0} speed {speed,6:F0} mass {massMul,4:F0}"
+                        + $"  at tick {i}  ({s.BodyCount} bodies, {s.CellCount} cells)");
+                    found++;
+                    break;
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"  THREW       {mn,-9} grain {grain,6:F0} speed {speed,6:F0} mass {massMul,4:F0}"
+                    + $"  : {e.GetType().Name}: {e.Message}");
+                found++;
+            }
+        }
+        Console.WriteLine($"\n{tried} configurations, {found} bad");
+    }
+
+    private static void PairWatchRun(string[] args)
+    {
+        int ca = ArgInt(args, "--a", 60), cb = ArgInt(args, "--b", 6);
+        int from = ArgInt(args, "--from", 20), to = ArgInt(args, "--to", 45);
+        var r = Scenarios.Collide(SimTuning.Default, Material.Rock, 600f, 900f);
+        SimState s = r.State;
+        Console.WriteLine($"collide rock/rock, speed 600, grain 900, SimTuning.Default");
+        Console.WriteLine($"watching cells {ca} and {cb}; crush threshold {Material.Rock.Crush:E2}\n");
+        float a0 = s.CellArea[ca], b0 = s.CellArea[cb];
+
+        Console.WriteLine("  tick | contact? depth |  peak press   threshold | gate open/tries | dents | area a          area b");
+        for (int i = 0; i < to; i++)
+        {
+            int da0 = r.Solver.DentCalls;
+            float pressSeen = 0f; int gateOpen = 0, gateShut = 0;
+            r.Solver.TraceCell = ca;
+            int tk = i;
+            r.Solver.DentTrace = Array.IndexOf(args, "--dents") >= 0 && i >= from && i <= from + 12
+                ? msg => Console.WriteLine($"t{tk,3} {msg}") : null;
+            r.Solver.TraceSink = msg =>
+            {
+                if (!msg.Contains("carve gate")) return;
+                if (msg.Contains("OPEN")) gateOpen++; else gateShut++;
+                int ix = msg.IndexOf("press");
+                if (ix >= 0 && float.TryParse(msg.Substring(ix + 5, 12).Trim(),
+                        System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture, out float pv))
+                    pressSeen = MathF.Max(pressSeen, pv);
+            };
+            r.Solver.Step();
+            r.Solver.TraceSink = null;
+            if (i < from) continue;
+
+            float depth = float.NaN; bool found = false;
+            for (int q = 0; q < r.Solver.ContactCount; q++)
+            {
+                Contact ct = r.Solver.ContactAt(q);
+                if ((ct.A == ca && ct.B == cb) || (ct.A == cb && ct.B == ca)) { depth = ct.Depth; found = true; break; }
+            }
+            // geometric overlap along the centre line, independent of the manifold
+            float dx = (s.BodyX[s.CellBody[ca]] + s.CellRx[ca]) - (s.BodyX[s.CellBody[cb]] + s.CellRx[cb]);
+            float dy = (s.BodyY[s.CellBody[ca]] + s.CellRy[ca]) - (s.BodyY[s.CellBody[cb]] + s.CellRy[cb]);
+            float sep = SimMath.Hypot(dx, dy);
+            float gap = sep - (s.CellRad[ca] + s.CellRad[cb]);
+
+            Console.WriteLine($"  {i,4} | {(found ? $"yes {depth,6:F2}" : $"no  {gap,6:F2}")} | "
+                + $"{pressSeen,10:E2} {Material.Rock.Crush,10:E2} | {gateOpen,3}/{gateOpen + gateShut,-3} | "
+                + $"{r.Solver.DentCalls - da0,5} | {s.CellArea[ca],8:F1} ({100f * s.CellArea[ca] / a0,5:F1}%) "
+                + $"{s.CellArea[cb],8:F1} ({100f * s.CellArea[cb] / b0,5:F1}%)");
+        }
+    }
+
+    private static void GuardrailSpreadRun(string[] args)
+    {
+        float[] muls = { 1f, 1.000001f, 1.0001f, 1.001f };
+        foreach (var (name, ticks) in new (string, int)[] { ("collide", 400), ("projectile", 400) })
+        {
+            Console.WriteLine($"\n── {name}, {ticks} ticks, 4 imperceptibly perturbed runs ──");
+            Console.WriteLine("  speed x   | bodies | broken | dust | conn% | big% ");
+            int bmin = int.MaxValue, bmax = int.MinValue;
+            foreach (float mul in muls)
+            {
+                var r = name == "collide"
+                    ? Scenarios.Collide(SimTuning.Default, Material.Rock, speed: 600f * mul)
+                    : Scenarios.Projectile(SimTuning.Default, Material.Rock, speed: 900f * mul);
+                for (int i = 0; i < ticks; i++) r.Solver.Step();
+                SimState s = r.State;
+                int broken = (int)r.Solver.Broken;      // the same counter the guardrail asserts on
+                // mass in pieces of more than four cells
+                var cnt = new Dictionary<int, int>();
+                var mass = new Dictionary<int, float>();
+                float total = 0f;
+                for (int c = 0; c < s.CellCount; c++)
+                {
+                    if (s.Dead(c)) continue;
+                    int bb = s.CellBody[c];
+                    cnt[bb] = cnt.TryGetValue(bb, out int q) ? q + 1 : 1;
+                    float mm = s.CellArea[c];
+                    mass[bb] = mass.TryGetValue(bb, out float w) ? w + mm : mm;
+                    total += mm;
+                }
+                float big = 0f;
+                foreach (var kv in cnt) if (kv.Value > 4) big += mass[kv.Key];
+                bmin = System.Math.Min(bmin, broken); bmax = System.Math.Max(bmax, broken);
+                Console.WriteLine($"  {mul,9:F6} | {s.BodyCount,6} | {broken,6} | {r.Solver.Dust,4} | "
+                    + $"{"-",5} | {100f * big / MathF.Max(1e-6f, total),4:F0}%");
+            }
+            Console.WriteLine($"  broken across the ensemble: {bmin}..{bmax}");
+        }
+
+        // The shatter stress test needs the scene to actually shatter to prove anything.
+        Console.WriteLine("\n── AViolentShatter stress case: bodies after 40 ticks (needs > 400) ──");
+        foreach (var (lbl, grain, speed, massMul) in new (string, float, float, float)[]
+        {
+            ("grain 30, 900 px/s, mass 3 (as written)", 30f, 900f, 3f),
+            ("grain 30, 2400 px/s, mass 3", 30f, 2400f, 3f),
+            ("grain 30, 2400 px/s, mass 12", 30f, 2400f, 12f),
+            ("grain 30, 4000 px/s, mass 24", 30f, 4000f, 24f),
+            ("grain 20, 4000 px/s, mass 24", 20f, 4000f, 24f),
+            ("grain 15, 4000 px/s, mass 24", 15f, 4000f, 24f),
+            ("grain 20, 6000 px/s, mass 24", 20f, 6000f, 24f),
+        })
+        {
+            var swx = Stopwatch.StartNew();
+            var r = Scenarios.Projectile(SimTuning.Default, Material.Rock, speed, massMul, grain);
+            for (int i = 0; i < 40; i++) r.Solver.Step();
+            swx.Stop();
+            Console.WriteLine($"  {lbl,-40} -> {r.State.BodyCount,5} bodies, {r.Solver.Broken,5} broken, "
+                + $"{r.Solver.Dust,4} dust, {swx.Elapsed.TotalSeconds,5:F1}s");
+        }
+    }
+
+    private static void SmallRoundRun(string[] args)
+    {
+        int ticks = ArgInt(args, "--ticks", 120);
+        float baseR = ArgFloat(args, "--radius", 26f);
+        float baseV = ArgFloat(args, "--speed", 900f);
+
+        static (float lost, int bodies, int dead, float impMass, float ke) Shot(
+            float radius, float rhoMul, float speed, int ticks2, float massWanted = 0f)
+        {
+            var tune = SimTuning.Default;
+            var rk = Material.Rock;
+            var round = new Material("round", rk.Rho * rhoMul, rk.C, rk.Strain, rk.Chi, rk.Yield,
+                rk.Duct, rk.Crush, rk.CrushRate, rk.ShedLimit, rk.Dent);
+            var r = Scenarios.Collide(tune, Material.Rock, 0f, 900f);
+            SimState s = r.State;
+            int before = s.CellCount;
+            float area0 = 0f;
+            for (int c = 0; c < before; c++) area0 += s.CellArea[c];
+            float tx = s.BodyX[0], ty = s.BodyY[0];
+            r = Scenarios.FireAt(r, tune, round, tx - 400f, ty, tx, ty,
+                speed: speed, radius: radius, grain: 900f, seed: 1, roundMass: massWanted);
+            s = r.State;
+            int rb = s.CellBody[before];
+            float m = s.BodyM[rb];
+            for (int i = 0; i < ticks2; i++) r.Solver.Step();
+            float area1 = 0f; int dead = 0;
+            for (int c = 0; c < before; c++)                       // target cells only
+            {
+                if (s.Dead(c)) { dead++; continue; }
+                area1 += s.CellArea[c];
+            }
+            return (100f * (area0 - area1) / area0, s.BodyCount, dead, m, 0.5f * m * speed * speed);
+        }
+
+        var (lost0, bodies0, dead0, m0, ke0) = Shot(baseR, 1f, baseV, ticks);
+        Console.WriteLine($"target: rock g900. Baseline round radius {baseR:F0} px at {baseV:F0} px/s, mass {m0:F0}.\n");
+        Console.WriteLine("  round                              | radius | mass      | KE        | target area lost | bodies | dead");
+        Console.WriteLine($"  {"baseline",-34} | {baseR,6:F1} | {m0,9:F0} | {ke0,9:E2} | {lost0,15:F1}% | {bodies0,6} | {dead0,4}");
+        foreach (var (name, radius, rhoMul, speed, wanted) in new (string, float, float, float, float)[]
+        {
+            ("half size, density x4", baseR / 2f, 4f, baseV, 0f),
+            ("half size, mass set directly", baseR / 2f, 1f, baseV, m0),
+            ("third size, mass set directly", baseR / 3f, 1f, baseV, m0),
+            ("quarter size, mass set directly", baseR / 4f, 1f, baseV, m0),
+            ("sixth size, mass set directly", baseR / 6f, 1f, baseV, m0),
+            ("half size, nothing compensated", baseR / 2f, 1f, baseV, 0f),
+        })
+        {
+            var (lost, bodies, dead, m, ke) = Shot(radius, rhoMul, speed, ticks, wanted);
+            string err = wanted > 0f ? $"  (asked {wanted:F0}, err {100f * (m - wanted) / wanted:+0.00;-0.00}%)" : "";
+            Console.WriteLine($"  {name,-34} | {radius,6:F1} | {m,9:F0} | {ke,9:E2} | {lost,15:F1}% | {bodies,6} | {dead,4}{err}");
+        }
+    }
+
+    private static void FuseCheckRun(string[] args)
+    {
+        float speed = ArgFloat(args, "--speed", 900f);
+        var tune = SimTuning.Default;
+        var r = Scenarios.Collide(tune, Material.Rock, 0f, 900f);
+        SimState s = r.State;
+        int before = s.CellCount;
+        float tx = s.BodyX[0], ty = s.BodyY[0];
+        r = Scenarios.FireAt(r, tune, Material.Rock, tx - 500f, ty, tx, ty, speed: speed, radius: 20f, grain: 900f, seed: 1);
+        s = r.State;
+        int rb = s.CellBody[before];
+        float v0 = SimMath.Hypot(s.BodyVx[rb], s.BodyVy[rb]);
+        int touchTick = -1, slowTick = -1, overlapTick = -1;
+
+        for (int i = 0; i < 200; i++)
+        {
+            r.Solver.Step();
+            if (rb >= s.BodyCount) break;
+            if (touchTick < 0 && r.Solver.BodyTouchedThisTick(rb)) touchTick = i;
+            if (slowTick < 0 && SimMath.Hypot(s.BodyVx[rb], s.BodyVy[rb]) < 0.99f * v0) slowTick = i;
+            if (overlapTick < 0)
+            {
+                float rmnx = float.MaxValue, rmxx = float.MinValue, rmny = float.MaxValue, rmxy = float.MinValue;
+                float omnx = float.MaxValue, omxx = float.MinValue, omny = float.MaxValue, omxy = float.MinValue;
+                for (int c = 0; c < s.CellCount; c++)
+                {
+                    if (s.Dead(c)) continue;
+                    int bb = s.CellBody[c];
+                    float wx = s.BodyX[bb] + s.CellRx[c], wy = s.BodyY[bb] + s.CellRy[c];
+                    float rr = s.CellRad[c];
+                    if (bb == rb) { rmnx = MathF.Min(rmnx, wx - rr); rmxx = MathF.Max(rmxx, wx + rr); rmny = MathF.Min(rmny, wy - rr); rmxy = MathF.Max(rmxy, wy + rr); }
+                    else { omnx = MathF.Min(omnx, wx - rr); omxx = MathF.Max(omxx, wx + rr); omny = MathF.Min(omny, wy - rr); omxy = MathF.Max(omxy, wy + rr); }
+                }
+                if (rmxx >= omnx && omxx >= rmnx && rmxy >= omny && omxy >= rmny) overlapTick = i;
+            }
+            if (touchTick >= 0 && slowTick >= 0 && overlapTick >= 0) break;
+        }
+        Console.WriteLine($"round fired at {speed:F0} px/s from 500 px away");
+        Console.WriteLine($"   solver reported first contact at tick : {touchTick}");
+        Console.WriteLine($"   round first lost 1% of its speed at   : {slowTick}");
+        Console.WriteLine($"   AABBs first overlapped at             : {overlapTick}");
+        Console.WriteLine(touchTick >= 0 && slowTick >= 0 && System.Math.Abs(touchTick - slowTick) <= 1
+            ? "   -> contact report agrees with the round actually being slowed"
+            : "   -> MISMATCH");
+    }
+
+    private static void BondInterfaceRun(string[] args)
+    {
+        int ticks = ArgInt(args, "--ticks", 200);
+        foreach (var (label, make) in new (string, Func<Scenarios.Result>)[]
+        {
+            ("collide rock g900", () => Scenarios.Collide(SimTuning.Default, Material.Rock, 600f, 900f)),
+            ("collide rock g170", () => Scenarios.Collide(SimTuning.Default, Material.Rock, 600f, 170f)),
+            ("collide glass g255", () => Scenarios.Collide(SimTuning.Default, Material.Glass, 600f, 255f)),
+            ("projectile rock", () => Scenarios.Projectile(SimTuning.Default, Material.Rock, 900f, 8f, 900f)),
+            ("viewer piercing rod + knobs", () =>
+            {
+                var pen = Material.Penetrator;
+                var rod = new Material(pen.Name, pen.Rho, pen.C, pen.Strain, pen.Chi, pen.Yield, pen.Duct,
+                    pen.Crush / 64f, pen.CrushRate * 64f, MathF.Min(0.95f, pen.ShedLimit * 64f), pen.Dent);
+                var rr = Scenarios.Collide(SimTuning.Default, Material.Rock, 0f, 900f);
+                float tx = rr.State.BodyX[0], ty = rr.State.BodyY[0];
+                float rad = 15f * MathF.Sqrt(3f);
+                return Scenarios.FireAt(rr, SimTuning.Default, rod, tx - 360f, ty, tx, ty,
+                    speed: 900f, radius: rad, grain: 900f, seed: 1, radiusX: rad * 3.5f, radiusY: rad / 3.5f);
+            }),
+        })
+        {
+            var r = make();
+            SimState s = r.State;
+            int nb = s.BondCount;
+            var len0 = new float[nb]; var k0 = new float[nb]; var s0 = new float[nb];
+            for (int k = 0; k < nb; k++) { len0[k] = s.BondLen[k]; k0[k] = s.BondK0[k]; s0[k] = s.BondS0[k]; }
+
+            int grew = 0;
+            var prevLen = (float[])s.BondLen.Clone();
+            for (int i = 0; i < ticks; i++)
+            {
+                r.Solver.Step();
+                for (int k = 0; k < nb && k < s.BondCount; k++)
+                {
+                    if (!s.BondBroken[k] && s.BondLen[k] > prevLen[k] + 1e-4f) grew++;
+                    prevLen[k] = s.BondLen[k];
+                }
+            }
+
+            // 1. stiffness vs length, on bonds whose interface actually eroded
+            double worst = 0; int eroded = 0; int s0Changed = 0;
+            for (int k = 0; k < nb && k < s.BondCount; k++)
+            {
+                if (s.BondBroken[k] || len0[k] <= 1e-6f || k0[k] <= 1e-9f) continue;
+                float lr = s.BondLen[k] / len0[k];
+                if (lr > 0.999f) continue;
+                eroded++;
+                double kr = s.BondK0[k] / k0[k];
+                worst = System.Math.Max(worst, System.Math.Abs(kr - lr));
+                if (System.Math.Abs(s.BondS0[k] - s0[k]) > 1e-9f) s0Changed++;
+            }
+
+            // 2. anything still bonded with no interface left
+            var hasRec = new bool[s.BondCount];
+            for (int rr = 0; rr < s.TouchCount; rr++)
+            {
+                if (s.TouchA[rr] < 0) continue;
+                short bk = s.TouchBond[rr];
+                if (bk >= 0 && bk < s.BondCount) hasRec[bk] = true;
+            }
+            int glue = 0;
+            for (int k = 0; k < s.BondCount; k++)
+            {
+                if (s.BondBroken[k] || hasRec[k]) continue;
+                int a = s.BondA[k], b = s.BondB[k];
+                if (a < 0 || b < 0 || s.Dead(a) || s.Dead(b)) continue;
+                glue++;
+            }
+
+            Console.WriteLine($"\n── {label} after {ticks} ticks ──");
+            Console.WriteLine($"   bonds whose interface eroded: {eroded}");
+            Console.WriteLine($"   worst |k/k0 - len/len0| among them: {worst:E2}   (claim: telescopes exactly)");
+            Console.WriteLine($"   of those, bonds whose failure stretch S0 moved: {s0Changed}   (claim: never)");
+            Console.WriteLine($"   times a live bond's length INCREASED: {grew}   (claim: never; rescale only fires on shrink)");
+            Console.WriteLine($"   live bonds joining two live cells with NO touch record: {glue}   (claim: none)");
+
+            // The build sets Ka0 = K0 * L^2 / 12 (second moment of a line of springs over length L).
+            // Does the carved-interface rescale keep that?
+            double worstBend = 1.0; int bendChecked = 0; double atF = 1.0;
+            for (int k = 0; k < nb && k < s.BondCount; k++)
+            {
+                if (s.BondBroken[k] || len0[k] <= 1e-6f) continue;
+                float lr = s.BondLen[k] / len0[k];
+                if (lr > 0.999f) continue;
+                double want = s.BondK0[k] * (double)s.BondLen[k] * s.BondLen[k] / 12.0;
+                if (want <= 1e-12) continue;
+                double ratio = s.BondKa0[k] / want;
+                bendChecked++;
+                if (ratio > worstBend) { worstBend = ratio; atF = lr; }
+            }
+            if (bendChecked > 0)
+                Console.WriteLine($"   Ka0 / (K0*L^2/12) on {bendChecked} eroded bonds: worst {worstBend:F2}x too stiff "
+                    + $"at interface {atF * 100:F1}% (1/f^2 predicts {1.0 / (atF * atF):F2}x)");
+
+            // How far down can a live bond's interface be eroded and still hold?
+            var lenRatios = new List<double>();
+            for (int k = 0; k < nb && k < s.BondCount; k++)
+            {
+                if (s.BondBroken[k] || len0[k] <= 1e-6f) continue;
+                int a = s.BondA[k], b = s.BondB[k];
+                if (a < 0 || b < 0 || s.Dead(a) || s.Dead(b)) continue;
+                lenRatios.Add(s.BondLen[k] / len0[k]);
+            }
+            lenRatios.Sort();
+            if (lenRatios.Count > 0)
+                Console.WriteLine($"   live bond interface remaining: min {lenRatios[0] * 100:F1}%, "
+                    + $"p10 {lenRatios[lenRatios.Count / 10] * 100:F1}%, median {lenRatios[lenRatios.Count / 2] * 100:F1}%");
+
+            // Two-cell bodies: how many, and what holds them together.
+            var cellsOf = new Dictionary<int, List<int>>();
+            for (int c = 0; c < s.CellCount; c++)
+            {
+                if (s.Dead(c)) continue;
+                int bb = s.CellBody[c];
+                if (!cellsOf.TryGetValue(bb, out var l)) cellsOf[bb] = l = new List<int>();
+                l.Add(c);
+            }
+            int two = 0, twoNoBond = 0, twoNoRec = 0; double worstTwo = 1.0;
+            foreach (var kv in cellsOf.OrderBy(x => x.Key))
+            {
+                if (kv.Value.Count != 2) continue;
+                two++;
+                int a = kv.Value[0], b = kv.Value[1];
+                int found = -1;
+                for (int k = 0; k < s.BondCount; k++)
+                {
+                    if (s.BondBroken[k]) continue;
+                    if ((s.BondA[k] == a && s.BondB[k] == b) || (s.BondA[k] == b && s.BondB[k] == a)) { found = k; break; }
+                }
+                if (found < 0) { twoNoBond++; continue; }
+                bool rec = false;
+                for (int rr = 0; rr < s.TouchCount; rr++)
+                    if (s.TouchA[rr] >= 0 && s.TouchBond[rr] == found) { rec = true; break; }
+                if (!rec) twoNoRec++;
+                if (found < nb && len0[found] > 1e-6f) worstTwo = System.Math.Min(worstTwo, s.BondLen[found] / len0[found]);
+            }
+            Console.WriteLine($"   two-cell bodies: {two}; of those {twoNoBond} have NO live bond between their cells, "
+                + $"{twoNoRec} have a bond but no record; thinnest surviving interface {worstTwo * 100:F1}%");
+        }
+    }
+
+    private static void PartBRun(string[] args)
+    {
+        int ticks = ArgInt(args, "--ticks", 120);
+        Console.WriteLine($"after {ticks} ticks\n");
+        Console.WriteLine("  scene                | dents | v1 fallback | carves >60 deg off approach | morphology");
+        foreach (var (name, make) in new (string, Func<Scenarios.Result>)[]
+        {
+            ("collide rock g900", () => Scenarios.Collide(SimTuning.Default, Material.Rock, 600f, 900f)),
+            ("collide rock g255", () => Scenarios.Collide(SimTuning.Default, Material.Rock, 600f, 255f)),
+            ("collide steel g170", () => Scenarios.Collide(SimTuning.Default, Material.Steel, 600f, 170f)),
+            ("projectile rock", () => Scenarios.Projectile(SimTuning.Default, Material.Rock, 900f, 8f, 900f)),
+            ("collide glass g255", () => Scenarios.Collide(SimTuning.Default, Material.Glass, 600f, 255f)),
+        })
+        {
+            var r = make();
+            r.Solver.MeasureCarveAngles = true;
+            r.Solver.DentLoneCells = Array.IndexOf(args, "--v1lone") < 0;
+            for (int i = 0; i < 10; i++) r.Solver.Step();          // warm
+            var sw = Stopwatch.StartNew();
+            for (int i = 10; i < ticks; i++) r.Solver.Step();
+            sw.Stop();
+            int live = 0, dead = 0; float areaLeft = 0f;
+            for (int c = 0; c < r.State.CellCount; c++) { if (r.State.Dead(c)) dead++; else { live++; areaLeft += r.State.CellArea[c]; } }
+            int tot = 0; foreach (int v in r.Solver.CarveNormalAngle) tot += v;
+            int off60 = r.Solver.CarveNormalAngle[6] + r.Solver.CarveNormalAngle[7] + r.Solver.CarveNormalAngle[8];
+            int calls = r.Solver.DentCalls, fb = r.Solver.DentFallback;
+            Console.WriteLine($"  {name,-20} | {calls,5} | {fb,5} ({100.0 * fb / System.Math.Max(1, calls),4:F1}%) | "
+                + $"{off60,6} of {tot,6} ({100.0 * off60 / System.Math.Max(1, tot),4:F1}%)  | "
+                + $"{r.State.BodyCount,4} bodies {live,4} live {dead,4} dead | {sw.Elapsed.TotalMilliseconds / (ticks - 10),5:F2} ms/tick");
+        }
+    }
+
+    private static void DentCapacityRun(string[] args)
+    {
+        int ticks = ArgInt(args, "--ticks", 60);
+
+        static double Capacity(float[] xs, float[] ys, int[] touch, int n)
+        {
+            double cap = 0;
+            double gx = 0, gy = 0;
+            for (int v = 0; v < n; v++) { gx += xs[v]; gy += ys[v]; }
+            gx /= n; gy /= n;
+            for (int v = 0; v < n; v++)
+            {
+                int pv = v == 0 ? n - 1 : v - 1, nv = v + 1 == n ? 0 : v + 1;
+                if (touch[pv] >= 0 || touch[v] >= 0) continue;
+                double kx = xs[v] - gx, ky = ys[v] - gy;
+                double kl = System.Math.Sqrt(kx * kx + ky * ky);
+                if (kl < 1e-4) continue;
+                double ux = -kx / kl, uy = -ky / kl;
+                double p1x = xs[pv] - gx, p1y = ys[pv] - gy;
+                double p2x = xs[nv] - gx, p2y = ys[nv] - gy;
+                double cx = p2x - p1x, cy = p2y - p1y;
+                double cross = ux * cy - uy * cx;
+                double da = 0.5 * System.Math.Abs(cross);
+                if (da <= 1e-6) continue;
+                double toChord = -((kx - p1x) * cy - (ky - p1y) * cx) / cross;
+                if (toChord <= 0) continue;
+                cap += da * toChord;
+            }
+            return cap;
+        }
+
+        foreach (var (label, r) in new (string, Scenarios.Result)[]
+        {
+            ("collide rock g900", Scenarios.Collide(SimTuning.Default, Material.Rock, 600f, 900f)),
+            ("collide rock g255", Scenarios.Collide(SimTuning.Default, Material.Rock, 600f, 255f)),
+            ("collide steel g170", Scenarios.Collide(SimTuning.Default, Material.Steel, 600f, 170f)),
+        })
+        {
+            SimState s = r.State;
+            for (int i = 0; i < ticks; i++) r.Solver.Step();
+            var ratios = new List<double>();
+            int tested = 0, better = 0;
+            for (int c = 0; c < s.CellCount; c++)
+            {
+                if (s.Dead(c) || s.CellArea[c] <= 1e-3f) continue;
+                int off = s.PolyOff[c], n = s.PolyLen[c];
+                if (n < 4) continue;
+                var xs = new float[n + 1]; var ys = new float[n + 1]; var tc = new int[n + 1];
+                for (int v = 0; v < n; v++) { xs[v] = s.PolyX[off + v]; ys[v] = s.PolyY[off + v]; tc[v] = s.SideTouch[off + v]; }
+                double cap0 = Capacity(xs, ys, tc, n);
+                if (cap0 <= 1e-6) continue;
+
+                // Insert a midpoint on the longest SURFACE edge — the one a contact is most likely
+                // to land in the middle of, and the only kind we may re-mesh (a record side is
+                // shared geometry).
+                int bestE = -1; float bestL = 0f;
+                for (int v = 0; v < n; v++)
+                {
+                    if (tc[v] >= 0) continue;
+                    int nv = v + 1 == n ? 0 : v + 1;
+                    float L = SimMath.Hypot(xs[nv] - xs[v], ys[nv] - ys[v]);
+                    if (L > bestL) { bestL = L; bestE = v; }
+                }
+                if (bestE < 0) continue;
+
+                var x2 = new float[n + 1]; var y2 = new float[n + 1]; var t2 = new int[n + 1];
+                int k2 = 0;
+                for (int v = 0; v < n; v++)
+                {
+                    x2[k2] = xs[v]; y2[k2] = ys[v]; t2[k2] = tc[v]; k2++;
+                    if (v != bestE) continue;
+                    int nv = v + 1 == n ? 0 : v + 1;
+                    x2[k2] = 0.5f * (xs[v] + xs[nv]); y2[k2] = 0.5f * (ys[v] + ys[nv]); t2[k2] = -1; k2++;
+                }
+                double cap1 = Capacity(x2, y2, t2, k2);
+                tested++;
+                if (cap1 > cap0) better++;
+                ratios.Add(cap1 / cap0);
+            }
+            ratios.Sort();
+            Console.WriteLine($"\n── {label}: {tested} cells with a free corner and a surface edge ──");
+            if (tested == 0) continue;
+            Console.WriteLine($"   capacity after inserting one midpoint, relative to before:"
+                + $"  median {ratios[ratios.Count / 2]:F3}   p25 {ratios[ratios.Count / 4]:F3}   p75 {ratios[3 * ratios.Count / 4]:F3}");
+            Console.WriteLine($"   cells where the insertion INCREASED capacity: {better} of {tested} ({100.0 * better / tested:F1}%)");
+        }
+    }
+
+    private static void DentBudgetRun(string[] args)
+    {
+        int ticks = ArgInt(args, "--ticks", 120);
+        Console.WriteLine($"realised / target area over {ticks} ticks\n");
+        Console.WriteLine("  scene                      | single pass + clamp |  iterated (shipping) ");
+        foreach (var (name, make) in new (string, Func<Scenarios.Result>)[]
+        {
+            ("collide rock g900", () => Scenarios.Collide(SimTuning.Default, Material.Rock, 600f, 900f)),
+            ("collide rock g255", () => Scenarios.Collide(SimTuning.Default, Material.Rock, 600f, 255f)),
+            ("collide steel g170", () => Scenarios.Collide(SimTuning.Default, Material.Steel, 600f, 170f)),
+            ("projectile rock", () => Scenarios.Projectile(SimTuning.Default, Material.Rock, 900f, 8f, 900f)),
+        })
+        {
+            var outp = new double[2];
+            string bound = "";
+            for (int mode2 = 0; mode2 < 2; mode2++)
+            {
+                var r = make();
+                r.Solver.MeasureDentBudget = true;
+                r.Solver.DentSinglePass = mode2 == 0;
+                for (int i = 0; i < ticks; i++) r.Solver.Step();
+                outp[mode2] = 100.0 * r.Solver.DentRealisedSum / System.Math.Max(1e-9, r.Solver.DentTargetSum);
+                if (mode2 == 1) bound = $"| capacity-bound on {r.Solver.DentCapacityBound} of {r.Solver.DentTotalSolved} dents "
+                    + $"({100.0 * r.Solver.DentCapacityBound / System.Math.Max(1, r.Solver.DentTotalSolved):F1}%)";
+            }
+            Console.WriteLine($"  {name,-26} | {outp[0],18:F1}% | {outp[1],18:F1}%   {bound}");
+        }
+    }
+
+    private static void DentPickRun(string[] args)
+    {
+        float grain = ArgFloat(args, "--grain", 900f);
+        int ticks = ArgInt(args, "--ticks", 120);
+        Console.WriteLine($"rock collide, grain {grain}, {ticks} ticks — sweeping Material.Dent on the meanEdge base\n");
+        Console.WriteLine("  Dent | bodies | dead | live | median aspect | area kept | dents | clamped/solved");
+        foreach (float d in new[] { 0.40f, 0.55f, 0.75f, 1.00f, 1.25f, 1.50f, 2.00f })
+        {
+            var rock = Material.Rock;
+            var m = new Material(rock.Name, rock.Rho, rock.C, rock.Strain, rock.Chi, rock.Yield,
+                rock.Duct, rock.Crush, rock.CrushRate, rock.ShedLimit, d);
+            var r = Scenarios.Collide(SimTuning.Default, m, 600f, grain);
+            SimState s = r.State;
+            float area0 = 0f;
+            for (int c = 0; c < s.CellCount; c++) area0 += s.CellArea[c];
+            for (int i = 0; i < ticks; i++) r.Solver.Step();
+
+            var aspects = new List<double>();
+            int dead = 0, live = 0; float area1 = 0f;
+            for (int c = 0; c < s.CellCount; c++)
+            {
+                if (s.Dead(c)) { dead++; continue; }
+                live++; area1 += s.CellArea[c];
+                int off = s.PolyOff[c], n = s.PolyLen[c];
+                if (n < 4) continue;
+                double diam = 0; int ai = 0, bi = 0;
+                for (int v = 0; v < n; v++)
+                    for (int w = v + 1; w < n; w++)
+                    {
+                        double dx = s.PolyX[off + v] - s.PolyX[off + w], dy = s.PolyY[off + v] - s.PolyY[off + w];
+                        double dd = System.Math.Sqrt(dx * dx + dy * dy);
+                        if (dd > diam) { diam = dd; ai = v; bi = w; }
+                    }
+                double axx = s.PolyX[off + bi] - s.PolyX[off + ai], axy = s.PolyY[off + bi] - s.PolyY[off + ai];
+                double al = System.Math.Sqrt(axx * axx + axy * axy);
+                double lo = double.MaxValue, hi = double.MinValue;
+                for (int v = 0; v < n; v++)
+                {
+                    double pr = (s.PolyX[off + v] * -axy + s.PolyY[off + v] * axx) / System.Math.Max(1e-9, al);
+                    lo = System.Math.Min(lo, pr); hi = System.Math.Max(hi, pr);
+                }
+                aspects.Add(diam / System.Math.Max(1e-6, hi - lo));
+            }
+            aspects.Sort();
+            double medA = aspects.Count > 0 ? aspects[aspects.Count / 2] : double.NaN;
+            int cl = r.Solver.DentClamped, un = r.Solver.DentUnclamped;
+            Console.WriteLine($"  {d,4:F2} | {s.BodyCount,6} | {dead,4} | {live,4} | {medA,13:F2} | {100f * area1 / area0,8:F1}% | "
+                + $"{r.Solver.DentCalls,5} | {cl,5}/{cl + un}");
+        }
+    }
+
+    private static void DentScaleRun(string[] args)
+    {
+        var tune = SimTuning.Default;
+        var scenes = new (string, Scenarios.Result)[]
+        {
+            ("collide rock g900", Scenarios.Collide(tune, Material.Rock, 600f, 900f)),
+            ("collide rock g255", Scenarios.Collide(tune, Material.Rock, 600f, 255f)),
+            ("collide steel g170", Scenarios.Collide(tune, Material.Steel, 600f, 170f)),
+        };
+        string[] names = { "CellRad (now)", "diameter", "meanEdge=perim/n", "sqrt(area)" };
+
+        foreach (var (label, r) in scenes)
+        {
+            SimState s = r.State;
+            for (int i = 0; i < 60; i++) r.Solver.Step();      // let carving make the shapes irregular
+            var ratios = new List<double>[4];
+            for (int j = 0; j < 4; j++) ratios[j] = new List<double>();
+            var elong = new List<double>[4];
+            for (int j = 0; j < 4; j++) elong[j] = new List<double>();
+            int cells = 0, elongCells = 0;
+
+            for (int c = 0; c < s.CellCount; c++)
+            {
+                if (s.Dead(c)) continue;
+                int off = s.PolyOff[c], n = s.PolyLen[c];
+                if (n < 4) continue;
+                // typical spacing between neighbouring vertices
+                var nn = new List<double>();
+                for (int v = 0; v < n; v++)
+                {
+                    double best = double.MaxValue;
+                    for (int w = 0; w < n; w++)
+                    {
+                        if (w == v) continue;
+                        double dx = s.PolyX[off + v] - s.PolyX[off + w], dy = s.PolyY[off + v] - s.PolyY[off + w];
+                        best = System.Math.Min(best, System.Math.Sqrt(dx * dx + dy * dy));
+                    }
+                    nn.Add(best);
+                }
+                nn.Sort();
+                double spacing = nn[nn.Count / 2];
+                if (spacing < 1e-3) continue;
+
+                double diam = 0; int ai = 0, bi = 0;
+                for (int v = 0; v < n; v++)
+                    for (int w = v + 1; w < n; w++)
+                    {
+                        double dx = s.PolyX[off + v] - s.PolyX[off + w], dy = s.PolyY[off + v] - s.PolyY[off + w];
+                        double d = System.Math.Sqrt(dx * dx + dy * dy);
+                        if (d > diam) { diam = d; ai = v; bi = w; }
+                    }
+                // width = extent perpendicular to the diameter axis
+                double axx = s.PolyX[off + bi] - s.PolyX[off + ai], axy = s.PolyY[off + bi] - s.PolyY[off + ai];
+                double al = System.Math.Sqrt(axx * axx + axy * axy);
+                double lo = double.MaxValue, hi = double.MinValue;
+                for (int v = 0; v < n; v++)
+                {
+                    double pr = (s.PolyX[off + v] * -axy + s.PolyY[off + v] * axx) / System.Math.Max(1e-9, al);
+                    lo = System.Math.Min(lo, pr); hi = System.Math.Max(hi, pr);
+                }
+                double aspect = diam / System.Math.Max(1e-6, hi - lo);
+
+                double[] sc = { s.CellRad[c], diam, s.CellPerim[c] / n, System.Math.Sqrt(s.CellArea[c]) };
+                cells++;
+                bool isElong = aspect >= 2.0;
+                if (isElong) elongCells++;
+                for (int j = 0; j < 4; j++)
+                {
+                    ratios[j].Add(sc[j] / spacing);
+                    if (isElong) elong[j].Add(sc[j] / spacing);
+                }
+            }
+
+            Console.WriteLine($"\n── {label}: {cells} live cells ({elongCells} elongated, aspect >= 2) ──");
+            Console.WriteLine("  scale               scale/spacing: MEDIAN  IQR/med   min     max  |  elongated-only med  IQR/med");
+            for (int j = 0; j < 4; j++)
+            {
+                static (double med, double iqr) Robust(List<double> xs)
+                {
+                    var a = xs.OrderBy(x => x).ToArray();
+                    double Q(double f) { double i = f * (a.Length - 1); int lo2 = (int)i; int hi2 = System.Math.Min(a.Length - 1, lo2 + 1); return a[lo2] + (i - lo2) * (a[hi2] - a[lo2]); }
+                    return (Q(0.5), Q(0.75) - Q(0.25));
+                }
+                var (med, iqr) = Robust(ratios[j]);
+                var (emed, eiqr) = elong[j].Count > 0 ? Robust(elong[j]) : (double.NaN, double.NaN);
+                Console.WriteLine($"  {names[j],-20} {med,8:F2} {100 * iqr / med,6:F1}% {ratios[j].Min(),7:F2} {ratios[j].Max(),7:F2}"
+                    + $"  |  {emed,10:F2} {100 * eiqr / emed,6:F1}%");
+            }
+        }
+    }
+
+    private static void TipTraceRun(string[] args)
+    {
+        float grain = ArgFloat(args, "--grain", 900f);
+        float speed = ArgFloat(args, "--speed", 900f);
+        float mass = ArgFloat(args, "--mass", 3f);
+        int ticks = ArgInt(args, "--ticks", 30);
+        bool plain = Array.IndexOf(args, "--plain") >= 0;
+
+        var tune = SimTuning.Default;
+        Material pen = Material.Penetrator;
+        float dentOverride = ArgFloat(args, "--dentval", -1f);
+        float dentUse = dentOverride > 0f ? dentOverride : pen.Dent;
+        Material rod = plain
+            ? new Material(pen.Name, pen.Rho, pen.C, pen.Strain, pen.Chi, pen.Yield, pen.Duct,
+                pen.Crush, pen.CrushRate, pen.ShedLimit, dentUse)
+            : new Material(pen.Name, pen.Rho, pen.C, pen.Strain, pen.Chi, pen.Yield,
+                pen.Duct, pen.Crush / 64f, pen.CrushRate * 64f, MathF.Min(0.95f, pen.ShedLimit * 64f), dentUse);
+        Console.WriteLine($"grain {grain}, speed {speed}, mass {mass}; rod material {(plain ? "Penetrator as-is" : "Penetrator + knobs")}:");
+        Console.WriteLine($"   crush {rod.Crush:E2} (base {pen.Crush:E2}), rate {rod.CrushRate:F3} (base {pen.CrushRate:F3}), "
+            + $"shedLimit {rod.ShedLimit:F2} (base {pen.ShedLimit:F2}), dent {rod.Dent:F2}");
+
+        var r = Scenarios.Collide(tune, Material.Rock, 0f, grain);
+        SimState s = r.State;
+        int before = s.CellCount;
+        float tx = s.BodyX[0], ty = s.BodyY[0];
+        float radius = 15f * MathF.Sqrt(mass);
+        r = Scenarios.FireAt(r, tune, rod, tx - 360f, ty, tx, ty,
+            speed: speed, radius: radius, grain: grain, seed: 1,
+            radiusX: radius * 3.5f, radiusY: radius / 3.5f);
+        s = r.State;
+
+        int rodBody = s.CellBody[before];
+        int front = -1; float bestX = float.NegativeInfinity;
+        Console.WriteLine($"\nrod is body {rodBody}, radius {radius:F1} -> rx {radius * 3.5f:F1} ry {radius / 3.5f:F1}");
+        for (int c = before; c < s.CellCount; c++)
+        {
+            if (s.CellBody[c] != rodBody) continue;
+            Console.WriteLine($"   cell {c}: {s.PolyLen[c]} verts, area {s.CellArea[c]:F0}, rad {s.CellRad[c]:F1}, local ({s.CellRx[c]:F1},{s.CellRy[c]:F1})");
+            if (s.CellRx[c] > bestX) { bestX = s.CellRx[c]; front = c; }
+        }
+        Console.WriteLine($"front cell is {front}; its vertices (cell-local, centroid at origin):");
+        int fo = s.PolyOff[front];
+        for (int v = 0; v < s.PolyLen[front]; v++)
+            Console.WriteLine($"   v{v}: ({s.PolyX[fo + v],7:F2},{s.PolyY[fo + v],7:F2})  {r.Solver.ClassifyVertex(front, v)}");
+
+        r.Solver.TraceCell = front;
+        r.Solver.MeasureCarveAngles = true;
+        r.Solver.DentSinglePass = Array.IndexOf(args, "--singlepass") >= 0;
+        r.Solver.MeasureDentBudget = true;
+        int shown = 0;
+        int tick = 0;
+        int traceUntil = ArgInt(args, "--trace", 10);
+        r.Solver.DentTrace = msg => { if (tick <= traceUntil && shown < 200) { Console.WriteLine($"t{tick,3} {msg}"); shown++; } };
+
+        float a0 = s.CellArea[front];
+        Console.WriteLine("\n  tick | area | verts | tip x | half-width | shape (local x,y per vertex)");
+        for (tick = 0; tick < ticks; tick++)
+        {
+            int d0 = r.Solver.DentCalls;
+            r.Solver.Step();
+            if (s.Dead(front)) { Console.WriteLine($"t{tick,3} front cell {front} is DEAD"); break; }
+            if (r.Solver.DentCalls == d0 && s.CellArea[front] >= a0 - 1e-3f) continue;
+            int off = s.PolyOff[front], len = s.PolyLen[front];
+            float mxx = float.MinValue, mny = float.MaxValue, mxy = float.MinValue;
+            var sb = new System.Text.StringBuilder();
+            for (int v = 0; v < len; v++)
+            {
+                float vx3 = s.PolyX[off + v], vy3 = s.PolyY[off + v];
+                mxx = MathF.Max(mxx, vx3); mny = MathF.Min(mny, vy3); mxy = MathF.Max(mxy, vy3);
+                sb.Append($"({vx3,6:F1},{vy3,5:F1})");
+            }
+            if (false) { }
+            Console.WriteLine($"  {tick,4} | {s.CellArea[front],5:F0} ({100f * s.CellArea[front] / a0,5:F1}%) | {len,2} | "
+                + $"{mxx,6:F1} | {0.5f * (mxy - mny),6:F1} | {sb}");
+        }
+
+        double tot = 0, totS = 0;
+        foreach (double v in r.Solver.DentAreaByU) tot += v;
+        foreach (double v in r.Solver.DentSlideByU) totS += v;
+        string[] band = { "u < 0.1  (at the contact)", "u 0.1-0.3", "u 0.3-0.6", "u > 0.6  (far side)" };
+        Console.WriteLine($"\nwhere the front cell's dented area went (total {tot:F0} px2, total slide {totS:F1} px):");
+        for (int b = 0; b < 4; b++)
+            Console.WriteLine($"   {band[b],-26} area {r.Solver.DentAreaByU[b],8:F0} ({100.0 * r.Solver.DentAreaByU[b] / System.Math.Max(1e-9, tot),5:F1}%)"
+                + $"   slide {r.Solver.DentSlideByU[b],7:F1} ({100.0 * r.Solver.DentSlideByU[b] / System.Math.Max(1e-9, totS),5:F1}%)");
+        Console.WriteLine($"corner slides clamped by toChord: {r.Solver.DentClamped} of {r.Solver.DentClamped + r.Solver.DentUnclamped}");
+        Console.WriteLine($"corners reached but already on/past their chord (capacity lost): "
+            + $"{r.Solver.DentCornerAtChord} of {r.Solver.DentCornerAtChord + r.Solver.DentCornerUsable}");
+        Console.WriteLine($"budget realised over the run: {100.0 * r.Solver.DentRealisedSum / System.Math.Max(1e-9, r.Solver.DentTargetSum):F1}%"
+            + $" ({(r.Solver.DentSinglePass ? "single pass + clamp" : "iterated")})");
+        double pd = r.Solver.PressDyn, pc = r.Solver.PressConf, pr = r.Solver.PressDrive;
+        double pt = pd + pc + pr;
+        Console.WriteLine($"\nfront cell's contact pressure, summed over {r.Solver.PressSamples} contact-substeps:");
+        Console.WriteLine($"   dyn   (impulse that brakes the approach; velocity) {pd,12:E3}  ({100.0 * pd / System.Math.Max(1e-9, pt),5:F1}%)");
+        Console.WriteLine($"   conf  (penetration strain x modulus; DEPTH)        {pc,12:E3}  ({100.0 * pc / System.Math.Max(1e-9, pt),5:F1}%)");
+        Console.WriteLine($"   drive (own deviation velocity x impedance)         {pr,12:E3}  ({100.0 * pr / System.Math.Max(1e-9, pt),5:F1}%)");
+        Console.WriteLine($"   contact-substeps with pen == 0 (no depth term at all): {r.Solver.PressZeroPen} of {r.Solver.PressSamples}");
+    }
+
+    private static void ViewerRodRun(string[] args)
+    {
+        float mass = ArgFloat(args, "--mass", 1f), grain = ArgFloat(args, "--grain", 900f);
+        float speed = ArgFloat(args, "--speed", 1800f);
+        var tune = SimTuning.Default;
+        var r = Scenarios.Collide(tune, Material.Rock, 0f, grain);
+        SimState s = r.State;
+        int before = s.CellCount;
+
+        float radius = 15f * MathF.Sqrt(mass);
+        bool round = Array.IndexOf(args, "--round") >= 0;
+        float rx = round ? radius : radius * 3.5f, ry = round ? radius : radius / 3.5f;
+        Console.WriteLine($"viewer rod: mass {mass}, grain {grain}, speed {speed} -> radius {radius:F1}, rx {rx:F1}, ry {ry:F1}");
+
+        // Aim at a real body, the way a click in the viewer does.
+        Console.WriteLine($"scene has {s.BodyCount} bodies, {s.CellCount} cells");
+        for (int b = 0; b < s.BodyCount; b++)
+        {
+            float mnx = float.MaxValue, mxx = float.MinValue, mny = float.MaxValue, mxy = float.MinValue; int nc = 0;
+            for (int c = 0; c < s.CellCount; c++)
+            {
+                if (s.CellBody[c] != b || s.Dead(c)) continue;
+                nc++;
+                float wx = s.BodyX[b] + s.CellRx[c], wy = s.BodyY[b] + s.CellRy[c];
+                mnx = MathF.Min(mnx, wx); mxx = MathF.Max(mxx, wx);
+                mny = MathF.Min(mny, wy); mxy = MathF.Max(mxy, wy);
+            }
+            Console.WriteLine($"  body {b}: origin ({s.BodyX[b]:F0},{s.BodyY[b]:F0}) {nc} cells, "
+                + $"world x [{mnx:F0},{mxx:F0}] y [{mny:F0},{mxy:F0}]");
+        }
+        float tx = s.BodyX[0], ty = s.BodyY[0];
+        Console.WriteLine($"target body 0 centre ({tx:F0},{ty:F0})");
+        r = Scenarios.FireAt(r, tune, Material.Penetrator, tx - 420f, ty, tx, ty,
+            speed: speed, radius: radius, grain: grain, seed: 1, radiusX: rx, radiusY: ry);
+        s = r.State;
+        int rodBody = s.CellBody[before];
+        int rodCells = 0;
+        for (int c = before; c < s.CellCount; c++) if (s.CellBody[c] == rodBody) rodCells++;
+        Console.WriteLine($"rod is body {rodBody} with {rodCells} cell(s):");
+        for (int c = before; c < s.CellCount; c++)
+        {
+            if (s.CellBody[c] != rodBody) continue;
+            Console.WriteLine($"   cell {c}: {s.PolyLen[c]} verts, area {s.CellArea[c]:F0}, rad {s.CellRad[c]:F1}, "
+                + $"local ({s.CellRx[c]:F1},{s.CellRy[c]:F1})");
+        }
+
+        var a0 = new float[s.CellCount];
+        for (int c = 0; c < s.CellCount; c++) a0[c] = s.CellArea[c];
+        int lastDent = 0, lastFb = 0;
+        int rodCell = -1;
+        for (int c = before; c < s.CellCount; c++) if (s.CellBody[c] == rodBody) { rodCell = c; break; }
+        r.Solver.TraceCell = rodCell;
+        int f0 = r.Solver.DentFallback, c0 = r.Solver.DentCalls;
+
+        // The rod flies +x, so its axis is x. For every contact the rod is in, how far is the
+        // carving normal from that axis? 0 deg = pushing on the tip; 90 deg = clipping the flanks.
+        Console.WriteLine("\n  tick | rod contacts | normal angle to the rod axis (deg) | depth | rod area left");
+        int axial = 0, lateral = 0;
+        for (int i = 0; i < 90; i++)
+        {
+            r.Solver.Step();
+            int n = 0; float angSum = 0f, dSum = 0f; float worst = 0f;
+            for (int q = 0; q < r.Solver.ContactCount; q++)
+            {
+                Contact ct = r.Solver.ContactAt(q);
+                bool aIn = ct.A >= 0 && ct.A < s.CellCount && s.CellBody[ct.A] == rodBody;
+                bool bIn = ct.B >= 0 && ct.B < s.CellCount && s.CellBody[ct.B] == rodBody;
+                if (!aIn && !bIn) continue;
+                float ang = MathF.Abs(MathF.Atan2(MathF.Abs(ct.Ny), MathF.Abs(ct.Nx))) * 180f / MathF.PI;
+                n++; angSum += ang; dSum += ct.Depth; if (ang > worst) worst = ang;
+                if (ang > 45f) lateral++; else axial++;
+            }
+            float left = 0f, was = 0f;
+            for (int c = 0; c < s.CellCount; c++)
+            { if (s.CellBody[c] != rodBody) continue; was += a0[c]; if (!s.Dead(c)) left += s.CellArea[c]; }
+            if (i % 5 != 0 && n == 0) continue;
+            string angTxt = n > 0 ? $"mean {angSum / n,6:F1}  worst {worst,6:F1}" : "          (cleared)";
+            Console.WriteLine($"  {i,4} | {n,12} | {angTxt}       | {(n > 0 ? dSum / n : 0f),5:F2} | {100f * left / MathF.Max(1f, was),5:F1}%"
+                + $"  v1 along {r.Solver.CarveV1Along,6:F0} across {r.Solver.CarveV1Across,6:F0}"
+                + $"  rod at ({s.BodyX[rodBody],7:F0},{s.BodyY[rodBody],6:F0}) v ({s.BodyVx[rodBody],7:F0},{s.BodyVy[rodBody],6:F0})"
+                + $"  dents {r.Solver.DentCalls - lastDent,4} fallbacks {r.Solver.DentFallback - lastFb,3} pairs {r.Solver.C.PairEmitted,5} sat {r.Solver.C.SatCalls,5} satContact {r.Solver.C.SatContact,4}");
+            lastDent = r.Solver.DentCalls; lastFb = r.Solver.DentFallback;
+            // Independent overlap check: rod polygon vs body 0 cells, both in world space.
+            {
+                float bc = MathF.Cos(s.BodyRot[rodBody]), bs = MathF.Sin(s.BodyRot[rodBody]);
+                int ro = s.PolyOff[rodCell], rl = s.PolyLen[rodCell];
+                float rminx = float.MaxValue, rmaxx = float.MinValue, rminy = float.MaxValue, rmaxy = float.MinValue;
+                for (int v = 0; v < rl; v++)
+                {
+                    float px2 = s.CellRx[rodCell] + s.PolyX[ro + v], py2 = s.CellRy[rodCell] + s.PolyY[ro + v];
+                    float wx = s.BodyX[rodBody] + px2 * bc - py2 * bs, wy = s.BodyY[rodBody] + px2 * bs + py2 * bc;
+                    rminx = MathF.Min(rminx, wx); rmaxx = MathF.Max(rmaxx, wx);
+                    rminy = MathF.Min(rminy, wy); rmaxy = MathF.Max(rmaxy, wy);
+                }
+                int overlapping = 0;
+                for (int c = 0; c < s.CellCount; c++)
+                {
+                    if (s.CellBody[c] == rodBody || s.Dead(c)) continue;
+                    int bb = s.CellBody[c];
+                    float cc2 = MathF.Cos(s.BodyRot[bb]), ss2 = MathF.Sin(s.BodyRot[bb]);
+                    int co2 = s.PolyOff[c], cl2 = s.PolyLen[c];
+                    float mnx2 = float.MaxValue, mxx2 = float.MinValue, mny2 = float.MaxValue, mxy2 = float.MinValue;
+                    for (int v = 0; v < cl2; v++)
+                    {
+                        float px2 = s.CellRx[c] + s.PolyX[co2 + v], py2 = s.CellRy[c] + s.PolyY[co2 + v];
+                        float wx = s.BodyX[bb] + px2 * cc2 - py2 * ss2, wy = s.BodyY[bb] + px2 * ss2 + py2 * cc2;
+                        mnx2 = MathF.Min(mnx2, wx); mxx2 = MathF.Max(mxx2, wx);
+                        mny2 = MathF.Min(mny2, wy); mxy2 = MathF.Max(mxy2, wy);
+                    }
+                    if (rmaxx >= mnx2 && mxx2 >= rminx && rmaxy >= mny2 && mxy2 >= rminy) overlapping++;
+                }
+                int liveForeign = 0;
+                float fmnx = float.MaxValue, fmxx = float.MinValue, fmny = float.MaxValue, fmxy = float.MinValue;
+                for (int c = 0; c < s.CellCount; c++)
+                {
+                    if (s.CellBody[c] == rodBody || s.Dead(c)) continue;
+                    liveForeign++;
+                    int bb = s.CellBody[c];
+                    float wx = s.BodyX[bb] + s.CellRx[c], wy = s.BodyY[bb] + s.CellRy[c];
+                    fmnx = MathF.Min(fmnx, wx); fmxx = MathF.Max(fmxx, wx);
+                    fmny = MathF.Min(fmny, wy); fmxy = MathF.Max(fmxy, wy);
+                }
+                Console.WriteLine($"         rod world aabb x [{rminx:F0},{rmaxx:F0}] y [{rminy:F0},{rmaxy:F0}]"
+                    + $"  -> {overlapping} foreign cells overlap it; {liveForeign} live foreign cells span "
+                    + $"x [{fmnx:F0},{fmxx:F0}] y [{fmny:F0},{fmxy:F0}]");
+            }
+        }
+        Console.WriteLine($"\nrod contacts by normal: {axial} axial (<45 deg, pushing the tip), "
+            + $"{lateral} lateral (>45 deg, clipping the flanks)");
+        Console.WriteLine($"DentCalls {r.Solver.DentCalls - c0}, DentFallback (lone cell -> carving v1) {r.Solver.DentFallback - f0}");
+        double al = r.Solver.CarveV1Along, ac = r.Solver.CarveV1Across;
+        Console.WriteLine($"v1 clip area by direction in the cell's own frame: along the long axis {al:F0} "
+            + $"({100.0 * al / System.Math.Max(1e-9, al + ac):F1}%), ACROSS it {ac:F0} "
+            + $"({100.0 * ac / System.Math.Max(1e-9, al + ac):F1}%)");
+        int alive = 0; for (int c = 0; c < s.CellCount; c++) if (s.CellBody[c] == rodBody && !s.Dead(c)) alive++;
+        Console.WriteLine($"rod cells alive: {alive} of {rodCells}");
+    }
+
+    private static void TipRun(string[] args)
+    {
+        var tn = SimTuning.Default;
+        var r = Scenarios.Pierce(tn, Material.Rock, ArgInt(args, "--speed", 1800), 3f, 900f);
+        SimState s = r.State;
+
+        // The rod is body 1, flying +x; its tip is the cell with the largest local x.
+        int tip = -1; float best = float.NegativeInfinity;
+        for (int c = 0; c < s.CellCount; c++)
+        {
+            if (s.CellBody[c] != 1) continue;
+            if (s.CellRx[c] > best) { best = s.CellRx[c]; tip = c; }
+        }
+        var a0 = new float[s.CellCount];
+        for (int c = 0; c < s.CellCount; c++) a0[c] = s.CellArea[c];
+
+        Console.WriteLine($"rod tip is cell {tip} ({s.PolyLen[tip]} verts, area {s.CellArea[tip]:F0}, rad {s.CellRad[tip]:F1})");
+        for (int v = 0; v < s.PolyLen[tip]; v++)
+            Console.WriteLine($"   vertex {v}: {r.Solver.ClassifyVertex(tip, v)}");
+
+        // Which cells actually receive erosion, and were they in contact when they did?
+        var everContact = new bool[s.CellCount];
+        var eroded = new float[s.CellCount];
+        Console.WriteLine("\n  tick | tip shed% | rod shed by position (front third / middle / back third) | contacts on tip");
+        for (int i = 1; i <= 60; i++)
+        {
+            r.Solver.Step();
+            for (int q = 0; q < r.Solver.ContactCount; q++)
+            { var ct = r.Solver.ContactAt(q); if (ct.A < s.CellCount) everContact[ct.A] = true; if (ct.B < s.CellCount) everContact[ct.B] = true; }
+            if (i % 6 != 0) continue;
+            float f = 0f, m = 0f, b = 0f; float fa = 0f, ma = 0f, ba = 0f;
+            float lo = float.MaxValue, hi = float.MinValue;
+            for (int c = 0; c < s.CellCount; c++) { if (s.CellBody[c] != 1 || s.Dead(c)) continue; lo = SimMath.Min(lo, s.CellRx[c]); hi = SimMath.Max(hi, s.CellRx[c]); }
+            for (int c = 0; c < s.CellCount; c++)
+            {
+                if (s.CellBody[c] != 1 || s.Dead(c)) continue;
+                float u = hi > lo ? (s.CellRx[c] - lo) / (hi - lo) : 0.5f;
+                float lost = a0[c] - s.CellArea[c];
+                if (u > 0.667f) { f += lost; fa += a0[c]; } else if (u > 0.333f) { m += lost; ma += a0[c]; } else { b += lost; ba += a0[c]; }
+            }
+            int tc = 0;
+            for (int q = 0; q < r.Solver.ContactCount; q++) { var ct = r.Solver.ContactAt(q); if (ct.A == tip || ct.B == tip) tc++; }
+            float tipShed = a0[tip] > 0 ? 100f * (a0[tip] - (s.Dead(tip) ? 0f : s.CellArea[tip])) / a0[tip] : 0f;
+            Console.WriteLine($"  {i,4} | {tipShed,8:F1}% | {100f * f / SimMath.Max(1f, fa),10:F1}% {100f * m / SimMath.Max(1f, ma),8:F1}% {100f * b / SimMath.Max(1f, ba),8:F1}% | {tc,4}");
+        }
+
+        int erodedTouched = 0, erodedNever = 0; float areaTouched = 0f, areaNever = 0f;
+        for (int c = 0; c < s.CellCount; c++)
+        {
+            if (s.CellBody[c] != 1 && !(s.Dead(c) && a0[c] > 0f)) continue;
+            float lost = a0[c] - (s.Dead(c) ? 0f : s.CellArea[c]);
+            if (lost <= 0.01f * a0[c]) continue;
+            if (everContact[c]) { erodedTouched++; areaTouched += lost; }
+            else
+            {
+                erodedNever++; areaNever += lost;
+                Console.WriteLine($"    cell {c,4} lost {100f * lost / a0[c],5:F1}% of its area, never contacted anything"
+                    + $" (local x {s.CellRx[c],7:F1}, y {s.CellRy[c],7:F1})");
+            }
+        }
+        Console.WriteLine($"\nrod cells that eroded: {erodedTouched} were in contact ({areaTouched:F0} area), "
+            + $"{erodedNever} NEVER were ({areaNever:F0} area)");
+    }
+
+    /// <summary>What does an elongated MakeBlob actually tessellate into?</summary>
+    private static void RodShape(string[] args)
+    {
+        float grain = ArgInt(args, "--grain", 170);
+        foreach (var (label, rx, ry) in new (string, float, float)[]
+        { ("round  r=73", 73f, 73f), ("rod 2:1", 103f, 52f), ("rod 3.5:1", 257f, 21f), ("rod 6:1", 440f, 12f) })
+        {
+            var s = new SimState();
+            var rng = new ProtoRng(7);
+            var outline = BodyBuilder.MakeBlob(ref rng, 400, 350, rx, ry, 0.10, 12);
+            BodyBuilder.AddBody(s, ref rng, SimTuning.Default, outline, 0f, 0f, 0f, Material.Steel, grain);
+            float maxRad = 0f, maxArea = 0f, sumArea = 0f; int worst = -1;
+            for (int c = 0; c < s.CellCount; c++)
+            {
+                if (s.CellRad[c] > maxRad) { maxRad = s.CellRad[c]; worst = c; }
+                maxArea = SimMath.Max(maxArea, s.CellArea[c]);
+                sumArea += s.CellArea[c];
+            }
+            float step = SimMath.Sqrt(grain);
+            Console.WriteLine($"{label,-12} ({rx:F0}x{ry:F0}): {s.CellCount,3} cells, step {step:F0}px  |  "
+                + $"max CellRad {maxRad,8:F1}px  max cell area {maxArea,9:F0}  total area {sumArea,9:F0} "
+                + $"(outline area {SimMath.Abs((float)Geometry2D.Area(outline)),9:F0})");
+            if (worst >= 0 && maxRad > 5f * step)
+                Console.WriteLine($"             worst cell {worst}: {s.PolyLen[worst]} verts, rad {maxRad:F1}px = {maxRad / step:F1}x the seed step");
+        }
+    }
+
+    /// <summary>Spawn a round INSIDE a body, as the viewer does on an unlucky click, and watch the cost.</summary>
+    private static void SpawnInside(string[] args)
+    {
+        var tn = SimTuning.Default;
+        float grain = ArgInt(args, "--grain", 900);
+        if (Array.IndexOf(args, "--nocrackpush") >= 0) tn.CrackPush = false;
+        if (ArgInt(args, "--cap", -1) >= 0) tn.CrackPushCap = ArgInt(args, "--cap", 400) / 100f;
+        float mass = ArgInt(args, "--mass", 3);
+        float rad = 15f * SimMath.Sqrt(mass);
+        bool rod = Array.IndexOf(args, "--rod") >= 0;
+        foreach (var (label, dx) in new (string, float)[]
+        { ("outside (control)", -600f), ("INSIDE the target", 0f) })
+        {
+            var r = Scenarios.Collide(tn, Material.Rock, 0f, grain);
+            SimState s = r.State;
+            for (int i = 0; i < 5; i++) r.Solver.Step();
+
+            float tx = 650f, ty = 350f;
+            Console.WriteLine($"   [round r={rad:F0}px{(rod ? $", rod {rad * 3.5f:F0}x{rad / 3.5f:F0}" : "")}, grain {grain:F0}, mass x{mass:F0}]");
+            r = Scenarios.FireAt(r, tn, rod ? Material.Penetrator : Material.Steel, tx + dx, ty, tx, ty,
+                                 speed: ArgInt(args, "--speed", 2500), radius: rad, grain: grain, seed: 7,
+                                 radiusX: rod ? rad * 3.5f : 0f, radiusY: rod ? rad / 3.5f : 0f);
+
+            Console.WriteLine($"── {label}");
+            Console.WriteLine("   tick |  pairs   SAT calls  contacts | manifold rebuilds | ms/tick");
+            var sw = new System.Diagnostics.Stopwatch();
+            for (int i = 1; i <= 40; i++)
+            {
+                var before = r.Solver.C;
+                sw.Restart(); r.Solver.Step(); sw.Stop();
+                if (i % 5 != 0 && i > 3) continue;
+                var c = r.Solver.C;
+                Console.WriteLine($"   {i,4} | {r.Solver.PairCount,6}  {c.SatCalls - before.SatCalls,9}  {r.Solver.ContactCount,8} | "
+                    + $"{c.ManifoldRebuilds - before.ManifoldRebuilds,3} | {sw.Elapsed.TotalMilliseconds,6:F1} | "
+                    + $"examined {c.NarrowExamined - before.NarrowExamined,7}  same-body {c.NarrowRejectSameBody - before.NarrowRejectSameBody,7}  "
+                    + $"radius {c.NarrowRejectRadius - before.NarrowRejectRadius,6}  aabb {c.NarrowRejectAabb - before.NarrowRejectAabb,6}  "
+                    + $"sat-sep {c.SatSeparated - before.SatSeparated,6}");
+                float mr = 0f, ma = 0f; int worst = -1;
+                for (int cc = 0; cc < s.CellCount; cc++)
+                {
+                    if (s.Dead(cc)) continue;
+                    if (s.CellRad[cc] > mr) { mr = s.CellRad[cc]; worst = cc; }
+                    ma = SimMath.Max(ma, s.CellArea[cc]);
+                }
+                float maxSn = 0f, maxV = 0f; int nan = 0, brokenCompressed = 0;
+                for (int k = 0; k < s.BondCount; k++)
+                {
+                    float sn = s.BondSn[k];
+                    if (float.IsNaN(sn) || float.IsInfinity(sn)) nan++;
+                    else if (s.BondBroken[k] && sn < 0f) { brokenCompressed++; maxSn = SimMath.Max(maxSn, -sn); }
+                }
+                for (int b = 0; b < s.BodyCount; b++)
+                {
+                    float v = SimMath.Hypot(s.BodyVx[b], s.BodyVy[b]);
+                    if (float.IsNaN(v) || float.IsInfinity(v)) nan++; else maxV = SimMath.Max(maxV, v);
+                }
+                Console.WriteLine($"        crack compression: {brokenCompressed} broken bonds pressed, deepest {maxSn,10:F1}px  "
+                    + $"| max body speed {maxV,10:F0} px/s | NaN/Inf {nan}");
+                Console.WriteLine($"        max CellRad {mr,10:F1}px (cell {worst}, {(worst >= 0 ? s.PolyLen[worst] : 0)} verts, "
+                    + $"area {(worst >= 0 ? s.CellArea[worst] : 0f),10:F0}, body {(worst >= 0 ? s.CellBody[worst] : -1)})   max area {ma,10:F0}");
+            }
+        }
+    }
+
+    /// <summary>Does an eroded interface carry less force? Built length vs current, and the stiffness.</summary>
+    private static void BondLenRun(string[] args)
+    {
+        var tn = SimTuning.Default;
+        var r = Scenarios.Collide(tn, Material.Rock, 600f, 170f);
+        SimState s = r.State;
+        var len0 = new float[s.BondCount];
+        for (int k = 0; k < s.BondCount; k++) len0[k] = s.BondLen[k];
+        var k00 = new float[s.BondCount];
+        for (int k = 0; k < s.BondCount; k++) k00[k] = s.BondK0[k];
+
+        for (int i = 0; i < 200; i++) r.Solver.Step();
+
+        int eroded = 0, badK = 0, badS = 0; float worst = 1f;
+        for (int k = 0; k < s.BondCount; k++)
+        {
+            if (s.BondBroken[k] || len0[k] <= 0f) continue;
+            float frac = s.BondLen[k] / len0[k];
+            if (frac > 0.95f) continue;
+            eroded++;
+            worst = SimMath.Min(worst, frac);
+            if (s.BondK0[k] == k00[k]) badK++;      // stiffness never followed the interface
+            badS++;
+        }
+        Console.WriteLine($"live bonds whose interface shrank below 95% of built: {eroded}");
+        Console.WriteLine($"  of those, stiffness still at its built value: {badK}   (narrowest interface now {100f * worst:F0}% of built)");
+
+        // Two-cell fragments specifically: one bond holding the whole body.
+        int twoCell = 0, twoCellEroded = 0; float twoWorst = 1f;
+        for (int b = 0; b < s.BodyCount; b++)
+        {
+            if (s.BodyCellLen[b] != 2) continue;
+            twoCell++;
+            int off = s.BodyCellOff[b];
+            int a = s.BodyCells[off], c = s.BodyCells[off + 1];
+            for (int k = 0; k < s.BondCount; k++)
+            {
+                if (s.BondBroken[k]) continue;
+                if ((s.BondA[k] != a || s.BondB[k] != c) && (s.BondA[k] != c || s.BondB[k] != a)) continue;
+                float frac = len0[k] > 0f ? s.BondLen[k] / len0[k] : 1f;
+                if (frac < 0.95f) { twoCellEroded++; twoWorst = SimMath.Min(twoWorst, frac); }
+            }
+        }
+        Console.WriteLine($"two-cell bodies: {twoCell}, of which the holding bond has eroded: {twoCellEroded} (narrowest {100f * twoWorst:F0}%)");
+    }
+
+    /// <summary>Hunt the reported crash: every scenario, wide speed and grain range.</summary>
+    private static void CrashHunt(string[] args)
+    {
+        int ticks = ArgInt(args, "--ticks", 150);
+        var mats = new[] { Material.Rock, Material.Glass, Material.Steel, Material.Ice, Material.Sandstone };
+        int runs = 0, fails = 0;
+        foreach (float speed in new[] { 1500f, 3500f, 6000f })
+        foreach (float grain in new[] { 170f, 900f })
+        foreach (var m in mats)
+        foreach (int kind in new[] { 0, 1, 2, 3 })
+        {
+            string what = $"kind {kind} {m.Name} speed {speed:F0} grain {grain:F0}";
+            try
+            {
+                var t = SimTuning.Default;
+                Scenarios.Result r = kind switch
+                {
+                    0 => Scenarios.Projectile(t, m, speed, 3f, grain, impactor: Material.Steel),
+                    1 => Scenarios.Pierce(t, m, speed, 3f, grain),
+                    2 => Scenarios.Shell(t, Material.Steel, m, speed, 3f, grain),
+                    _ => Scenarios.Blast(Scenarios.Collide(t, m, speed * 0.3f, grain), t, 370f, 350f, 6e5f, 300f),
+                };
+                runs++;
+                for (int i = 0; i < ticks; i++) r.Solver.Step();
+            }
+            catch (Exception ex)
+            {
+                fails++;
+                Console.WriteLine($"CRASH  {what}");
+                Console.WriteLine($"       {ex.GetType().Name}: {ex.Message}");
+                var st = ex.StackTrace?.Split('\n');
+                if (st != null) foreach (var line in st.Take(4)) Console.WriteLine("       " + line.Trim());
+            }
+        }
+        Console.WriteLine($"── {runs} runs, {fails} crashes");
+    }
+
+    /// <summary>Does per-body structure reach the physics? Bond strength spread and crack direction.</summary>
+    private static void StructureRun(string[] args)
+    {
+        foreach (var (label, wm, an, fl, lockg) in new (string, float, float, float, bool)[]
+        {
+            ("uniform          ", 0f,  0f,   0f,   false),
+            ("weibull 8        ", 8f,  0f,   0f,   false),
+            ("weibull 3 (wide) ", 3f,  0f,   0f,   false),
+            ("aniso 0.6 locked ", 8f,  0.6f, 0f,   true),
+            ("surface flaws 0.5", 8f,  0f,   0.5f, false),
+        })
+        {
+            var tn = SimTuning.Default;
+            tn.WeibullM = wm; tn.Aniso = an; tn.SurfFlaw = fl; tn.GrainLock = lockg; tn.GrainAngle = 0f;
+            var r = Scenarios.Collide(tn, Material.Rock, 600f, 170f);
+            SimState s = r.State;
+
+            // Bond strength spread as built, then how the scene actually breaks.
+            float lo = float.MaxValue, hi = 0f, mean = 0f;
+            for (int k = 0; k < s.BondCount; k++) { lo = SimMath.Min(lo, s.BondStr[k]); hi = SimMath.Max(hi, s.BondStr[k]); mean += s.BondStr[k]; }
+            mean /= SimMath.Max(1, s.BondCount);
+
+            for (int i = 0; i < 200; i++) r.Solver.Step();
+
+            // Direction of the breaks: |cos| of the bond normal against the grain axis, averaged.
+            int broken = 0; float along = 0f;
+            for (int k = 0; k < s.BondCount; k++)
+            {
+                if (!s.BondBroken[k]) continue;
+                broken++;
+                along += SimMath.Abs(s.BondNx[k]);        // grain angle 0 => grain along x
+            }
+            Console.WriteLine($"{label}: BondStr {lo:F2}-{hi:F2} (mean {mean:F2})  ->  broken {broken,4}, bodies {s.BodyCount,3}, "
+                + $"mean |cos| of break normal to grain {(broken > 0 ? along / broken : 0f):F3}");
+        }
+    }
+
+    /// <summary>The impact types against one another: what each does to the same target.</summary>
+    private static void ImpactTypes(string[] args)
+    {
+        int ticks = ArgInt(args, "--ticks", 120);
+        var t = SimTuning.Default;
+
+        // A crater profile: how much of the target is lost, and how deep the damage reaches.
+        static string Profile(Scenarios.Result r, int ticks, Func<int, Scenarios.Result>? perTick = null)
+        {
+            SimState s = r.State;
+            float a0 = 0f;
+            for (int c = 0; c < s.CellCount; c++) if (s.CellBody[c] == 0) a0 += s.CellArea0[c];
+            for (int i = 0; i < ticks; i++) { r.Solver.Step(); if (perTick != null) r = perTick(i); }
+            float shed = 0f; int dead = 0, broken = 0;
+            // Depth INTO the target: damaged cells run from the struck face inward, so the deepest
+            // is the largest local x (the impactor arrives from -x).
+            float face = float.PositiveInfinity, deepest = float.NegativeInfinity;
+            for (int c = 0; c < s.CellCount; c++)
+            {
+                if (s.Dead(c)) dead++;
+                if (s.CellBody[c] != 0) continue;
+                float lost = s.Dead(c) ? s.CellArea0[c] : s.CellArea0[c] - s.CellArea[c];
+                shed += lost;
+                if (lost > 0.02f * s.CellArea0[c])
+                {
+                    face = SimMath.Min(face, s.CellRx[c]);
+                    deepest = SimMath.Max(deepest, s.CellRx[c]);
+                }
+            }
+            for (int k = 0; k < s.BondCount; k++) if (s.BondBroken[k]) broken++;
+            string reach = deepest > face ? $"{face,5:F0} to {deepest,4:F0}px (depth {deepest - face,4:F0})" : "  none";
+            return $"bodies {s.BodyCount,3}  broken {broken,4}  dead {dead,3}  target shed {100f * shed / SimMath.Max(1f, a0),5:F1}%  damaged span {reach}";
+        }
+
+        Console.WriteLine($"── same target (blob at 560,350 r190), {ticks} ticks");
+        Console.WriteLine($"   bullet   1800px/s x3 : {Profile(Scenarios.Projectile(t, Material.Rock, 1800f, 3f, 900f, impactor: Material.Steel), ticks)}");
+        Console.WriteLine($"   pierce   1800px/s x3 : {Profile(Scenarios.Pierce(t, Material.Rock, 1800f, 3f, 900f), ticks)}");
+        foreach (float pres in new[] { 1e5f, 3e5f, 1e6f })
+        {
+            var bl = Scenarios.Collide(t, Material.Rock, 0f, 900f);
+            var blasted = Scenarios.Blast(bl, t, 370f, 350f, pres, 260f);
+            Console.WriteLine($"   blast    p={pres,7:E1} : {Profile(blasted, ticks)}");
+        }
+
+        // Explosive round: the bullet path, then a blast at wherever the round got to. Composition
+        // by the caller — Blast stays a primitive that knows nothing about fuses.
+        {
+            int fuse = ArgInt(args, "--fuse", 6);
+            var ex = Scenarios.Projectile(t, Material.Rock, 1800f, 3f, 900f, impactor: Material.Steel);
+            int shot = ex.State.BodyCount - 1;
+            Console.WriteLine($"   explosive fuse {fuse,2}   : {Profile(ex, ticks, i =>
+            {
+                if (i != fuse - 1) return ex;
+                SimState es = ex.State;
+                float bx = shot < es.BodyCount ? es.BodyX[shot] : 0f, by = shot < es.BodyCount ? es.BodyY[shot] : 0f;
+                return ex = Scenarios.Blast(ex, t, bx, by, 3e5f, 260f);
+            })}");
+        }
+    }
+
+    /// <summary>Steel shell over a rock core: does the shell resist while the core crushes?</summary>
+    private static void ShellRun(string[] args)
+    {
+        var r = Scenarios.Shell(SimTuning.Default, Material.Steel, Material.Rock,
+                                speed: ArgInt(args, "--speed", 1500), massMul: 8f, grain: 900f);
+        SimState s = r.State;
+        byte steelId = 255;
+        for (int i = 0; i < s.MatCount; i++) if (s.MatTable[i].Name == "steel") { steelId = (byte)i; break; }
+        int nShell = 0, nCore = 0;
+        for (int c = 0; c < s.CellCount; c++) { if (s.CellBody[c] != 0) continue; if (s.CellMat[c] == steelId) nShell++; else nCore++; }
+        int tss = 0, tcc = 0, tsc = 0;
+        for (int k = 0; k < s.BondCount; k++)
+        {
+            if (s.CellBody[s.BondA[k]] != 0) continue;
+            bool a = s.CellMat[s.BondA[k]] == steelId, b = s.CellMat[s.BondB[k]] == steelId;
+            if (a && b) tss++; else if (!a && !b) tcc++; else tsc++;
+        }
+        Console.WriteLine($"target: {nShell} shell cells, {nCore} core cells; bonds: {tss} shell-shell, {tcc} core-core, {tsc} seam");
+        Console.WriteLine("  tick | shell dead  core dead | shell shed%  core shed% | broken: shell-shell core-core seam");
+        for (int tick = 1; tick <= 60; tick++)
+        {
+            r.Solver.Step();
+            if (tick % 10 != 0) continue;
+            int ds = 0, dc = 0; float ss = 0f, sc = 0f, as0 = 0f, ac0 = 0f;
+            for (int c = 0; c < s.CellCount; c++)
+            {
+                if (s.CellBody[c] < 0) continue;
+                bool isShell = s.CellMat[c] == steelId;
+                if (s.Dead(c)) { if (isShell) ds++; else dc++; }
+                if (isShell) { as0 += s.CellArea0[c]; ss += s.CellArea0[c] - (s.Dead(c) ? 0f : s.CellArea[c]); }
+                else { ac0 += s.CellArea0[c]; sc += s.CellArea0[c] - (s.Dead(c) ? 0f : s.CellArea[c]); }
+            }
+            int bss = 0, bcc = 0, bsc = 0;
+            for (int k = 0; k < s.BondCount; k++)
+            {
+                if (!s.BondBroken[k]) continue;
+                bool a = s.CellMat[s.BondA[k]] == steelId, b = s.CellMat[s.BondB[k]] == steelId;
+                if (a && b) bss++; else if (!a && !b) bcc++; else bsc++;
+            }
+            Console.WriteLine($"  {tick,4} | {ds,10} {dc,10} | {100f * ss / SimMath.Max(1f, as0),10:F1} {100f * sc / SimMath.Max(1f, ac0),10:F1} | "
+                + $"{100f * bss / SimMath.Max(1, tss),12:F0}% {100f * bcc / SimMath.Max(1, tcc),8:F0}% {100f * bsc / SimMath.Max(1, tsc),4:F0}%");
         }
     }
 
@@ -1528,6 +3707,7 @@ internal static class Program
 
     private static void MaterialCensus(string[] args)
     {
+
         if (Array.IndexOf(args, "--glass") >= 0)
         {
             // What the v1→v2 change did to the effective rate, and what restores glass's intent.

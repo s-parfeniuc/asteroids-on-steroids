@@ -58,11 +58,44 @@ public static class BodyBuilder
     /// still take part in the clipping ("phantom seeds"), without which a carved shape comes out as
     /// its bounding box.
     /// </summary>
+    /// <summary>The acoustic CFL number every body is built to stay under. See <see cref="MinGrain"/>.</summary>
+    public const float StableCfl = 0.5f;
+
+    /// <summary>
+    /// The finest grain a body of this material may be built at, for the tuning's substep count.
+    /// </summary>
+    /// <remarks>
+    /// <para>Bond forces are integrated explicitly, so they are stable only while a stress wave
+    /// crosses less than a fraction of a cell per substep: c * (Dt / substeps) / cellSize, with
+    /// cellSize = sqrt(grain). Past the limit the deviation field diverges, and the damage model
+    /// cannot tell numerical divergence from load, so a body shatters from nothing and then goes
+    /// non-finite. Measured: steel at grain 30 runs at 1.04 with the default 9 substeps and blew up
+    /// within 10-22 ticks at every speed tried; at 16 substeps (0.58) it held.</para>
+    /// <para>The limit is 0.5 because it is the suite's own reference: rock at grain 100 runs at 0.48
+    /// in <c>AFreeSpinnerIsStableAtEveryGrainGivenEnoughSubsteps</c>, which asserts under 0.55. At the
+    /// default 9 substeps that puts the floor at rock 93, glass 112, steel 129, penetrator 59, ice 38,
+    /// sandstone 23. Raising substeps lowers it as their square, so a finer grain stays available to
+    /// anyone who pays for it.</para>
+    /// <para>It depends on the wave speed only, not the density, so a small dense round is capped
+    /// exactly like a large light one of the same material.</para>
+    /// </remarks>
+    public static float MinGrain(in Material material, in SimTuning tune)
+    {
+        int sub = tune.Substeps > 1 ? tune.Substeps : 1;
+        double cpx = material.C * tune.PxPerMetre;
+        double cell = cpx * (Solver.Dt / sub) / StableCfl;
+        return (float)(cell * cell);
+    }
+
     public static void AddBody(SimState s, ref ProtoRng rng, in SimTuning tune,
         List<Vec2d> outline, float velX, float velY, float omega,
-        in Material material, float grain, Func<Vec2d, bool>? member = null)
+        in Material material, float grain, Func<Vec2d, bool>? member = null,
+        BodyStructure? structure = null, Func<Vec2d, Material>? matAt = null)
     {
         var mp = new MaterialProps(material, tune);
+        // Never finer than the material can be integrated at (see MinGrain). A matAt caller has to
+        // pass a grain that satisfies every material it maps to: only the nominal one is known here.
+        grain = System.Math.Max(grain, MinGrain(material, tune));
         double step = System.Math.Sqrt(grain);
         Geometry2D.BBox(outline, out double minX, out double minY, out double maxX, out double maxY);
 
@@ -160,6 +193,9 @@ public static class BodyBuilder
         s.BodyEulL[bi] = 0f;
         s.BodyCount = bi + 1;
 
+        // One id for the whole body unless the caller maps material by position, in which case each
+        // cell resolves its own from its seed. RegisterMaterial deduplicates by value, so a two-
+        // material body costs two table slots however many cells it has.
         byte matId = s.RegisterMaterial(material);
         bool solo = rawPoly.Count == 1;   // built as one cell: a legitimate pebble, never dust
         int cellStart = s.CellCount;
@@ -208,7 +244,7 @@ public static class BodyBuilder
             s.SetFlag(ci, CellFlag.Dead, false); s.SetFlag(ci, CellFlag.Cracked, false);
             s.SetFlag(ci, CellFlag.Solo, solo); s.SetFlag(ci, CellFlag.Surf, false);
             s.CellTouch[ci] = int.MinValue; s.CellBorn[ci] = int.MinValue;
-            s.CellMat[ci] = matId;
+            s.CellMat[ci] = matAt == null ? matId : s.RegisterMaterial(matAt(rawSeed[i]));
             s.CellSeedX[ci] = (float)(rawSeed[i].X - cent.X);
             s.CellSeedY[ci] = (float)(rawSeed[i].Y - cent.Y);
             s.CellArea0[ci] = s.CellArea[ci];
@@ -272,7 +308,15 @@ public static class BodyBuilder
                 nx /= L; ny /= L;
 
                 double Lb = System.Math.Max(1.0, sh);
-                double k0 = mp.Rho * mp.Cpx * mp.Cpx * (Lb / step);
+
+                // TWO HALF-BONDS IN SERIES. Each cell owns half the bond, so its half is twice as
+                // stiff as the whole would be; in series they give 2 ka kb / (ka + kb), which is
+                // exactly ka when the two materials match — so a uniform body is unchanged, and a
+                // genuine material boundary gets the impedance mismatch it should have.
+                // Identical materials take the single-material expression verbatim, because
+                // 2kk/(k+k) is not bit-exactly k in floating point and a uniform body must not move.
+                double ka = CellStiffness(s, ca, tune, Lb, step);
+                double k0 = s.CellMat[ca] == s.CellMat[cb] ? ka : Series(ka, CellStiffness(s, cb, tune, Lb, step));
 
                 int bk = s.BondCount;
                 s.EnsureBonds(bk + 1);
@@ -289,19 +333,30 @@ public static class BodyBuilder
                 s.BondRby[bk] = (float)(my - s.CellRy[cb]);
                 s.BondNx[bk] = (float)nx; s.BondNy[bk] = (float)ny;
                 s.BondSn[bk] = 0f; s.BondSt[bk] = 0f; s.BondSa[bk] = 0f;
-                s.BondDmg[bk] = 0f; s.BondLmax[bk] = 0f; s.BondRate[bk] = 0f;
-                s.BondBroken[bk] = false; s.BondMode[bk] = 0;
+                s.BondDmg[bk] = 0f; s.BondLmax[bk] = 0f;                s.BondBroken[bk] = false; s.BondMode[bk] = 0;
                 s.BondCount = bk + 1;
             }
 
-        ApplyStructure(s, ref rng, tune, bondStart, s.BondCount);
+        ApplyStructure(s, ref rng, structure ?? BodyStructure.From(tune), bondStart, s.BondCount);
 
         // Peak and yield stretch bake AFTER structure: the authoring layer scales STRENGTH, never
         // stiffness — heterogeneous stiffness would make the wave field heterogeneous too.
         for (int k = bondStart; k < s.BondCount; k++)
         {
-            s.BondS0[k] = (float)(mp.VCrit * step / mp.Cpx) * s.BondStr[k];
-            s.BondSy0[k] = s.BondS0[k] * mp.Yield;
+            // THE WEAKER CELL GOVERNS, on both axes. A bond is an interface, and an interface fails
+            // as its weaker side does — so the failure stretch is the smaller failure strain and the
+            // softening is the more brittle chi. Identical materials reproduce the old value exactly.
+            ref readonly Material ma = ref s.Mat(s.BondA[k]);
+            ref readonly Material mb = ref s.Mat(s.BondB[k]);
+            var weak = new MaterialProps(ma.Strain <= mb.Strain ? ma : mb, tune);
+            var mpA = new MaterialProps(ma, tune);
+            var mpB = new MaterialProps(mb, tune);
+
+            // The expression is the original one, evaluated on the weaker material, so a uniform
+            // body reproduces its old value to the bit rather than to a rounding.
+            s.BondS0[k] = (float)(weak.VCrit * step / weak.Cpx) * s.BondStr[k];
+            s.BondSy0[k] = s.BondS0[k] * weak.Yield;
+            s.BondChi[k] = SimMath.Min(mpA.Chi, mpB.Chi);
         }
 
         // ── surface cells ────────────────────────────────────────────────────
@@ -366,14 +421,27 @@ public static class BodyBuilder
     /// composable patterns; the solver never learns how it was produced, and fragments inherit it
     /// for free because each bond carries its own value through splitting.
     /// </summary>
-    private static void ApplyStructure(SimState s, ref ProtoRng rng, in SimTuning tune,
+    /// <summary>Two half-bonds in series: 2 ka kb / (ka + kb), which is ka when the two agree.</summary>
+    private static double Series(double ka, double kb) => ka + kb > 0 ? 2.0 * ka * kb / (ka + kb) : 0.0;
+
+    /// <summary>A cell's own contribution to a bond's stiffness: rho c^2 scaled by the bond's share.</summary>
+    private static double CellStiffness(SimState s, int c, in SimTuning tune, double Lb, double step)
+    {
+        // Through MaterialProps, not recomputed: it carries Rho and Cpx as FLOATS, and steel's
+        // 7850/1000 is not exactly representable, so dividing in double here moved the steel
+        // fingerprint while rock and glass (which divide cleanly) stayed put.
+        var mp = new MaterialProps(s.Mat(c), tune);
+        return mp.Rho * mp.Cpx * mp.Cpx * (Lb / step);
+    }
+
+    private static void ApplyStructure(SimState s, ref ProtoRng rng, in BodyStructure st,
         int bondStart, int bondEnd)
     {
         if (bondEnd <= bondStart) return;
 
         // Drawn unconditionally when the grain is not locked, even at zero anisotropy — the
         // prototype consumes it either way, and the stream position is part of the contract.
-        double g = tune.GrainLock ? tune.GrainAngle : rng.Range(0, System.Math.PI);
+        double g = st.GrainLock ? st.GrainAngle : rng.Range(0, System.Math.PI);
 
         // neighbour counts, for the surface-flaw pattern
         var nb = new Dictionary<int, int>();
@@ -383,7 +451,7 @@ public static class BodyBuilder
             nb.TryGetValue(s.BondB[k], out int vb); nb[s.BondB[k]] = vb + 1;
         }
 
-        float m = tune.WeibullM;
+        float m = st.WeibullM;
         float med = m > 0 ? SimMath.Pow(0.6931471805599453f, 1f / m) : 1f;
 
         for (int k = bondStart; k < bondEnd; k++)
@@ -401,20 +469,20 @@ public static class BodyBuilder
 
             // Bedding-plane anisotropy. A bond along the grain is stronger, across it weaker;
             // doubled angle because a bedding plane is an axis.
-            if (tune.Aniso > 0)
+            if (st.Aniso > 0)
             {
                 int a = s.BondA[k], b = s.BondB[k];
                 float ba = SimMath.Atan2(s.CellRy[b] - s.CellRy[a], s.CellRx[b] - s.CellRx[a]);
-                str *= SimMath.Max(0.05f, 1f + tune.Aniso * SimMath.Cos(2f * (ba - (float)g)));
+                str *= SimMath.Max(0.05f, 1f + st.Aniso * SimMath.Cos(2f * (ba - (float)g)));
             }
 
             // Surface flaws: bonds whose cells sit at the boundary are weaker. Real brittle solids
             // crack from surface defects, and this is what lets glass initiate at all.
-            if (tune.SurfFlaw > 0)
+            if (st.SurfFlaw > 0)
             {
                 nb.TryGetValue(s.BondA[k], out int na);
                 nb.TryGetValue(s.BondB[k], out int nbb);
-                if (System.Math.Min(na, nbb) < 4) str *= 1f - tune.SurfFlaw;
+                if (System.Math.Min(na, nbb) < 4) str *= 1f - st.SurfFlaw;
             }
 
             s.BondStr[k] = SimMath.Clamp(str, 0.05f, 3f);

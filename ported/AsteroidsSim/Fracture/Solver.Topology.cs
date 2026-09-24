@@ -129,7 +129,12 @@ public sealed partial class Solver
                     for (int j = 0; j < alen; j++)
                     {
                         int k = _s.AdjBond[aoff + j];
-                        if (_s.BondBroken[k]) continue;
+                        if (_s.BondBroken[k])
+                        {
+                            // A broken bond whose faces are still pressed together still couples
+                            // the two cells: the crack has not opened, so this is not a split yet.
+                            if (!(_tune.SplitOnOpen && _tune.CrackPush && _s.BondSn[k] < 0f)) continue;
+                        }
                         int v = _s.BondA[k] == u ? _s.BondB[k] : _s.BondA[k];
                         if (_s.Dead(v) || _comp[v] >= 0) continue;
                         _comp[v] = target;
@@ -393,7 +398,7 @@ public sealed partial class Solver
     /// </remarks>
     private bool ConvertDust()
     {
-        if (!_tune.Dust) return false;
+        if (!_tune.Dust) { ClearDoomed(); return false; }
         C.DustScans++;
         bool did = false;
         EnsureCrushScratch();
@@ -420,6 +425,20 @@ public sealed partial class Solver
             _crushList[_crushCount++] = c;
         }
 
+        // Cells the penetration backstop found could not be carved out of an overlap past the
+        // ceiling (SimTuning.OverlapBackstop). Same path, same momentum hand-off; appended after the
+        // ShedLimit scan in the order they were found, which is contact order, so it is deterministic.
+        for (int i = 0; i < _doomCount; i++)
+        {
+            int c = _doomList[i];
+            _doomMark[c] = false;
+            if (c >= _s.CellCount || _s.Dead(c) || _crushMark[c]) continue;
+            _crushMark[c] = true;
+            _crushList[_crushCount++] = c;
+            BackstopComminuted++;
+        }
+        _doomCount = 0;
+
         for (int i = 0; i < _crushCount; i++)
         {
             int c = _crushList[i];
@@ -445,6 +464,7 @@ public sealed partial class Solver
                 int other = _s.BondA[k] == c ? _s.BondB[k] : _s.BondA[k];
                 if (other >= 0 && other < _s.CellCount) _s.SetFlag(other, CellFlag.Cracked, true);
             }
+
 
             // ── THE POWDER COMPACTS INTO THE CRATER ──────────────────────────
             // The cell's momentum has two shares. The rigid share — what it carried because it was
@@ -596,6 +616,17 @@ public sealed partial class Solver
     private float[] _crushJx = Array.Empty<float>();
     private float[] _crushJy = Array.Empty<float>();
     private float[] _crushGain = Array.Empty<float>();
+
+    private void ClearDoomed()
+    {
+        for (int i = 0; i < _doomCount; i++) if (_doomList[i] < _doomMark.Length) _doomMark[_doomList[i]] = false;
+        _doomCount = 0;
+    }
+
+    // Backstop comminution queue: filled during the substeps, drained by ConvertDust.
+    private bool[] _doomMark = Array.Empty<bool>();
+    private int[] _doomList = Array.Empty<int>();
+    private int _doomCount;
 
     private void EnsureCrushScratch()
     {

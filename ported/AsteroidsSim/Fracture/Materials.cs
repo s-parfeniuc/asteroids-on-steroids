@@ -69,16 +69,26 @@ public readonly struct Material
     /// </summary>
     public readonly float ShedLimit;
 
-    /// <summary>How wide a dent is, in radii of the loaded cell: the kernel radius over which one
-    /// contact's recession is spread across neighbouring surface vertices.</summary>
+    /// <summary>How wide a dent is, in MEAN POLYGON EDGES of the loaded cell: the kernel radius
+    /// over which one contact's recession is spread across neighbouring surface vertices.</summary>
     /// <remarks>
-    /// The one parameter carving v2 adds. Narrow gives pits (glass), wide gives dents (steel). A
-    /// multiple of cell radius rather than pixels so it means the same thing at any grain.
+    /// <para>The one parameter carving v2 adds. Narrow gives pits (glass), wide gives dents (steel).
+    /// A multiple of a cell length rather than pixels, so it means the same thing at any grain.</para>
+    /// <para>The base is the cell's mean edge, not its radius — see <c>Solver.MeanEdge</c> for why,
+    /// and note that these values were re-derived when the base changed. On the old radius base the
+    /// kernel came out about twice the cell, so every corner of a loaded cell drew near-equal weight
+    /// and a pointy cell contracted toward its centroid instead of flattening where it was struck.
+    /// Values here are half the old ones, which puts the Penetrator at the measured optimum for a
+    /// rod tip while preserving every material's width relative to the others. A normal collide is
+    /// insensitive to this over 0.40-2.00 (bodies 3-8, area kept 75-79%, median cell aspect
+    /// 1.21-1.23): the parameter only bites where a sharp feature meets a surface.</para>
     /// </remarks>
     public readonly float Dent;
 
+
+
     public Material(string name, float rho, float c, float strain, float chi, float yield, float duct,
-        float crush, float crushEnergy, float shedLimit, float dent = 1.5f)
+        float crush, float crushEnergy, float shedLimit, float dent = 0.75f)
     {
         Name = name; Rho = rho; C = c; Strain = strain; Chi = chi; Yield = yield; Duct = duct;
         Crush = crush; CrushRate = crushEnergy; ShedLimit = shedLimit; Dent = dent;
@@ -142,11 +152,22 @@ public readonly struct Material
 
     /// <summary>The prototype's table (<c>MATERIALS</c>), plus the authored comminution pair.</summary>
     //                                              rho     c    strain  chi   yield duct   crush  rate  shed  dent
-    public static readonly Material Rock = new("rock", 3000f, 5000f, 0.010f, 90f, 0.95f, 0.02f, 2.5e5f, 1.0f, 0.35f, 1.5f);
-    public static readonly Material Ice = new("ice", 917f, 3200f, 0.007f, 70f, 0.70f, 0.05f, 6.0e4f, 1.0f, 0.25f, 1.5f);
-    public static readonly Material Glass = new("glass", 2500f, 5500f, 0.008f, 1.05f, 9f, 0.00f, 4.0e5f, 2.0f, 0.15f, 0.8f);
-    public static readonly Material Sandstone = new("sandstone", 2200f, 2500f, 0.009f, 50f, 0.85f, 0.05f, 1.5e5f, 1.0f, 0.25f, 1.5f);
-    public static readonly Material Steel = new("steel", 7850f, 5900f, 0.020f, 50f, 0.35f, 0.50f, 1.0e6f, 0.3f, 0.50f, 2.5f);
+    public static readonly Material Rock = new("rock", 3000f, 5000f, 0.010f, 90f, 0.95f, 0.02f, 2.5e5f, 1.0f, 0.35f, 0.75f);
+    public static readonly Material Ice = new("ice", 917f, 3200f, 0.007f, 70f, 0.70f, 0.05f, 6.0e4f, 1.0f, 0.25f, 0.75f);
+    public static readonly Material Glass = new("glass", 2500f, 5500f, 0.008f, 30f, 9f, 0.00f, 4.0e5f, 2.0f, 0.15f, 0.40f);
+    public static readonly Material Sandstone = new("sandstone", 2200f, 2500f, 0.009f, 50f, 0.85f, 0.05f, 1.5e5f, 1.0f, 0.25f, 0.75f);
+    public static readonly Material Steel = new("steel", 7850f, 5900f, 0.020f, 50f, 0.35f, 0.50f, 1.0e6f, 0.3f, 0.50f, 1.25f);
+
+    /// <summary>A long-rod penetrator: dense, and authored to resist its OWN erosion.</summary>
+    /// <remarks>
+    /// The distinguishing property is not mass but that it does not mushroom. A bullet erodes as it
+    /// goes — its front cells reach ShedLimit and comminute, the rod shortens and spreads, and it
+    /// ends up delivering its momentum over a wide crater. This one is given a crush threshold three
+    /// times steel's and a third of its erosion rate, so it stays a rod and keeps driving into the
+    /// hole it has already made. Tungsten's density, and a high shed limit so that even when it does
+    /// start eroding it survives a long way.
+    /// </remarks>
+    public static readonly Material Penetrator = new("penetrator", 17000f, 4000f, 0.015f, 40f, 0.40f, 0.30f, 3.0e6f, 0.1f, 0.60f, 1.00f);
 
     public static Material ByName(string name) => name switch
     {
@@ -209,6 +230,45 @@ public readonly struct MaterialProps
 }
 
 /// <summary>
+/// How a single body is put together: the heterogeneity that decides WHERE it cracks, as opposed to
+/// the material, which decides how hard that is.
+/// </summary>
+/// <remarks>
+/// <para>Per body rather than per material, because two asteroids of the same rock can be one a
+/// uniform lump and the other visibly bedded, and because this is the hook a shape-authoring tool
+/// writes into. All of it is applied once, at build, by <c>BodyBuilder.ApplyStructure</c>, and it
+/// scales bond STRENGTH only — never stiffness, which would make the wave field heterogeneous for
+/// no reason. (A genuine material boundary is a different matter; see per-cell materials.)</para>
+///
+/// <para><see cref="From"/> returns the scene-wide defaults out of <see cref="SimTuning"/>, so a
+/// caller that does not care about structure gets exactly today's behaviour.</para>
+/// </remarks>
+public readonly struct BodyStructure
+{
+    /// <summary>Weibull modulus for per-bond strength scatter. 0 disables it; low = wide spread.</summary>
+    public readonly float WeibullM;
+    /// <summary>Bedding-plane anisotropy: bonds along the grain are stronger, across it weaker.</summary>
+    public readonly float Aniso;
+    /// <summary>Grain direction in radians, used only when <see cref="GrainLock"/> is set.</summary>
+    public readonly float GrainAngle;
+    /// <summary>Fix the grain instead of drawing it per body.</summary>
+    public readonly bool GrainLock;
+    /// <summary>How much weaker a bond is when its cells sit on the boundary. Real brittle solids
+    /// crack from surface defects, and this is what lets glass initiate at all.</summary>
+    public readonly float SurfFlaw;
+
+    public BodyStructure(float weibullM, float aniso, float grainAngle, bool grainLock, float surfFlaw)
+    {
+        WeibullM = weibullM; Aniso = aniso; GrainAngle = grainAngle;
+        GrainLock = grainLock; SurfFlaw = surfFlaw;
+    }
+
+    /// <summary>The scene-wide defaults — what every body used before structure became per body.</summary>
+    public static BodyStructure From(in SimTuning t)
+        => new(t.WeibullM, t.Aniso, t.GrainAngle, t.GrainLock, t.SurfFlaw);
+}
+
+/// <summary>
 /// Every global knob the solver reads. A value type carried inside the simulation rather than a
 /// static, because static mutable state inside the tick is a determinism hazard and cannot be
 /// snapshotted (PORT_PLAN §6 rule 5).
@@ -249,6 +309,30 @@ public struct SimTuning
     public float CrushConfine;
 
     /// <summary>
+    /// The hard ceiling on penetration, as a fraction of the thinner cell's half-extent along the
+    /// contact normal. Past it, carving is forced whatever the pressure reads. 0 disables it.
+    /// </summary>
+    /// <remarks>
+    /// <para>Bodies never spawn overlapping, so an overlap is never just solver slack: it is the
+    /// contact telling us that velocity correction and pressure-driven carving between them did not
+    /// keep the two cells apart. Past this depth one of them must give way, and the one that gives
+    /// is the one whose material yields first — the forced recession is split in inverse proportion
+    /// to the two crush thresholds, so rock yields to a penetrator and like yields to like evenly.
+    /// It runs through the ordinary carve path, so ShedMass still hands the lost mass and its
+    /// momentum to the partner and the ledger stays exact; a cell driven deep enough is eroded to
+    /// nothing through the same path, which is its comminution.</para>
+    /// <para>It is a BACKSTOP, not the mechanism. With <see cref="CrushConfine"/> at 1.0 the depth
+    /// term alone held the worst penetration to 0.16-0.27 cell radii across the reference scenes,
+    /// so at 0.3 this is there to guarantee the bound, not to produce it.</para>
+    /// <para>The yardstick is the half-extent along the normal rather than <c>CellRad</c>, because
+    /// the circumradius measures a cell's longest reach, not how much material lies in the
+    /// direction it is being pushed: on the piercing round's tip cell it is 53.7 px against a
+    /// half-width of 7.9, so a ceiling on it would let a partner pass clean through the rod
+    /// sideways. For a round cell the two agree.</para>
+    /// </remarks>
+    public float OverlapBackstop;
+
+    /// <summary>
     /// How strongly an eroded surface is pulled to meet its neighbour's at the side they share.
     /// </summary>
     /// <remarks>
@@ -284,6 +368,37 @@ public struct SimTuning
     /// </remarks>
     public bool CrackPush;
 
+    /// <summary>How far a crack may be squeezed shut, as a multiple of the bond's failure stretch,
+    /// before its compressive force stops growing.</summary>
+    /// <remarks>
+    /// <para><b>Not optional.</b> An unbroken bond is bounded by its own damage law: push it far
+    /// enough and it breaks. A broken one under <see cref="CrackPush"/> can only push, so two cells
+    /// driven together accumulate compression with nothing to stop them — same-body pairs are
+    /// rejected by the narrow phase, so there is no contact to resolve the interpenetration either.
+    /// Shipped uncapped it diverged: on a mass-24 rod at grain 170 the deepest crack reached
+    /// 6.05e11 px and bodies reached 2.6e18 px/s within one tick, and the resulting 1027 NaNs
+    /// scattered cells across the scene until every pair was a broadphase candidate — 338,448 SAT
+    /// calls a tick against 174 once bounded.</para>
+    ///
+    /// <para>A multiple of the failure stretch, because that is the scale at which the interface
+    /// stops behaving like the material: beyond it the faces are in hard contact, which is the
+    /// contact solver's business and not a bond's.</para>
+    /// </remarks>
+    public float CrackPushCap;
+
+    /// <summary>A body splits along a crack only once the crack has OPENED — while the broken bond's
+    /// faces are still pressed together the two sides remain one body.</summary>
+    /// <remarks>
+    /// A piece still pressed against the body is mechanically coupled to it: contact impulses on it
+    /// belong to the whole body, not to a fragment. Splitting the tick a bond breaks handed the
+    /// impact to a one-row fragment and the bulk behind it never decelerated (glass collide: body 0
+    /// at 300 → 279 px/s while it lost half its mass). Requires <see cref="CrackPush"/>, which is
+    /// what tracks the closing across a broken bond.
+    /// </remarks>
+    public bool SplitOnOpen;
+
+
+
     /// <summary>
     /// Fraction of a snapping bond's stored elastic energy that becomes fly-apart kinetic energy.
     /// </summary>
@@ -317,8 +432,6 @@ public struct SimTuning
     /// <summary>Penetration beyond which the bias stops growing, in px.</summary>
     public float ContactMaxBias;
     public float ContactCMin;      // contact stiffness floor, m/s
-    public float RateSens;
-    public float RateRef;
     public int Substeps;
 
     /// <summary>
@@ -366,17 +479,18 @@ public struct SimTuning
         Relax = 2f,
         ContactMu = 0.6f,
         ContactCompliance = 1f,
-        CrushConfine = 0.05f,
+        CrushConfine = 1.0f,
+        OverlapBackstop = 0.3f,
         CarveContinuity = 0.5f,
         CarveMinArea = 0.005f,
         CrackPush = true,
+        CrackPushCap = 4f,
+        SplitOnOpen = false,
         SpallFraction = 1f,
         ExportFreeDebris = false,
-        ContactBias = 0.2f,
+        ContactBias = 0.05f,
         ContactMaxBias = 2f,
         ContactCMin = 5000f,
-        RateSens = 0f,
-        RateRef = 1f,
         ManifoldDrift = 0.02f,
         Substeps = 9,
         Centrifugal = true,

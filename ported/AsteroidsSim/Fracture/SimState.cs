@@ -330,6 +330,15 @@ public sealed class SimState
     public float[] BondK0 = Array.Empty<float>();     // axial/shear stiffness
     public float[] BondKa0 = Array.Empty<float>();    // bending stiffness
     public float[] BondS0 = Array.Empty<float>();     // peak (elastic) stretch
+
+    /// <summary>Cohesive softening ratio for THIS bond, trims already applied.</summary>
+    /// <remarks>
+    /// Per bond rather than per body because a body may be built from more than one material, and a
+    /// bond between two of them fails as the more brittle side does. Baked at build: the toughness
+    /// trim is reset-on-change in the viewer, so there is nothing live to track.
+    /// </remarks>
+    public float[] BondChi = Array.Empty<float>();
+
     public float[] BondSy0 = Array.Empty<float>();    // yield stretch
 
     // live
@@ -344,7 +353,6 @@ public sealed class SimState
     public float[] BondSa = Array.Empty<float>();
     public float[] BondDmg = Array.Empty<float>();    // cohesive damage, monotone in [0,1]
     public float[] BondLmax = Array.Empty<float>();   // history max of the equivalent stretch
-    public float[] BondRate = Array.Empty<float>();   // strain rate, for rate-dependent strength
     public bool[] BondBroken = Array.Empty<bool>();
     public byte[] BondMode = Array.Empty<byte>();     // 0 none, 1 tension, 2 shear
 
@@ -442,10 +450,11 @@ public sealed class SimState
     {
         Grow(ref BondA, n); Grow(ref BondB, n); Grow(ref BondLen, n); Grow(ref BondStr, n);
         Grow(ref BondK0, n); Grow(ref BondKa0, n); Grow(ref BondS0, n); Grow(ref BondSy0, n);
+        Grow(ref BondChi, n);
         Grow(ref BondNx, n); Grow(ref BondNy, n);
         Grow(ref BondRax, n); Grow(ref BondRay, n); Grow(ref BondRbx, n); Grow(ref BondRby, n);
         Grow(ref BondSn, n); Grow(ref BondSt, n); Grow(ref BondSa, n);
-        Grow(ref BondDmg, n); Grow(ref BondLmax, n); Grow(ref BondRate, n);
+        Grow(ref BondDmg, n); Grow(ref BondLmax, n);
         Grow(ref BondBroken, n); Grow(ref BondMode, n);
         Grow(ref AdjBond, 2 * n);
     }

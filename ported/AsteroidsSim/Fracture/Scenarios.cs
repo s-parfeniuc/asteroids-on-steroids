@@ -106,6 +106,41 @@ public static class Scenarios
     /// <param name="radius">Body radius; with the grain this sets cells per body.</param>
     /// <param name="spacing">Centre-to-centre spacing. Below ~2.2x the radius they start packed.</param>
     /// <param name="speed">Drift speed scale.</param>
+    /// <summary>
+    /// A projectile into a body built from two materials: a hard shell over a softer core.
+    /// </summary>
+    /// <remarks>
+    /// The reason per-cell material exists. The shell should resist comminution while the core
+    /// crushes behind it, and the interface bonds should fail first — a bond takes the weaker of its
+    /// two cells on both the strain and the softening axis, so the shell/core seam is the weakest
+    /// line in the body even though half of it is steel.
+    /// </remarks>
+    public static Result Shell(in SimTuning tuning, in Material shell, in Material core,
+        float speed = 1500f, float massMul = 8f, float grain = 900f, float shellFrac = 0.30f,
+        int seed = ProtoRng.DefaultSeed, Material? impactor = null)
+    {
+        var s = new SimState();
+        var rng = new ProtoRng(seed);
+
+        var target = BodyBuilder.MakeBlob(ref rng, 560, 350, 190, 175);
+        // Shell by depth from the outline: a seed within shellFrac of the bounding radius is shell.
+        Geometry2D.BBox(target, out double bx0, out double by0, out double bx1, out double by1);
+        double ccx = 0.5 * (bx0 + bx1), ccy = 0.5 * (by0 + by1);
+        double rad = 0.5 * Math.SimMath.Min((float)(bx1 - bx0), (float)(by1 - by0));
+        double inner = rad * (1.0 - shellFrac);
+        Material sh = shell, co = core;
+        // AddBody only knows the nominal (core) material; the shell's wave speed bounds the grain too.
+        grain = System.Math.Max(grain, BodyBuilder.MinGrain(sh, tuning));
+        BodyBuilder.AddBody(s, ref rng, tuning, target, 0f, 0f, 0f, core, grain,
+            matAt: p => (p.X - ccx) * (p.X - ccx) + (p.Y - ccy) * (p.Y - ccy) >= inner * inner ? sh : co);
+
+        float r = 15f * Math.SimMath.Sqrt(massMul);
+        var shot = BodyBuilder.MakeBlob(ref rng, 120, 350, r, r, 0.18, 10);
+        BodyBuilder.AddBody(s, ref rng, tuning, shot, speed, 0f, 0f, impactor ?? shell, grain);
+
+        return Finish(s, tuning);
+    }
+
     public static Result Field(in SimTuning tuning, in Material material,
         int cols, int rows, float radius = 60f, float spacing = 150f, float speed = 60f,
         float grain = 900f, int seed = ProtoRng.DefaultSeed)
@@ -154,9 +189,31 @@ public static class Scenarios
     /// <para>Not part of the reference scenario set and not on the fingerprint path: it draws from
     /// its own generator stream, seeded by the caller so a session can still be replayed.</para>
     /// </remarks>
+    /// <summary>
+    /// What a round of this shape and material would weigh, for callers that want to keep a round's
+    /// mass while changing its size. Builds the same blob <see cref="FireAt"/> would from the same
+    /// seed, on its own rng, so it neither needs nor disturbs the caller's stream.
+    /// </summary>
+    public static float RoundMass(in Material material, float radius,
+        float radiusX = 0f, float radiusY = 0f, int seed = 1)
+    {
+        var rng = new ProtoRng(seed);
+        float rx = radiusX > 0f ? radiusX : radius, ry = radiusY > 0f ? radiusY : radius;
+        bool rod = radiusX > 0f && radiusY > 0f && radiusX != radiusY;
+        var shot = BodyBuilder.MakeBlob(ref rng, 0f, 0f, rx, ry, rod ? 0.10 : 0.18, rod ? 12 : 10);
+        double area = 0.0;
+        for (int i = 0, n = shot.Count; i < n; i++)
+        {
+            var a = shot[i]; var b = shot[i + 1 == n ? 0 : i + 1];
+            area += a.X * b.Y - b.X * a.Y;
+        }
+        return (float)(System.Math.Abs(area) * 0.5 * (material.Rho / 1000.0));
+    }
+
     public static Result FireAt(in Result r, in SimTuning tuning, in Material material,
         float fromX, float fromY, float toX, float toY, float speed = 900f,
-        float radius = 16f, float grain = 900f, int seed = 1)
+        float radius = 16f, float grain = 900f, int seed = 1,
+        float radiusX = 0f, float radiusY = 0f, float roundMass = 0f)
     {
         SimState s = r.State;
         Solver solver = r.Solver;
@@ -165,14 +222,47 @@ public static class Scenarios
         float keBefore = solver.BodyKineticEnergy();
 
         var rng = new ProtoRng(seed);
-        var shot = BodyBuilder.MakeBlob(ref rng, fromX, fromY, radius, radius, 0.18, 10);
+        // A rod is the same round with its radii split: small face, long body. Zero means "round".
+        float rx = radiusX > 0f ? radiusX : radius, ry = radiusY > 0f ? radiusY : radius;
+        bool rod = radiusX > 0f && radiusY > 0f && radiusX != radiusY;
+        var shot = BodyBuilder.MakeBlob(ref rng, fromX, fromY, rx, ry, rod ? 0.10 : 0.18, rod ? 12 : 10);
+
+        // ── SIZE AND MASS ARE SEPARATE THINGS ────────────────────────────────
+        // A round's mass used to be whatever its area happened to weigh, so making a round smaller
+        // made it proportionally feebler and there was no way to author a small round that still
+        // hit hard. Given a mass, the density is solved for it instead: rho = m / area. Measured on
+        // a rock target, that holds damage flat as the round shrinks — 0.7% of the target lost at
+        // radius 26, 0.7% at 13, 0.8% at 8.7 — where shrinking at fixed density drops it to 0.2%.
+        //
+        // This is not a pure mass change and should not be sold as one. Density also sets the
+        // acoustic impedance rho*c that the carve pressure law and the contact compliance read, so
+        // a small dense round is BOTH as heavy and harder-hitting per unit of face: at a quarter the
+        // radius it removed 1.7%, more than the round it replaced. That is what a dense penetrator
+        // does in reality, and it is the reason the lever works at all.
+        Material round = material;
+        if (roundMass > 0f)
+        {
+            double area = 0.0;
+            for (int i = 0, n = shot.Count; i < n; i++)
+            {
+                var a = shot[i]; var b = shot[i + 1 == n ? 0 : i + 1];
+                area += a.X * b.Y - b.X * a.Y;
+            }
+            area = System.Math.Abs(area) * 0.5;
+            // MaterialProps divides Rho by 1000 before it becomes mass per unit area
+            // (Materials.cs:214), so the density that produces a given mass carries that factor.
+            if (area > 1e-6)
+                round = new Material(material.Name, (float)(1000.0 * roundMass / area), material.C, material.Strain,
+                    material.Chi, material.Yield, material.Duct, material.Crush, material.CrushRate,
+                    material.ShedLimit, material.Dent);
+        }
 
         float dx = toX - fromX, dy = toY - fromY;
         float L = Math.SimMath.Hypot(dx, dy);
         if (L < 1e-3f) { dx = 1f; dy = 0f; L = 1f; }
 
         BodyBuilder.AddBody(s, ref rng, tuning, shot,
-            dx / L * speed, dy / L * speed, 0f, material, grain);
+            dx / L * speed, dy / L * speed, 0f, round, grain);
         s.Reindex();
         // NOT LabelPolyEdges over every cell. AddBody has already labelled the cells it created and
         // built their touch records; relabelling from 0 resets SideTouch on every EXISTING cell, so
@@ -190,6 +280,111 @@ public static class Scenarios
             r.Ke0 + (keAfter - keBefore),
             mass,
             Math.SimMath.Max(r.V0, speed));
+    }
+
+    /// <summary>
+    /// A long rod fired at a target: the piercing round, as opposed to the blunt one.
+    /// </summary>
+    /// <remarks>
+    /// Same machinery as <see cref="Projectile"/>; what makes it pierce is the shape and the
+    /// material. The rod is elongated along its flight (<c>MakeBlob</c> takes separate radii), so it
+    /// presents a small face and concentrates its pressure, and <see cref="Material.Penetrator"/>
+    /// resists its own comminution so it stays a rod instead of mushrooming into a wide crater.
+    /// </remarks>
+    public static Result Pierce(in SimTuning tuning, in Material material,
+        float speed = 1800f, float massMul = 3f, float grain = 900f, float aspect = 3.5f,
+        int seed = ProtoRng.DefaultSeed, Material? impactor = null)
+    {
+        var s = new SimState();
+        var rng = new ProtoRng(seed);
+
+        var target = BodyBuilder.MakeBlob(ref rng, 560, 350, 190, 175);
+        BodyBuilder.AddBody(s, ref rng, tuning, target, 0f, 0f, 0f, material, grain);
+
+        // Same area as the equivalent round shot, redistributed into a rod: pi r^2 = pi (r a)(r / a).
+        float r = 15f * Math.SimMath.Sqrt(massMul);
+        var rod = BodyBuilder.MakeBlob(ref rng, 120, 350, r * aspect, r / aspect, 0.10, 12);
+        BodyBuilder.AddBody(s, ref rng, tuning, rod, speed, 0f, 0f, impactor ?? Material.Penetrator, grain);
+
+        return Finish(s, tuning);
+    }
+
+    /// <summary>
+    /// A blast: load applied to a body without anything striking it.
+    /// </summary>
+    /// <remarks>
+    /// <para>What separates a grenade from a bullet is not the amount of energy but how it arrives.
+    /// A bullet is one cell pushing on one cell; a blast is a pressure front arriving at the whole
+    /// exposed face at once. So there is no impactor body — the impulse is applied directly to the
+    /// deviation velocity of every cell with free surface, and <c>DecomposeMotion</c> promotes the
+    /// rigid part to the body in the same substep, exactly as a contact impulse would. Cells in the
+    /// interior feel it through their bonds a moment later, which is the shock travelling in.</para>
+    ///
+    /// <para>Only cells with a free edge are loaded. That is the cheap stand-in for line of sight —
+    /// a buried cell has no exposed face for a pressure front to push on — and it costs one call to
+    /// <see cref="Solver.HasFreeEdge"/> rather than a raycast per cell.</para>
+    ///
+    /// <para>The load is a PRESSURE on the exposed face: impulse is <c>p · L · falloff</c>, so a cell
+    /// accelerates by <c>p·L/m</c> — small cells fly and dense ones resist, which is what a front
+    /// does. The falloff is <c>(1 − d/radius)²</c> rather than <c>1/r²</c>: the inverse square has no
+    /// bound at the centre and is already negligible a few cells out, which made the first version
+    /// deliver 0.15 px/s at 50 px and do visibly nothing.</para>
+    ///
+    /// <para>The impulse is injected from nothing, which is honest — an explosion carries its own
+    /// momentum — so the scene's reference momentum and energy move with it, the way
+    /// <see cref="FireAt"/> already does for a fired round. Without that every conservation check
+    /// would read the blast as a break.</para>
+    /// </remarks>
+    /// <param name="pressure">Peak impulse per unit of exposed length, at the blast centre.</param>
+    /// <param name="radius">Beyond this the front has nothing left to give.</param>
+    public static Result Blast(in Result r, in SimTuning tuning,
+        float fromX, float fromY, float pressure = 3e5f, float radius = 260f)
+    {
+        SimState s = r.State;
+        Solver solver = r.Solver;
+
+        solver.TotalMomentum(out float pxBefore, out float pyBefore);
+        float keBefore = solver.BodyKineticEnergy();
+
+        for (int c = 0; c < s.CellCount; c++)
+        {
+            if (s.Dead(c)) continue;
+            int b = s.CellBody[c];
+            if (b < 0 || b >= s.BodyCount) continue;
+            if (!solver.HasFreeEdge(c)) continue;               // nothing for a front to push on
+
+            Math.SimMath.SinCos(s.BodyRot[b], out float si, out float co);
+            float wx = s.BodyX[b] + s.CellRx[c] * co - s.CellRy[c] * si;
+            float wy = s.BodyY[b] + s.CellRx[c] * si + s.CellRy[c] * co;
+
+            float dx = wx - fromX, dy = wy - fromY;
+            float d = Math.SimMath.Hypot(dx, dy);
+            if (d >= radius || d < 1e-3f) continue;
+
+            // Scaled by the cell's own exposed length, so a big face takes more of the front than a
+            // small one, and falling to nothing at the radius.
+            float fall = 1f - d / radius;
+            float face = Math.SimMath.Max(1f, s.CellPerim[c] * 0.25f);
+            float j = pressure * face * fall * fall;
+            float ax = j * (dx / d) / Math.SimMath.Max(1e-6f, s.CellM[c]);
+            float ay = j * (dy / d) / Math.SimMath.Max(1e-6f, s.CellM[c]);
+
+            s.CellDvx[c] += ax * co + ay * si;                  // body-local, as the solver carries it
+            s.CellDvy[c] += -ax * si + ay * co;
+        }
+
+        solver.TotalMomentum(out float pxAfter, out float pyAfter);
+        float keAfter = solver.BodyKineticEnergy();
+
+        float mass = 0f;
+        for (int b = 0; b < s.BodyCount; b++) mass += s.BodyM[b];
+
+        return new Result(s, solver,
+            r.P0x + (pxAfter - pxBefore),
+            r.P0y + (pyAfter - pyBefore),
+            r.Ke0 + Math.SimMath.Max(0f, keAfter - keBefore),
+            mass,
+            r.V0);
     }
 
     private static Result Finish(SimState s, in SimTuning tuning)
