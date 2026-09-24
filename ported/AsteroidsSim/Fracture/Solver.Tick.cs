@@ -15,15 +15,11 @@ public sealed partial class Solver
     /// velocity, body rigid motion plus deviation.
     /// </summary>
     /// <remarks>
-    /// <para><b>Levers come from rest, geometry from the deformed shape.</b> The contact point and
-    /// normal are produced by the skinned polygons, but the lever arms are measured from the rest
-    /// cell centres, because <see cref="DecomposeMotion"/> promotes the deviation field with rest
-    /// arms. Mismatched frames between injection and promotion pump energy under heavy vibration.
-    /// </para>
-    /// <para>The velocity solve kills approach plus a tiny capped separation drift that drains
-    /// residual resting overlap. That is not the old penetration bias, which scaled with pen/h and
-    /// ground fragment piles to dust; this is a constant crawl whose work is negligible by
-    /// construction. Impact-scale overlap is real deformation and is consumed elsewhere.</para>
+    /// <para><b>Levers come from the rest cell centres</b>, the same arms
+    /// <see cref="DecomposeMotion"/> promotes the deviation field with. Mismatched frames between
+    /// injection and promotion pump energy under heavy vibration.</para>
+    /// <para>The velocity solve removes the approach speed plus a capped positional bias
+    /// (<see cref="SimTuning.ContactBias"/>) that drains overlap over successive substeps.</para>
     /// </remarks>
     private void SolveContact(ref Contact ct, float h)
     {
@@ -73,21 +69,17 @@ public sealed partial class Solver
         float cC = SimMath.Max(SimMath.Max(_s.BodyCpx[ba], _s.BodyCpx[bb]),
                                _tune.ContactCMin * _tune.PxPerMetre);
         float rho = 0.5f * (_s.BodyRho[ba] + _s.BodyRho[bb]);
-        float lc = SimMath.Max(1f, SimMath.Min(_s.CellPerim[a], _s.CellPerim[b]) * 0.25f);
+        float lc = SimMath.Max(1f, SimMath.Min(_s.CellPerim[a], _s.CellPerim[b]) * K.FaceLength);
         float alpha = _tune.ContactCompliance / (rho * cC * cC * lc);
         float at = alpha / (h * h);
 
-        // POSITIONAL BIAS — now the ONLY thing resolving overlap.
-        //
-        // It used to be a token 4 px/s at most, because penetration was absorbed by deformation:
-        // overlap WAS the deformation, consumed elastically by u and permanently by the rebake. With
-        // that layer gone the bias does all the work, and at its old strength two bodies sank 36 px
-        // into each other — deeper than a cell.
+        // POSITIONAL BIAS — with carving, what resolves overlap. Cells never deform, so overlap is
+        // not absorbed anywhere else.
         //
         // Baumgarte form: removing `pen` within one substep needs a separation velocity of pen/h, so
         // the tuning value is the fraction of the error corrected per substep. Capped, because a deep
         // overlap on the first substep of an impact would otherwise fire material apart.
-        float pen = SimMath.Max(0f, ct.Depth - 0.05f);
+        float pen = SimMath.Max(0f, ct.Depth - K.ContactSlop);
         float sep = SimMath.Min(pen, _tune.ContactMaxBias) * _tune.ContactBias / h;
 
         float dl = ((sep - vn) * h - at * ct.Ln) / (w + at);
@@ -163,25 +155,11 @@ public sealed partial class Solver
 
         float pressA = shared + driveA;
         float pressB = shared + driveB;
-        if (a == TraceCell || b == TraceCell)                  // DIAGNOSTIC only
-        {
-            PressDyn += dyn; PressConf += conf;
-            PressDrive += a == TraceCell ? driveA : driveB;
-            PressSamples++;
-            if (pen <= 0f) PressZeroPen++;
-        }
         _cellPress[a] += pressA;
         _cellPress[b] += pressB;
         int tba = _s.CellBody[a], tbb = _s.CellBody[b];
         if (tba >= 0 && tba < _bodyTouchTick.Length) _bodyTouchTick[tba] = _s.Tick;
         if (tbb >= 0 && tbb < _bodyTouchTick.Length) _bodyTouchTick[tbb] = _s.Tick;
-        // WORK, which is what carving is actually rate-limited by. Force times approach speed times
-        // the substep: the energy this contact took out of the approach. A pressure-time integral
-        // would let destruction outrun momentum transfer — carve rate would RISE with pressure, so
-        // the more violent the impact the faster the load path is cut. Work cannot do that, because
-        // the contact can only do work if the impactor decelerates.
-        ct.Work = lnBrake * SimMath.Max(0f, -vn) / h;
-        if (MeasureStress && ct.Work > PeakWork) PeakWork = ct.Work;
         if (TraceCell >= 0 && (a == TraceCell || b == TraceCell))
         {
             bool isA = a == TraceCell;
@@ -189,21 +167,6 @@ public sealed partial class Solver
                 + $"depth {ct.Depth,6:F2} n=({ct.Nx,5:F2},{ct.Ny,5:F2}) "
                 + $"dyn {dyn,10:E2} conf {conf,10:E2} drive {(isA ? driveA : driveB),10:E2} "
                 + $"-> press {(isA ? pressA : pressB),10:E2}");
-        }
-
-        float press = SimMath.Max(pressA, pressB);
-
-        if (MeasureStress)
-        {
-            if (dyn > PeakDyn) PeakDyn = dyn;
-            if (conf > PeakConf) PeakConf = conf;
-            if (press > PeakStress) PeakStress = press;
-            if (press > 1f)
-            {
-                int bucket = (int)SimMath.Log2(press);
-                if (bucket >= StressHist.Length) bucket = StressHist.Length - 1;
-                if (bucket >= 0) StressHist[bucket]++;
-            }
         }
 
         // Coulomb friction — same scale, solved after the normal so it sees corrected velocities.
@@ -230,28 +193,7 @@ public sealed partial class Solver
     }
 
     /// <summary>
-    /// Turns the per-cell contact pressure accumulated over this substep into comminution dose.
-    /// </summary>
-    /// <remarks>
-    /// <para>Dose rather than a switch, and that is what couples comminution to participating mass.
-    /// A lone cell is pushed away within about a substep and accumulates almost nothing; a cell with
-    /// a body behind it has its bonds pulling it back into the contact — <c>SolveContact</c> runs
-    /// after <c>BondForces</c>, so that restoring force is already in <c>dv</c> — so it keeps being
-    /// pressed and the dose climbs until it fails. Pressure decides <i>whether</i>, duration decides
-    /// <i>how long until</i>.</para>
-    ///
-    /// <para><b>Each cell is charged against its own material.</b> The previous version took
-    /// <c>min</c> of the two bodies' thresholds and applied it to both, so a steel plate struck by a
-    /// glass shard was judged by glass — a cell's resistance to being crushed is a property of the
-    /// cell, never of what happens to be touching it.</para>
-    ///
-    /// <para>Walks the contact list rather than every cell, because the cells under load are exactly
-    /// the ones with contacts. Zeroing on visit is what makes that safe: a cell in six contacts is
-    /// reached six times and charged once, with its complete sum.</para>
-    /// </remarks>
-    /// <summary>
-    /// Turns the work each contact did into carved area, once per substep, after every contact has
-    /// been solved.
+    /// Carves every contact's two cells, once per substep, after every contact has been solved.
     /// </summary>
     /// <remarks>
     /// <para><b>After the loop, not inside it.</b> Carving mutates collider geometry — vertices,
@@ -264,9 +206,9 @@ public sealed partial class Solver
     /// single averaged direction per cell would flatten a corner being ground from two sides into one
     /// meaningless bevel.</para>
     ///
-    /// <para>Pressure still decides WHETHER — it is compared against the cell's own material
-    /// threshold — and the share of the work that carves ramps with how far over that threshold the
-    /// cell is, so the onset is smooth rather than a switch.</para>
+    /// <para><b>Each cell is charged against its own material.</b> The gate compares the cell's total
+    /// pressure this substep with its own crush threshold, and the recession rate follows the
+    /// excess (see <see cref="CarveSide"/>), so the onset is smooth rather than a switch.</para>
     /// </remarks>
     private void ApplyCarving(float h)
     {
@@ -275,19 +217,11 @@ public sealed partial class Solver
         // each contact on its own reads 60%, twice, and concludes nothing is happening. Confinement
         // is the sum of what presses on a cell, so the sum is what the threshold is for.
         //
-        // The RATE reads this contact's work, because the energy is this contact's to spend.
+        // Every contact is carved, not only those still braking an approach: a cell held in deep
+        // sustained overlap has no approach speed left but is still under pressure.
         for (int i = 0; i < _contactCount; i++)
         {
             ref Contact ct = ref _contacts[i];
-
-            // NO BRAKING GATE. This used to skip any contact with ct.Work <= 0, left over from the
-            // rate being paid out of braking work. The rate moved to pressure; the gate did not, so
-            // carving still only ran on substeps where something was being decelerated — the
-            // approach transient — and a cell held in deep sustained overlap carved on roughly one
-            // substep in nine. Traced on cell 562 at grain 170: pressure sat at 3.5e5 against a
-            // 2.5e5 threshold for eight substeps with no carve attempted at all, while penetration
-            // grew from 2.3 to 5.3 px.
-            if (MeasureCarveAngles) DentContactDepth = ct.Depth;      // DIAGNOSTIC only
 
             // ── THE PENETRATION BACKSTOP ──────────────────────────────────────
             // See SimTuning.OverlapBackstop. Past the ceiling, recession is forced on the two cells
@@ -300,7 +234,7 @@ public sealed partial class Solver
                 hMin = SimMath.Min(ha, hb);
                 // Floored at the contact's own slop: the pressure term ignores the first 0.05 px of any
                 // overlap, and a sliver carved thin would otherwise have a ceiling of nothing.
-                float ceiling = SimMath.Max(tau * hMin, 0.05f);
+                float ceiling = SimMath.Max(tau * hMin, K.ContactSlop);
                 float over = ct.Depth - ceiling;
                 if (over > 0f)
                 {
@@ -312,28 +246,8 @@ public sealed partial class Solver
                 }
             }
 
-            long oor0 = DentOutOfReach, noe0 = DentNoOpenEnd, ins0 = DentInsensitive, fb0 = DentFallback;
             float dA = CarveSide(ct.A, ct.B, _cellPress[ct.A], h, ct.Nx, ct.Ny, ct.Px, ct.Py, fA);
-            bool stuckA = DentOutOfReach > oor0 || DentNoOpenEnd > noe0 || DentInsensitive > ins0;
-            long oor1 = DentOutOfReach, noe1 = DentNoOpenEnd, ins1 = DentInsensitive;
             float dB = CarveSide(ct.B, ct.A, _cellPress[ct.B], h, -ct.Nx, -ct.Ny, ct.Px, ct.Py, fB);
-            bool stuckB = DentOutOfReach > oor1 || DentNoOpenEnd > noe1 || DentInsensitive > ins1;
-
-            // ── CARVED ENOUGH, OR COMMINUTED ─────────────────────────────────
-            // A cell the backstop told to yield that cannot deliver — its dent found no exposed point
-            // within reach of a contact buried inside it, or its area guard or capacity held it back —
-            // yields by crushing instead. It is queued for ConvertDust, the ordinary comminution path,
-            // which runs at the tick boundary because topology only changes there and which hands the
-            // cell's momentum inelastically to everything it presses on. A Solo cell — built as one
-            // piece, a pebble or a round — is never dust by design, so it is exempt and counted.
-
-            if (fA > 0f || fB > 0f)                                   // DIAGNOSTIC: backstop outcome
-            {
-                BackstopAsked += fA + fB; BackstopGot += dA + dB;
-                if (dA + dB <= 1e-6f) BackstopNothing++;
-                if (stuckA || stuckB) BackstopOutOfReach++;
-                if (DentFallback > fb0) BackstopV1++;
-            }
 
             // CLOSE THE FEEDBACK LOOP. Depth comes from the manifold, which is only re-derived when
             // ManifoldDrift trips — so without this the pressure keeps reading the overlap that was
@@ -343,21 +257,16 @@ public sealed partial class Solver
             float relief = dA + dB;
             if (relief > 0f) { ct.Depth -= relief; ct.Depth0 -= relief; }
 
+            // ── CARVED ENOUGH, OR COMMINUTED ─────────────────────────────────
             // If both sides delivered their forced share the depth is now at or under the ceiling
-            // by construction, so a contact still over it has a side that did not — whether its dent
-            // found nothing to move or was held back by its area guard or its capacity. That side
-            // could not be carved enough, so it is comminuted.
-            if ((fA > 0f || fB > 0f) && ct.Depth > SimMath.Max(tau * hMin, 0.05f))
+            // by construction, so a contact still over it has a side that did not — its dent found
+            // no exposed point within reach, or its area guard held it back. That cell yields by
+            // crushing instead: it is queued for ConvertDust, which runs at the tick boundary
+            // because topology only changes there. A Solo cell is never dust, so it is exempt.
+            if ((fA > 0f || fB > 0f) && ct.Depth > SimMath.Max(tau * hMin, K.ContactSlop))
             {
                 if (fA > 0f && dA < fA) Doom(ct.A);
                 if (fB > 0f && dB < fB) Doom(ct.B);
-            }
-            if ((fA > 0f || fB > 0f) && hMin > 1e-3f)                  // DIAGNOSTIC: what the backstop controls
-            {
-                bool stuck = (fA > 0f && stuckA) || (fB > 0f && stuckB);
-                float after = ct.Depth / hMin;
-                if (stuck) { if (after > BackstopWorstAfterStuck) BackstopWorstAfterStuck = after; if (after > tau) BackstopStillOverStuck++; }
-                else       { if (after > BackstopWorstAfterBoth) BackstopWorstAfterBoth = after;   if (after > tau) BackstopStillOverBoth++; }
             }
         }
 
@@ -367,7 +276,6 @@ public sealed partial class Solver
         for (int i = 0; i < _contactCount; i++)
         {
             ref Contact ct = ref _contacts[i];
-            ct.Work = 0f;
             _cellPress[ct.A] = 0f;
             _cellPress[ct.B] = 0f;
         }
@@ -377,7 +285,7 @@ public sealed partial class Solver
     private void Doom(int c)
     {
         if (c < 0 || c >= _s.CellCount || _s.Dead(c)) return;
-        if (_s.Solo(c)) { BackstopSoloExempt++; return; }
+        if (_s.Solo(c)) return;
         if (_doomMark.Length < _s.CellCount)
         {
             System.Array.Resize(ref _doomMark, _s.CellCount);
@@ -415,7 +323,7 @@ public sealed partial class Solver
         float forced = 0f)
     {
         DbgCalls++;
-        if (_s.Dead(c) || _s.Dead(other)) { DbgDead++; return 0f; }
+        if (_s.Dead(c) || _s.Dead(other)) return 0f;
         int bi = _s.CellBody[c];
         if (bi < 0 || bi >= _s.BodyCount) return 0f;
 
@@ -426,43 +334,7 @@ public sealed partial class Solver
         if (c == TraceCell)
             TraceSink?.Invoke($"     carve gate: press {press,10:E2} vs threshold {crushThr,10:E2}"
                 + $" -> {(excess > 0f ? "OPEN" : "shut")}");
-        if (MeasureCarveAngles)                                      // DIAGNOSTIC only
-        {
-            float prad = SimMath.Min(_s.CellRad[c], _s.CellRad[other]);
-            float pf = prad > 1e-3f ? SimMath.Max(0f, DentContactDepth) / prad : 0f;
-            int pb = pf < 0.1f ? 0 : pf < 0.25f ? 1 : pf < 0.5f ? 2 : pf < 1f ? 3 : 4;
-            if (excess > 0f) GateOpenByPen[pb]++; else GateShutByPen[pb]++;
-        }
-        if (excess <= 0f && forced <= 0f) { DbgGate++; return 0f; }
-
-        // DIAGNOSTIC: nx,ny is the SAT minimum-translation axis. Compare it with where the partner
-        // is actually coming from, so the two can be told apart in the bench.
-        if (MeasureCarveAngles)
-        {
-            int boDiag = _s.CellBody[other];
-            if (boDiag >= 0 && boDiag < _s.BodyCount)
-            {
-                float rvx = _s.BodyVx[boDiag] - _s.BodyVx[bi], rvy = _s.BodyVy[boDiag] - _s.BodyVy[bi];
-                float rl = SimMath.Hypot(rvx, rvy);
-                if (rl > 1e-3f)
-                {
-                    float cosang = -(nx * rvx + ny * rvy) / rl;
-                    cosang = SimMath.Max(-1f, SimMath.Min(1f, cosang));
-                    float ac = SimMath.Abs(cosang);
-                    int bin = 0;
-                    // cos(10..80 deg): each threshold the magnitude falls below is another bucket.
-                    if (ac < 0.9848f) bin = 1;
-                    if (ac < 0.9397f) bin = 2;
-                    if (ac < 0.8660f) bin = 3;
-                    if (ac < 0.7660f) bin = 4;
-                    if (ac < 0.6428f) bin = 5;
-                    if (ac < 0.5000f) bin = 6;
-                    if (ac < 0.3420f) bin = 7;
-                    if (ac < 0.1736f) bin = 8;
-                    CarveNormalAngle[bin]++;
-                }
-            }
-        }
+        if (excess <= 0f && forced <= 0f) return 0f;
 
         // ── RATE: VISCOPLASTIC YIELD, NOT BRAKING WORK ───────────────────────
         // The rate used to be paid out of the work the contact did against the approach. That is a
@@ -489,11 +361,11 @@ public sealed partial class Solver
         float imp = SimMath.Max(1e-3f, (m.Rho / 1000f) * cPx);
         float depth = excess > 0f ? m.CrushRate * (excess / imp) * h : 0f;
         // The backstop takes over wherever it asks for more than the rate law would give.
-        if (forced > depth) { depth = forced; BackstopRecessions++; }
+        if (forced > depth) depth = forced;
 
         // A cell may not vanish inside one substep however violent the contact: the shed has to be
         // spread over enough substeps for its momentum to leave through the contact with it.
-        if (depth <= 1e-5f) { DbgWant++; return 0f; }
+        if (depth <= 1e-5f) return 0f;
 
         // ── v2: recede the surface around the contact ────────────────────────
         // Cells with a surface chord are dented through their records; the direction clip below
@@ -505,19 +377,18 @@ public sealed partial class Solver
                 if (c == TraceCell)
                     TraceSink?.Invoke($"     dent: depth {depth,7:F3} removed {gotV2,7:F2}  area {_s.CellArea[c],7:F1}/{_s.CellArea0[c],7:F1} "
                         + $"shed {100f * (1f - _s.CellArea[c] / SimMath.Max(1f, _s.CellArea0[c])),5:F1}%");
-                if (gotV2 <= 0f) { DbgRemoved++; return 0f; }
-                DbgCarved++;
-                return gotV2 / SimMath.Max(1f, _s.CellPerim[c] * 0.25f);
+                if (gotV2 <= 0f) return 0f;
+                return gotV2 / SimMath.Max(1f, _s.CellPerim[c] * K.FaceLength);
             }
         }
 
         // The yield speed gives how far the surface recedes; the area that corresponds to is the
         // recession times the contact length it happens over.
         // v1 only: the depth cap that kept a cell from vanishing in one substep. v2 guards on area.
-        if (depth > _s.CellRad[c] * 0.25f) { DbgCapHit++; DbgCapExcess += depth / (_s.CellRad[c] * 0.25f); }
-        depth = SimMath.Min(depth, _s.CellRad[c] * 0.25f);
+        if (depth > _s.CellRad[c] * K.V1DepthCap) { DbgCapHit++; DbgCapExcess += depth / (_s.CellRad[c] * K.V1DepthCap); }
+        depth = SimMath.Min(depth, _s.CellRad[c] * K.V1DepthCap);
 
-        float lcw = SimMath.Max(1f, _s.CellPerim[c] * 0.25f);
+        float lcw = SimMath.Max(1f, _s.CellPerim[c] * K.FaceLength);
         float wantArea = depth * lcw;
 
         // The load direction is world; the polygon is body-local.
@@ -526,7 +397,7 @@ public sealed partial class Solver
         float ly = -nx * si + ny * co;
 
         float areaBefore = _s.CellArea[c];
-        if (areaBefore <= 1e-6f) { DbgArea++; return 0f; }
+        if (areaBefore <= 1e-6f) return 0f;
 
         // ── A CLIP HAS TO BE WORTH MAKING ────────────────────────────────────
         // The rate law gives a recession per substep, which is hundredths of a pixel. Carving that
@@ -536,32 +407,22 @@ public sealed partial class Solver
         // for no visible change. Demand below the floor is HELD, not dropped, so the erosion rate is
         // untouched and only the grain of the geometry changes.
         float pending = _s.CellCarvePend[c] + wantArea;
-        if (pending < _tune.CarveMinArea * areaBefore) { _s.CellCarvePend[c] = pending; DbgWant++; return 0f; }
+        if (pending < _tune.CarveMinArea * areaBefore) { _s.CellCarvePend[c] = pending; return 0f; }
         _s.CellCarvePend[c] = 0f;
         wantArea = pending;
 
         float removed = CarveCellByArea(c, lx, ly, wantArea);
-        if (c == TraceCell) { if (SimMath.Abs(ly) > SimMath.Abs(lx)) CarveV1Across += removed; else CarveV1Along += removed; }
         if (c == TraceCell)
             TraceSink?.Invoke($"     carve: depth {depth,7:F3} want {wantArea,7:F2} "
                 + $"removed {removed,7:F2}  area {_s.CellArea[c],7:F1}/{_s.CellArea0[c],7:F1} "
                 + $"shed {100f * (1f - _s.CellArea[c] / SimMath.Max(1f, _s.CellArea0[c])),5:F1}%");
-        if (removed <= 0f) { DbgRemoved++; return 0f; }
-        DbgCarved++;
-
-        if (CarveLogging && CarveLogCount < CarveLogCell.Length)
-        {
-            CarveLogCell[CarveLogCount] = c;
-            CarveLogNx[CarveLogCount] = nx; CarveLogNy[CarveLogCount] = ny;
-            CarveLogArea[CarveLogCount] = removed;
-            CarveLogCount++;
-        }
+        if (removed <= 0f) return 0f;
 
         ShedMass(c, other, removed / areaBefore);
 
         // Realized depth, from the area actually taken — the request may have been clamped by the
         // bonded-edge guard, and only what really went may be credited against the overlap.
-        float lc = SimMath.Max(1f, _s.CellPerim[c] * 0.25f);
+        float lc = SimMath.Max(1f, _s.CellPerim[c] * K.FaceLength);
         return removed / lc;
     }
 
@@ -680,22 +541,6 @@ public sealed partial class Solver
         vy = _s.BodyVy[b] + w * rx + _s.CellDvx[c] * si + _s.CellDvy[c] * co;
     }
 
-    /// <summary>
-    /// True when breaking bond <paramref name="k"/> would leave cell <paramref name="c"/> with no
-    /// unbroken bond while it is still buried — surrounded by live cells of its own body.
-    /// </summary>
-    private bool WouldIsolateBuried(int c, int k)
-    {
-        int aoff = _s.AdjOff[c], alen = _s.AdjLen[c];
-        for (int j = 0; j < alen; j++)
-        {
-            int o = _s.AdjBond[aoff + j];
-            if (o == k || _s.BondBroken[o]) continue;
-            return false;                       // another bond survives; nothing to worry about
-        }
-        return !HasFreeEdge(c);                 // last bond, and no side of it faces open space
-    }
-
     private void TotalVelocity(
         int a, int b, int ba, int bb,
         float cA, float sA, float cB, float sB,
@@ -731,19 +576,13 @@ public sealed partial class Solver
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    //  damage, plasticity, failure
+    //  damage and failure
     // ══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Advances plastic flow and cohesive damage, and separates bonds that reach d = 1.
-    /// Returns true if anything broke.
+    /// Advances cohesive damage and separates bonds that reach d = 1. Returns true if anything broke.
     /// </summary>
     /// <remarks>
-    /// <para><b>Plastic flow.</b> Elastic stretch past the yield point flows into a permanent offset
-    /// at a finite rate, capping the force near yield level and dissipating the work. Because flow
-    /// takes time, fast loading outruns it and reaches the damage threshold instead: bend slowly,
-    /// snap fast — the ductile/brittle transition is rate-dependent and emergent rather than
-    /// switched.</para>
     /// <para><b>Cohesive damage.</b> Below the peak stretch the bond is elastic; past it, linear
     /// softening whose triangle area IS the fracture energy, so toughness is a local per-bond
     /// property. Damage is driven by the monotone history maximum, so unloading is elastic at
@@ -772,7 +611,7 @@ public sealed partial class Solver
         return broke > 0;
     }
 
-    /// <summary>Cohesive damage and plastic flow for a contiguous range of bodies.</summary>
+    /// <summary>Cohesive damage for a contiguous range of bodies.</summary>
     /// <remarks>
     /// Per-body iteration for the same reason as <see cref="BondForces"/>: a bond couples two cells
     /// of one body, everything it writes belongs to that body, and <c>BodyBonds</c> holds a body's
@@ -782,9 +621,7 @@ public sealed partial class Solver
         ref double recoil)
     {
         bool broke = false;
-        float invSh = 1f / SimMath.Max(0.05f, _tune.ShearMul);
-        float sm = SimMath.Max(0.05f, _tune.ShearMul);
-        float fr = SimMath.Min(1f, _tune.FlowRate * h);
+        float invSh = 1f / SimMath.Max(K.MinShearMul, _tune.ShearMul);
 
         for (int bi = bodyLo; bi < bodyHi; bi++)
         {
@@ -798,7 +635,6 @@ public sealed partial class Solver
             if (_s.Dead(a) || _s.Dead(b))
             { _s.BondBroken[k] = true; MarkDirty(_s.CellBody[a]); continue; }
 
-            float sy = _s.BondSy0[k] * _tune.YieldScale;
             float sn = _s.BondSn[k], st = _s.BondSt[k], sa = _s.BondSa[k];
             float len = _s.BondLen[k];
 
@@ -832,16 +668,13 @@ public sealed partial class Solver
             if (lam > _s.BondLmax[k]) _s.BondLmax[k] = lam;
 
             float s0 = _s.BondS0[k];
-            float chi = SimMath.Max(1.001f, _s.BondChi[k]);
-            // Ductile exhaustion is gone with plastic flow: a bond that cannot flow cannot exhaust
-            // itself. Materials now separate on failure strain and on chi, the softening ratio,
-            // rather than on how far they could yield before tearing.
+            float chi = SimMath.Max(K.MinChi, _s.BondChi[k]);
             if (_s.BondLmax[k] <= s0) continue;
             ctr.DamageEvaluated++;
 
             float lmax = _s.BondLmax[k];
             float d;
-            if (chi <= 1.02f) d = 1f;                            // brittle limit: snaps at peak
+            if (chi <= K.BrittleChi) d = 1f;                            // brittle limit: snaps at peak
             else
             {
                 float sf = s0 * chi;
@@ -858,7 +691,7 @@ public sealed partial class Solver
             // side, so a crack tunnels inward and interior cells fall out of bodies that still
             // enclose them. And it cannot express the thing that matters: WHICH side is exposed.
             bool atSurface = SideTouchesSurface(a, k) || SideTouchesSurface(b, k);
-            if (!atSurface) d = SimMath.Min(d, 0.97f);
+            if (!atSurface) d = SimMath.Min(d, K.InteriorDamageCap);
 
             float dPrev = _s.BondDmg[k];
             if (d > _s.BondDmg[k]) _s.BondDmg[k] = d;
@@ -866,8 +699,6 @@ public sealed partial class Solver
             if (_s.BondDmg[k] >= 1f)
             {
                 _s.BondBroken[k] = true;
-                _s.SetFlag(a, CellFlag.Cracked, true);                        // a break IS new surface
-                _s.SetFlag(b, CellFlag.Cracked, true);
                 _s.BondMode[k] = (byte)(sh > op ? 2 : 1);
                 if (Jobs == null) Broken++;
                 ctr.DamageBroke++;

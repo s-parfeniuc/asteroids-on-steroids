@@ -14,7 +14,7 @@ public class DeterminismTests
 
     private static string RunAndFingerprint(int ticks, SimJobs? jobs = null)
     {
-        var r = Scenarios.Reference("collide", SimTuning.Default);
+        var r = Scenarios.Reference("collide", TestConfig.Value);
         r.Solver.Jobs = jobs;
         for (int i = 0; i < ticks; i++) r.Solver.Step();
         return SimFingerprint.Hex(r.State);
@@ -48,7 +48,7 @@ public class DeterminismTests
     public void FingerprintChangesWhenStateChanges()
     {
         // A hash that never changes would pass the test above while detecting nothing.
-        var r = Scenarios.Reference("collide", SimTuning.Default);
+        var r = Scenarios.Reference("collide", TestConfig.Value);
         string atStart = SimFingerprint.Hex(r.State);
         for (int i = 0; i < 30; i++) r.Solver.Step();
         Assert.NotEqual(atStart, SimFingerprint.Hex(r.State));
@@ -57,10 +57,11 @@ public class DeterminismTests
     [Fact]
     public void DifferentScenariosDoNotCollide()
     {
-        var t = SimTuning.Default;
-        float grain = Scenarios.FloorGrain(t, Material.Rock);
-        var a = Scenarios.Collide(t, Material.Rock, 600f, grain);
-        var b = Scenarios.Collide(t, Material.Rock, 601f, grain);
+        var t = TestConfig.Tuning;
+        var rock = TestConfig.Material("rock");
+        float grain = Scenarios.FloorGrain(t, rock);
+        var a = Scenarios.Collide(t, rock, 600f, grain);
+        var b = Scenarios.Collide(t, rock, 601f, grain);
         for (int i = 0; i < 60; i++) { a.Solver.Step(); b.Solver.Step(); }
         Assert.NotEqual(SimFingerprint.Hex(a.State), SimFingerprint.Hex(b.State));
     }

@@ -25,10 +25,9 @@ public sealed partial class Solver
     /// <para>Body-local so the caller can draw at a pose interpolated between the previous tick and
     /// the current one without re-deriving geometry: one rotation per body per frame.</para>
     ///
-    /// <para>With realized displacement removed this is simply the rest offset plus the rest polygon
-    /// — constant until a split re-centres the body. There is nothing to average and nothing to
-    /// cache: two cells sharing a Voronoi corner place it at the same point by construction, which
-    /// is what the shared-vertex skinning used to have to work to achieve.</para>
+    /// <para>This is the rest offset plus the rest polygon — constant until a carve or a split
+    /// changes it — so two cells sharing a Voronoi corner place it at the same point by
+    /// construction.</para>
     /// </remarks>
     /// <returns>Vertex count written, or 0 for a dead cell.</returns>
     public int CellLocalPolygon(int cell, Span<float> outX, Span<float> outY)

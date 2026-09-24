@@ -17,9 +17,6 @@ public struct Contact
     public float Ln;   // normal impulse for THIS substep (XPBD lambda; reset each substep)
     public float Lt;   // accumulated tangential impulse
 
-    /// <summary>Work this contact did against the approach this substep — what carving is paid from.</summary>
-    public float Work;
-
     // Reference state captured when the manifold was built, so a substep can refresh the contact
     // from rigid motion instead of re-running the narrow phase. Depth0 is signed: negative means
     // the pair was speculative — tracked but not yet touching.
@@ -34,22 +31,19 @@ public struct Contact
 /// The destruction solver: one fixed tick of the bonded-particle model.
 /// </summary>
 /// <remarks>
-/// <para>A transcription of <c>step()</c> in <c>prototypes/stress-fracture-v9.html</c>. The order of
-/// operations is the specification, not an implementation detail — the bond solve and the contact
-/// solve are both Gauss-Seidel, so reordering them changes the result. Contacts are solved in the
-/// order they are built, which is derived from cell index order; bonds are visited in index order;
-/// bodies in index order.</para>
+/// <para>The order of operations is the specification, not an implementation detail — the bond
+/// solve and the contact solve are both Gauss-Seidel, so reordering them changes the result.
+/// Contacts are solved in the order they are built, which is derived from cell index order; bonds
+/// are visited in index order; bodies in index order.</para>
 ///
-/// <para><b>Representation.</b> Cells never move relative to their body. Deformation is bookkept per
+/// <para><b>Representation.</b> Cells never move relative to their body: each sits at its rest
+/// offset, so the collider and the renderer see rigid rest geometry. Deformation is bookkept per
 /// bond as a stretch (normal, shear, bending) and carried dynamically by a per-cell deviation
-/// velocity field. What the collider and the renderer see is <c>rest + u</c>, where <c>u</c>
-/// integrates that field — but the solver itself always works in rest space. The two are reconciled
-/// by shared-vertex skinning, which places every copy of a shared polygon vertex at the average of
-/// where its sharing cells put it, so a bonded pair cannot open a gap.</para>
+/// velocity field, which <see cref="DecomposeMotion"/> keeps free of rigid motion.</para>
 ///
-/// <para><b>No positional solver.</b> Overlap during an impact is deformation, and is consumed by
-/// <c>u</c> elastically and by plastic denting through the rebake. The only positional nudge is for
-/// bond-less rubble, which has no deformation outlet at all.</para>
+/// <para><b>Overlap.</b> Contacts resolve overlap through a capped positional bias in the velocity
+/// solve, and carving removes material where contact pressure exceeds the crush threshold. The
+/// only direct positional correction is a nudge between two bond-less single cells.</para>
 /// </remarks>
 public sealed partial class Solver
 {
@@ -67,32 +61,25 @@ public sealed partial class Solver
     private readonly List<List<int>> _bucketPool = new();
     private int _bucketsUsed;
 
-    private float[] _skinX = Array.Empty<float>();   // skinned polygon vertices, world space
-    private float[] _skinY = Array.Empty<float>();
-    private int[] _skinStamp = Array.Empty<int>();
+    private float[] _worldX = Array.Empty<float>();   // cell polygons in world space, cached per substep
+    private float[] _worldY = Array.Empty<float>();
+    private int[] _worldStamp = Array.Empty<int>();
 
     /// <summary>
     /// Contact pressure summed over one cell's contacts, within one substep. Scratch, not state:
-    /// filled by <c>SolveContact</c> and drained to zero by <c>AccumulateCrushDose</c> in the same
+    /// filled by <c>SolveContact</c> and drained to zero by <c>ApplyCarving</c> in the same
     /// substep, so it never survives into a snapshot and never reaches the fingerprint.
     /// </summary>
     private float[] _cellPress = Array.Empty<float>();
     /// <summary>Last tick on which each body was party to a contact, or -1. Indexed by body, but
     /// sized by cell count, which bounds it since every body owns at least one cell.</summary>
     private int[] _bodyTouchTick = Array.Empty<int>();
-    private float[] _skinMinX = Array.Empty<float>(), _skinMaxX = Array.Empty<float>();
-    private float[] _skinMinY = Array.Empty<float>(), _skinMaxY = Array.Empty<float>();
-
-    // Cell-local transformed vertices, cached per substep. Skinning averages each shared vertex
-    // over the cells that own it, so without this the same neighbour vertex is transformed once
-    // for every cell in its group — nine transforms where three suffice for a typical Voronoi
-    // vertex. This was the dominant cost in a packed scene.
+    private float[] _worldMinX = Array.Empty<float>(), _worldMaxX = Array.Empty<float>();
+    private float[] _worldMinY = Array.Empty<float>(), _worldMaxY = Array.Empty<float>();
 
     // Body rotation trig, cached per epoch. SimMath is a software libm — every Sin/Cos is a
-    // Cody-Waite reduction plus a polynomial — and the naive code called it once per CELL in the
-    // skinning and twice per CONTACT in the solve, which came to roughly forty thousand software
-    // trig calls per tick in a packed scene. A body's rotation is constant between integrations,
-    // so one call per body per epoch is all that is needed.
+    // Cody-Waite reduction plus a polynomial — so one call per body per epoch replaces one per cell
+    // and two per contact. A body's rotation is constant between integrations.
     private float[] _bodyCa = Array.Empty<float>(), _bodySa = Array.Empty<float>();
     private int[] _bodyRotStamp = Array.Empty<int>();
     private int _rotEpoch = 1;
@@ -135,16 +122,6 @@ public sealed partial class Solver
 
     /// <summary>Per-tick work counters. Diagnostics only; never read by the simulation.</summary>
     public SolverCounters C;
-
-    // Contact coherence measurement. Diagnostics only: how much of the contact set survives from
-    // one substep to the next, and how far a surviving contact's depth moves. Together these say
-    // whether the narrow phase could run less often than every substep.
-    private readonly Dictionary<long, float> _prevContacts = new();
-    private readonly Dictionary<long, float> _thisContacts = new();
-    public bool MeasureCoherence;
-    public double DepthDeltaSum;
-    public double DepthDeltaMax;
-    public long DepthDeltaCount;
 
     private float _specMargin = 4f;   // speculative admission margin, set per tick by BuildPairs
 
@@ -223,11 +200,6 @@ public sealed partial class Solver
     private int _boundsBodies = -1;
 
     /// <summary>
-    /// Splits the body array so each chunk carries about the same bond count, not the same body
-    /// count. Recomputed once a tick — topology only changes at tick boundaries — and cached, so
-    /// all eighteen dispatches in a tick reuse one split.
-    /// </summary>
-    /// <summary>
     /// Dispatches one pass over body ranges and folds the per-chunk counters back in chunk order.
     /// </summary>
     private void RunOverBodies(Action<int, int, int> pass)
@@ -243,6 +215,10 @@ public sealed partial class Solver
         }
     }
 
+    /// <summary>
+    /// Splits the body array so each chunk carries about the same bond count, not the same body
+    /// count, and caches the split for every dispatch that follows until the body set changes.
+    /// </summary>
     private int[] BondChunkBounds()
     {
         int nc = Jobs!.Chunks;
@@ -273,12 +249,6 @@ public sealed partial class Solver
         return _bondChunkBounds;
     }
 
-
-    private float[] _polyAx = new float[64];
-    private float[] _polyAy = new float[64];
-    private float[] _polyBx = new float[64];
-    private float[] _polyBy = new float[64];
-
     // split scratch
     private int[] _comp = Array.Empty<int>();
     private int[] _stack = Array.Empty<int>();
@@ -289,15 +259,9 @@ public sealed partial class Solver
     private int[] _parentOf = Array.Empty<int>();
 
     /// <summary>Marks a body as having lost a bond or a cell, so the topology pass will visit it.</summary>
-    /// <summary>
-    /// Flags a body for the topology rebuild.
-    /// </summary>
     /// <remarks>
-    /// This kept a running count alongside the flags, which was a shared write and therefore a race
-    /// once damage ran across bodies in parallel: increments were lost, the rebuild was skipped, and
-    /// the result depended on how the chunks happened to interleave. The flag itself is per body and
-    /// safe; the count is now derived by scanning them, which costs one pass over bodies once a tick
-    /// against a value that could not be trusted.
+    /// A per-body flag and nothing else: a shared running count would be written by several chunks
+    /// when damage runs in parallel. <see cref="AnyDirty"/> derives the count by scanning.
     /// </remarks>
     private void MarkDirty(int b)
     {
@@ -337,11 +301,6 @@ public sealed partial class Solver
         return false;
     }
 
-    // rebake scratch
-    private float[] _wx = Array.Empty<float>();
-    private float[] _wy = Array.Empty<float>();
-    private float[] _wt = Array.Empty<float>();
-
     public Solver(SimState state, in SimTuning tuning)
     {
         _s = state;
@@ -350,55 +309,39 @@ public sealed partial class Solver
 
     public ref SimTuning Tuning => ref _tune;
 
-    /// <summary>Diagnostics, mirroring the prototype's <c>stats</c>. Not part of the sim state.</summary>
-    // ── contact-stress instrumentation (off by default, for the comminution study) ────────────
-    //
-    // Reads the same per-cell pressure the criterion runs on, so a sweep over CrushThreshold answers
-    // "what would this material have done" without re-running the sim per candidate value.
-    public bool MeasureStress;
-    public float CrushThreshold;
-    public readonly long[] StressHist = new long[40];   // log2 buckets, bucket i = [2^i, 2^(i+1))
-    public float PeakStress;
-    /// <summary>Peak of the impulse (braking) term alone, for reading the two apart.</summary>
-    public float PeakDyn;
-    /// <summary>Peak of the confining (penetration) term alone.</summary>
-    public float PeakConf;
-    /// <summary>Peak per-contact carve work in a substep. Diagnostics.</summary>
-    public float PeakWork;
-    public long DbgCalls, DbgDead, DbgGate, DbgWc, DbgWant, DbgArea, DbgRemoved, DbgCarved;
-    public int DbgCapHit; public double DbgCapExcess;
+    /// <summary>The model constants, read in place from the tuning.</summary>
+    private ref readonly ModelConstants K => ref _tune.Constants;
 
-    // ── carve log: every clip, with the direction it used. Diagnostics only. ──
-    /// <summary>Diagnostics: follow one cell through the contact solve and the carve.</summary>
+    // ── diagnostics: read by tools, never by the simulation ──────────────────
+
+    /// <summary>Follow one cell through the contact solve and the carve; -1 traces nothing.</summary>
     public int TraceCell = -1;
     public System.Action<string>? TraceSink;
 
-    public bool CarveLogging;
-    public int[] CarveLogCell = new int[4096];
-    public float[] CarveLogNx = new float[4096];
-    public float[] CarveLogNy = new float[4096];
-    public float[] CarveLogArea = new float[4096];
-    public int CarveLogCount;
-    public float[] CrushDose = Array.Empty<float>();
+    /// <summary>Carve calls, and how often the v1 depth cap bound (with its mean overshoot).</summary>
+    public long DbgCalls;
+    public int DbgCapHit; public double DbgCapExcess;
 
+    /// <summary>Bonds separated by cohesive failure.</summary>
     public int Broken;
+    /// <summary>Cells removed as debris: comminuted, or exported as free rubble.</summary>
     public int Dust;
+    /// <summary>Cells comminuted.</summary>
     public int Crushed;
 
-    /// <summary>Cell-areas' worth of material carved away, as a fraction sum. Diagnostics.</summary>
+    /// <summary>Cell-areas' worth of material carved away, as a fraction sum.</summary>
     public float ShedArea;
-    public int Rebakes;
+    /// <summary>Deepest contact penetration seen during the last tick.</summary>
     public float MaxOverlap;
-    public float PlasticWork;
+    /// <summary>Elastic energy released as fly-apart impulse by snapping bonds.</summary>
     public float RecoilEnergy;
     public float DustMass;
+
+    /// <summary>The ledger: momentum and energy that left the simulation with removed material.</summary>
     public float ExportedPx;
     public float ExportedPy;
     public float ExportedKe;
 
-    private const float RebakeThreshold = 1.0f;
-    private const int DustFreeTicks = 3;
-    private const int DustDeepTicks = 4;
 
     /// <summary>
     /// Called once as each phase of the tick completes, for profiling. Null by default, and the
@@ -422,25 +365,21 @@ public sealed partial class Solver
 
     /// <summary>
     /// Cell <paramref name="c"/>'s collider polygon in world space, cached for the substep. Returns
-    /// the offset into <see cref="_skinX"/>/<see cref="_skinY"/>.
+    /// the offset into <see cref="_worldX"/>/<see cref="_worldY"/>.
     /// </summary>
     /// <remarks>
-    /// <para><b>There is no skinning any more.</b> With realized displacement gone a cell sits
-    /// exactly at its rest offset, so its body-local polygon is simply <c>CellR + q</c> — constant
-    /// until a split re-centres the body — and two cells sharing a Voronoi corner place it at the
-    /// same point <i>by construction</i>. The shared-vertex averaging that used to be needed to make
-    /// that true, walking every vertex's group and transforming each member's polygon, is gone with
-    /// it. What remains is one rotation per body applied to a fixed local polygon.</para>
+    /// <para>A cell sits exactly at its rest offset, so its body-local polygon is <c>CellR + q</c>
+    /// and this is one rotation per body applied to it.</para>
     ///
-    /// <para><b>Why still cached.</b> A cell in a crowded pile takes part in many candidate pairs and
+    /// <para><b>Why cached.</b> A cell in a crowded pile takes part in many candidate pairs and
     /// presents the same polygon to all of them. The cache is keyed on the substep, so it holds
     /// exactly as long as the body pose does.</para>
     /// </remarks>
-    private int SkinCell(int c)
+    private int WorldPolygon(int c)
     {
         int off = _s.PolyOff[c];
-        if (_skinStamp[c] == _s.Substep) { C.SkinCacheHit++; return off; }
-        _skinStamp[c] = _s.Substep;
+        if (_worldStamp[c] == _s.Substep) { C.SkinCacheHit++; return off; }
+        _worldStamp[c] = _s.Substep;
         C.SkinComputed++;
 
         int body = _s.CellBody[c];
@@ -456,8 +395,8 @@ public sealed partial class Solver
             float ly = ry + _s.PolyY[off + v];
             float wx = bx + lx * co - ly * si;
             float wy = by + lx * si + ly * co;
-            _skinX[off + v] = wx;
-            _skinY[off + v] = wy;
+            _worldX[off + v] = wx;
+            _worldY[off + v] = wy;
             if (v == 0) { minX = maxX = wx; minY = maxY = wy; }
             else
             {
@@ -465,29 +404,29 @@ public sealed partial class Solver
                 if (wy < minY) minY = wy; if (wy > maxY) maxY = wy;
             }
         }
-        _skinMinX[c] = minX; _skinMaxX[c] = maxX;
-        _skinMinY[c] = minY; _skinMaxY[c] = maxY;
+        _worldMinX[c] = minX; _worldMaxX[c] = maxX;
+        _worldMinY[c] = minY; _worldMaxY[c] = maxY;
         return off;
     }
 
-    private void EnsureSkin()
+    private void EnsureContactScratch()
     {
-        if (_skinX.Length >= _s.PolyCount && _skinStamp.Length >= _s.CellCount
-            && _skinMinX.Length >= _s.CellCount && _cellPress.Length >= _s.CellCount
+        if (_worldX.Length >= _s.PolyCount && _worldStamp.Length >= _s.CellCount
+            && _worldMinX.Length >= _s.CellCount && _cellPress.Length >= _s.CellCount
             && _bodyTouchTick.Length >= _s.CellCount) return;
         int np = System.Math.Max(1, _s.PolyCount);
-        _skinX = new float[np];
-        _skinY = new float[np];
+        _worldX = new float[np];
+        _worldY = new float[np];
         int nc = System.Math.Max(1, _s.CellCount);
-        _skinMinX = new float[nc]; _skinMaxX = new float[nc];
-        _skinMinY = new float[nc]; _skinMaxY = new float[nc];
+        _worldMinX = new float[nc]; _worldMaxX = new float[nc];
+        _worldMinY = new float[nc]; _worldMaxY = new float[nc];
         _cellPress = new float[nc];
         var bt = new int[nc];
         for (int i = 0; i < nc; i++) bt[i] = -1;
         _bodyTouchTick = bt;
         var st = new int[nc];
         for (int i = 0; i < nc; i++) st[i] = -1;
-        _skinStamp = st;
+        _worldStamp = st;
     }
 
     private void UpdateCenters()
@@ -539,31 +478,31 @@ public sealed partial class Solver
         UpdateCenters();
         PackBroad();
 
-        float vmax = 0f, cellMax = 30f, cellMin = 0f;
+        float vmax = 0f, cellMax = K.GridCellMin, cellMin = 0f;
         if (_bodyMargin.Length < _s.BodyCount) _bodyMargin = new float[_s.BodyCount * 2];
         for (int b = 0; b < _s.BodyCount; b++)
         {
-            float sp = SimMath.Hypot(_s.BodyVx[b], _s.BodyVy[b]) + SimMath.Abs(_s.BodyW[b]) * 150f;
+            float sp = SimMath.Hypot(_s.BodyVx[b], _s.BodyVy[b]) + SimMath.Abs(_s.BodyW[b]) * K.SpinReach;
             if (sp > vmax) vmax = sp;
 
             // Each body carries its OWN reach. The grid still has to be sized for the fastest body
             // in the scene, but the pair test does not: sharing one global margin let a single fast
             // body inflate every test, and measured at 18.5k cells that was admitting 53% more
-            // pairs than could ever touch — each of which then paid for two cell skins to be
+            // pairs than could ever touch — each of which then paid for two world polygons to be
             // rejected by a bounding box.
-            _bodyMargin[b] = SimMath.Min(50f, 2f + sp * Dt);
+            _bodyMargin[b] = SimMath.Min(K.BodyMarginMax, K.BodyMarginBase + sp * Dt);
 
-            float cz = _s.BodyCellSize[b] * 2f;
+            float cz = _s.BodyCellSize[b] * K.GridCellFactor;
             if (cz > cellMax) cellMax = cz;
             if (cz > 0f && (cellMin == 0f || cz < cellMin)) cellMin = cz;
         }
-        if (cellMin == 0f) cellMin = 30f;
+        if (cellMin == 0f) cellMin = K.GridCellMin;
 
         // How far a body may travel before the manifold's held normals and cell pairings stop
         // describing the scene. A quarter of the smallest cell: below that the refresh is accurate,
         // above it the narrow phase has to run again.
         _mfDriftLimit = _tune.ManifoldDrift * cellMin;
-        float margin = SimMath.Min(100f, 4f + vmax * Dt);
+        float margin = SimMath.Min(K.GridMarginMax, K.GridMarginBase + vmax * Dt);
         float cs = cellMax + margin;
 
         // The manifold is built once a tick, so a pair must be admitted speculatively if it could
@@ -634,7 +573,7 @@ public sealed partial class Solver
     private static readonly int[] HalfNbrY = { 0, -1, 0, 1, 1 };
 
     /// <summary>
-    /// The reference's grid hash, reproduced exactly. Only ever probed, never iterated — a hash
+    /// The broadphase grid hash. Only ever probed, never iterated — a hash
     /// container's enumeration order is not defined and must not reach the simulation.
     /// </summary>
     private static int GridKey(int gx, int gy)
@@ -658,7 +597,7 @@ public sealed partial class Solver
         C.NarrowCalls++;
         CaptureManifoldPose();
         if (_pairCount == 0) return;
-        EnsureSkin();
+        EnsureContactScratch();
         UpdateCenters();
         PackBroad();
 
@@ -674,20 +613,20 @@ public sealed partial class Solver
             float rr = dc.Rad + db.Rad;
             if (ddx * ddx + ddy * ddy > rr * rr) { C.NarrowRejectRadius++; continue; }
 
-            int oa = SkinCell(c), ob = SkinCell(o);
+            int oa = WorldPolygon(c), ob = WorldPolygon(o);
 
             // BIT-SAFE REJECTION. Two polygons whose axis-aligned boxes are disjoint cannot
             // overlap, so SAT would have returned no contact. Four comparisons replace roughly two
             // hundred operations, and in a packed pile the circumscribed-radius test above rejects
             // very little because the cells genuinely ARE close.
-            if (_skinMaxX[c] < _skinMinX[o] || _skinMinX[c] > _skinMaxX[o] ||
-                _skinMaxY[c] < _skinMinY[o] || _skinMinY[c] > _skinMaxY[o])
+            if (_worldMaxX[c] < _worldMinX[o] || _worldMinX[c] > _worldMaxX[o] ||
+                _worldMaxY[c] < _worldMinY[o] || _worldMinY[c] > _worldMaxY[o])
             { C.NarrowRejectAabb++; continue; }
 
             C.SatCalls++;
             int lc = _s.PolyLen[c], lo = _s.PolyLen[o];
-            if (!Sat(_skinX.AsSpan(oa, lc), _skinY.AsSpan(oa, lc),
-                     _skinX.AsSpan(ob, lo), _skinY.AsSpan(ob, lo), _specMargin,
+            if (!Sat(_worldX.AsSpan(oa, lc), _worldY.AsSpan(oa, lc),
+                     _worldX.AsSpan(ob, lo), _worldY.AsSpan(ob, lo), _specMargin,
                      out float nx, out float ny, out float depth, out float px, out float py,
                      out int axes, out int projections))
             { C.SatSeparated++; C.SatAxesTested += axes; C.SatProjections += projections; continue; }
@@ -697,7 +636,7 @@ public sealed partial class Solver
             // cells are more than about half a cell deep that axis flips to the far side and the
             // contact pushes the impactor THROUGH. Past that depth the centre-to-centre direction
             // is the only trustworthy normal.
-            float lim = 0.5f * SimMath.Min(_s.CellRad[c], _s.CellRad[o]);
+            float lim = K.DeepOverlapNormal * SimMath.Min(_s.CellRad[c], _s.CellRad[o]);
             if (depth > lim)
             {
                 float L = SimMath.Hypot(ddx, ddy);
@@ -705,20 +644,6 @@ public sealed partial class Solver
             }
 
             if (depth > MaxOverlap) MaxOverlap = depth;
-
-            if (MeasureCoherence)
-            {
-                long key = ((long)c << 32) | (uint)o;
-                _thisContacts[key] = depth;
-                if (_prevContacts.TryGetValue(key, out float prevDepth))
-                {
-                    C.ContactRepeatPair++;
-                    double d = System.Math.Abs(depth - prevDepth);
-                    DepthDeltaSum += d;
-                    if (d > DepthDeltaMax) DepthDeltaMax = d;
-                    DepthDeltaCount++;
-                }
-            }
 
             if (_contactCount >= _contacts.Length) Array.Resize(ref _contacts, _contacts.Length * 2);
             _contacts[_contactCount++] = new Contact
@@ -728,13 +653,6 @@ public sealed partial class Solver
                 Ax0 = _s.CellPx[c], Ay0 = _s.CellPy[c],
                 Bx0 = _s.CellPx[o], By0 = _s.CellPy[o],
             };
-        }
-
-        if (MeasureCoherence)
-        {
-            _prevContacts.Clear();
-            foreach (var kv in _thisContacts) _prevContacts[kv.Key] = kv.Value;
-            _thisContacts.Clear();
         }
     }
 
@@ -755,7 +673,7 @@ public sealed partial class Solver
             float m = _s.BodyM[b];
             // Radius of gyration doubled: for a disc the rim sits at sqrt(2) times it, so this
             // over-estimates slightly, which is the safe direction for a staleness bound.
-            _mfRad[b] = m > 1e-9f ? 2f * SimMath.Sqrt(_s.BodyI[b] / m) : 0f;
+            _mfRad[b] = m > 1e-9f ? K.ManifoldRimFactor * SimMath.Sqrt(_s.BodyI[b] / m) : 0f;
         }
         _mfBodies = n;
     }
@@ -828,16 +746,7 @@ public sealed partial class Solver
         }
     }
 
-    private void EnsurePolyBuf(int n)
-    {
-        if (_polyAx.Length >= n) return;
-        int cap = _polyAx.Length;
-        while (cap < n) cap <<= 1;
-        _polyAx = new float[cap]; _polyAy = new float[cap];
-        _polyBx = new float[cap]; _polyBy = new float[cap];
-    }
-
-    /// <summary>Separating-axis test for two convex polygons, transcribed from the reference.</summary>
+    /// <summary>Separating-axis test for two convex polygons.</summary>
     /// <remarks>
     /// Takes spans rather than array-plus-offset so the JIT can prove every index is in range and
     /// drop the bounds checks. The inner loops make roughly three hundred element reads per call

@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using AsteroidsSim.Config;
 using AsteroidsSim.Fracture;
 using AsteroidsSim.Math;
 using Godot;
@@ -17,9 +19,11 @@ namespace AsteroidsGame.Viewer;
 /// morphology asserted over perturbation ensembles, a state fingerprint. Those catch arithmetic.
 /// They cannot say whether glass still shatters, whether steel still necks rather than snapping, or
 /// whether cracks still run to a surface instead of appearing inside a body. This puts the solver on
-/// screen so that can be judged by eye, against
-/// <c>prototypes/stress-fracture-v9.html</c>, whose colour scheme it deliberately copies so the two
-/// can be compared side by side.</para>
+/// screen so that can be judged by eye.</para>
+///
+/// <para><b>Configuration.</b> Every number the model is built from comes from <c>Assets/sim.json</c>,
+/// loaded at start and reloaded with L. The panel's sliders are live overrides on top of it; a
+/// reload discards them.</para>
 ///
 /// <para><b>Not the game.</b> <c>Sim/SimRoot.cs</c> is the Phase-1 game host; this is a tool. They
 /// are kept apart on purpose.</para>
@@ -27,7 +31,7 @@ namespace AsteroidsGame.Viewer;
 /// <para><b>Geometry path.</b> The batched <c>RenderingServer</c> route Spike A validated: cell fills
 /// as one triangle array, bonds and outlines as one multiline, buffers allocated once and reused.
 /// Cell polygons come back in body-local space and the body transform is applied here, which is what
-/// makes interpolation affordable — one rotation per body per frame rather than a re-skin.</para>
+/// makes interpolation affordable.</para>
 /// </remarks>
 public partial class Viewer : Node2D
 {
@@ -39,10 +43,11 @@ public partial class Viewer : Node2D
         "steel shell + rock core", "blast",
     };
 
-    private static readonly SimMaterial[] Materials =
-    {
-        SimMaterial.Rock, SimMaterial.Ice, SimMaterial.Glass, SimMaterial.Sandstone, SimMaterial.Steel,
-    };
+    /// <summary>The loaded configuration: tuning, model constants and the material table.</summary>
+    private SimConfig _cfg = null!;
+    /// <summary>Why the last reload was refused, shown on the readout until the next good one.</summary>
+    private string? _configError;
+    private SimMaterial[] Materials => _cfg.Materials;
 
     private int _scenario;
     private int _materialIndex;
@@ -52,8 +57,8 @@ public partial class Viewer : Node2D
     /// made half the interesting questions unaskable: a steel slug into rock and a rock into steel
     /// are different experiments, and neither is a body colliding with itself.
     /// </summary>
-    private int _impactorMaterialIndex = 4;   // steel
-    private SimTuning _tune = SimTuning.Default;
+    private int _impactorMaterialIndex;
+    private SimTuning _tune;
 
     // Comminution multipliers on the selected materials' authored pair. See Crushed().
     /// <summary>
@@ -78,10 +83,10 @@ public partial class Viewer : Node2D
     private readonly Label[] _matLabels = new Label[8];
     private Scenarios.Result _scene;
 
-    // Build-time knobs. Grain is cell AREA, so cell size is its square root: 30 gives 5.5 px cells,
-    // 900 gives 30 px. Lowering it is the fastest way to make a body expensive — cell count scales
-    // with 1/grain — which is why it belongs on a slider next to the frame timings.
-    private float _grain = 900f;
+    // Build-time knobs. Grain is cell AREA, so cell size is its square root: 900 gives 30 px cells.
+    // 0 means the floor — the finest grain the scene's materials may be built at, which is what the
+    // tests use (Scenarios.FloorGrain) — and is the default.
+    private float _grain;
     private float _impactorSpeed = 900f;
     private float _impactorMass = 3f;
     /// Round radius in px, independent of its mass. 0 keeps the legacy 15*sqrt(mass).
@@ -158,7 +163,7 @@ public partial class Viewer : Node2D
     private HSlider _confineSlider = null!;
     private HSlider _biasSlider = null!, _maxBiasSlider = null!;
     private CheckBox _crackPushBox = null!, _splitBox = null!, _grainLockBox = null!;
-    private HSlider _crackCapSlider = null!;
+    private HSlider _crackCapSlider = null!, _ceilingSlider = null!;
     private OptionButton _roundPick = null!;
     private HSlider _blastPresSlider = null!, _blastRadSlider = null!, _fuseSlider = null!;
     private HSlider _weibullSlider = null!, _anisoSlider = null!, _grainSlider2 = null!, _flawSlider = null!;
@@ -177,6 +182,10 @@ public partial class Viewer : Node2D
     private HSlider _grainSlider = null!, _speedSlider = null!, _massSlider = null!;
     private HSlider _strainSlider = null!, _toughSlider = null!, _substepSlider = null!;
     private HSlider _slowSlider = null!;
+
+    /// <summary>Each slider's caption and formatter, so a value can be shown without firing its
+    /// handler — which would round a configured value to the slider's step and write it back.</summary>
+    private readonly Dictionary<HSlider, (Label Caption, string Name, Func<double, string> Format)> _captions = new();
     private CheckBox _fillBox = null!, _outlineBox = null!, _idBox = null!;
     private OptionButton _fillPick = null!;
     private OptionButton _bondPick = null!;
@@ -198,15 +207,22 @@ public partial class Viewer : Node2D
     private Color[] _boldCols = Array.Empty<Color>();
     private int _boldCount;
 
-    private float[] _polyX = new float[64];
-    private float[] _polyY = new float[64];
 
-    // Interpolation: the pose each body had at the end of the previous tick.
-    private float[] _prevX = Array.Empty<float>();
-    private float[] _prevY = Array.Empty<float>();
+    // Interpolation, per CELL: each cell's world centre and orientation at the start of the tick
+    // being shown. A cell's world pose is continuous through a split — the fragment is re-centred,
+    // not moved — so this interpolates straight across topology changes, which a per-body pose
+    // cannot: a split renumbers bodies.
+    private float[] _prevCx = Array.Empty<float>(), _prevCy = Array.Empty<float>();
     private float[] _prevRot = Array.Empty<float>();
-    private int _prevCount;
-    private bool _poseComparable;     // false when topology changed, so poses cannot be matched up
+    private bool[] _prevLive = Array.Empty<bool>();
+    private int _prevCells;
+
+    // The pose each cell is drawn at this frame, shared by fills, bonds, vertex marks and ids.
+    private float[] _drawCx = Array.Empty<float>(), _drawCy = Array.Empty<float>();
+    private float[] _drawSi = Array.Empty<float>(), _drawCo = Array.Empty<float>();
+
+    /// <summary>Whether the last <see cref="_Draw"/> put ids on screen; one more redraw clears them.</summary>
+    private bool _idsOnScreen;
 
     // ── timing ───────────────────────────────────────────────────────────────
 
@@ -241,7 +257,7 @@ public partial class Viewer : Node2D
     private static readonly string[] PhaseNames =
     {
         "broadphase", "narrow phase", "contact refresh", "inertial loads", "bond forces",
-        "contact solve", "bond integrate", "decompose", "realize", "damage",
+        "contact solve", "bond integrate", "decompose", "damping", "damage",
         "split", "settle", "dust",
     };
     private static double Smooth(double prev, double now) => prev <= 0 ? now : prev * 0.9 + now * 0.1;
@@ -270,6 +286,9 @@ public partial class Viewer : Node2D
         RenderingServer.SetDefaultClearColor(new Color(0.027f, 0.039f, 0.055f));
         for (int r = 0; r < MatRoles; r++) for (int f = 0; f < 8; f++) _matMul[r, f] = 1f;
         _headless = DisplayServer.GetName() == "headless";
+        _cfg = SimConfigFile.Load();
+        _tune = _cfg.Tuning;
+        _impactorMaterialIndex = MaterialIndex("steel");
         ParseArgs();
         if (!_headless) BuildUi();
         Reset();
@@ -360,19 +379,20 @@ public partial class Viewer : Node2D
 
         box.AddChild(new HSeparator());
 
-        // Step 5 rather than something coarser because grain is an AREA: the interesting end is the
-        // low one, where 30 to 60 takes cells from 5.5 px to 7.7 px and multiplies the cell count by
-        // two. The caption carries the square root, which is the number that is actually intuitive.
-        _grainSlider = AddSlider(box, "grain", 30, 2500, 5, _grain,
+        // Step 5 rather than something coarser because grain is an AREA. The caption carries the
+        // square root, which is the number that is actually intuitive. 0 is the floor: the finest
+        // grain the scene's materials may be built at, the same one the tests use.
+        _grainSlider = AddSlider(box, "grain", 0, 2500, 5, _grain,
             v => { _grain = (float)v; _needsReset = true; },
             v =>
             {
-                // Bodies are never built finer than their material can be integrated at the current
-                // substep count (BodyBuilder.MinGrain), so say when the slider asks for less.
-                float floor = BodyBuilder.MinGrain(ActiveMaterial, _tune);
+                // Bodies are never built finer than their materials can be integrated at the current
+                // substep count (BodyBuilder.MinGrain), so say what the scene is actually built at.
+                float floor = SceneFloorGrain();
+                if (v <= 0) return $"floor {floor:F0}  ({MathF.Sqrt(floor):F1} px cells), as the tests";
                 return v < floor
-                    ? $"{v:F0} -> {floor:F0}, the floor for {ActiveMaterial.Name}  ({MathF.Sqrt(floor):F0} px cells)"
-                    : $"{v:F0}  ({MathF.Sqrt((float)v):F0} px cells)";
+                    ? $"{v:F0} -> {floor:F0}, the floor for this scene  ({MathF.Sqrt(floor):F1} px cells)"
+                    : $"{v:F0}  ({MathF.Sqrt((float)v):F1} px cells)";
             });
 
         _speedSlider = AddSlider(box, "impactor speed", 100, 4000, 50, _impactorSpeed,
@@ -397,7 +417,7 @@ public partial class Viewer : Node2D
             v => { _tune.Substeps = (int)v; _needsReset = true; }, v => $"{v:F0}");
 
         box.AddChild(new HSeparator());
-        box.AddChild(new Label { Text = "material (multipliers over the authored table)" });
+        box.AddChild(new Label { Text = "material (multipliers over sim.json)" });
 
         // Which material the sliders below edit. Body and round are separate sets, so a round can be
         // tuned against a target without changing the target.
@@ -409,7 +429,7 @@ public partial class Viewer : Node2D
 
         // Log2, because the useful range is multiplicative and a linear slider over a 64x span
         // wastes nine tenths of its travel. Captions carry the ABSOLUTE value for the material the
-        // role currently resolves to, since that is the number to copy back into Materials.cs.
+        // role currently resolves to, since that is the number to copy back into sim.json.
         for (int f = 0; f < MatFieldNames.Length; f++)
         {
             int fi = f;
@@ -510,7 +530,7 @@ public partial class Viewer : Node2D
         // moved while watching a contact.
         _confineSlider = AddSlider(box, "confine weight", 0, 4, 0.05, _tune.CrushConfine,
             v => _tune.CrushConfine = (float)v, v => $"{v:F3}");
-        AddSlider(box, "overlap ceiling", 0, 1, 0.05, _tune.OverlapBackstop,
+        _ceilingSlider = AddSlider(box, "overlap ceiling", 0, 1, 0.05, _tune.OverlapBackstop,
             v => _tune.OverlapBackstop = (float)v,
             v => v <= 0 ? "off" : $"{v:F2} of the thinner cell's half-extent");
 
@@ -550,6 +570,11 @@ public partial class Viewer : Node2D
         reset.Pressed += Reset;
         buttons.AddChild(reset);
 
+        var reload = new Button { Text = "reload", TooltipText = "re-read Assets/sim.json (L)",
+                                  SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        reload.Pressed += ReloadConfig;
+        buttons.AddChild(reload);
+
         var pause = new Button { Text = "pause", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         pause.Pressed += () => { _running = !_running; pause.Text = _running ? "pause" : "resume"; };
         buttons.AddChild(pause);
@@ -571,7 +596,7 @@ public partial class Viewer : Node2D
     }
 
     /// <summary>A labelled slider whose caption shows the value in the units that mean something.</summary>
-    private static HSlider AddSlider(VBoxContainer parent, string name,
+    private HSlider AddSlider(VBoxContainer parent, string name,
         double min, double max, double step, double value,
         Action<double> apply, Func<double, string> format)
     {
@@ -589,7 +614,19 @@ public partial class Viewer : Node2D
             caption.Text = $"{name}   {format(v)}";
         };
         parent.AddChild(slider);
+        _captions[slider] = (caption, name, format);
         return slider;
+    }
+
+    /// <summary>
+    /// Shows <paramref name="value"/> on a slider without firing its handler. The caption gets the
+    /// exact value; the slider's knob snaps to its step, but nothing is written back.
+    /// </summary>
+    private void ShowValue(HSlider? slider, double value)
+    {
+        if (slider == null || !_captions.TryGetValue(slider, out var c)) return;
+        slider.SetValueNoSignal(value);
+        c.Caption.Text = $"{c.Name}   {c.Format(value)}";
     }
 
     /// <summary>
@@ -612,7 +649,7 @@ public partial class Viewer : Node2D
                 case "--cols": _fieldCols = System.Math.Clamp(v, 1, 64); break;
                 case "--rows": _fieldRows = System.Math.Clamp(v, 1, 64); break;
                 case "--spacing": _fieldSpacing = System.Math.Clamp(v, 60, 400); break;
-                case "--grain": _grain = System.Math.Clamp(v, 30, 2500); break;
+                case "--grain": _grain = System.Math.Clamp(v, 0, 2500); break;
                 case "--substeps": _tune.Substeps = System.Math.Clamp(v, 1, 64); break;
                 case "--speed": _impactorSpeed = System.Math.Clamp(v, 100, 4000); break;
                 case "--mass": _impactorMass = System.Math.Clamp(v, 1, 24); break;
@@ -631,6 +668,69 @@ public partial class Viewer : Node2D
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Re-reads <c>Assets/sim.json</c> and rebuilds the scene from it.
+    /// </summary>
+    /// <remarks>
+    /// The file is what runs afterwards: the panel's tuning overrides are replaced by the file's
+    /// values and the material multipliers go back to x1, so a value copied from the panel into the
+    /// file is not applied twice. A file that fails to load is refused, the running configuration
+    /// is kept, and the reason is shown on the readout.
+    /// </remarks>
+    private void ReloadConfig()
+    {
+        SimConfig next;
+        try
+        {
+            next = SimConfigFile.Load();
+            foreach (string name in new[] { "rock", "glass", "steel", "penetrator" }) next.Material(name);
+        }
+        catch (Exception e)
+        {
+            _configError = e.Message;
+            GD.PrintErr($"sim.json not reloaded: {e.Message}");
+            return;
+        }
+
+        string body = Materials[_materialIndex].Name, impactor = Materials[_impactorMaterialIndex].Name;
+        _cfg = next;
+        _configError = null;
+        _tune = next.Tuning;
+        _materialIndex = MaterialIndex(body);
+        _impactorMaterialIndex = MaterialIndex(impactor);
+        for (int r = 0; r < MatRoles; r++) for (int f = 0; f < 8; f++) _matMul[r, f] = 1f;
+        RefreshPanel();
+        Reset();
+    }
+
+    /// <summary>Puts every configured value back on the panel, without firing any handler.</summary>
+    private void RefreshPanel()
+    {
+        if (_materialPick == null) return;                       // headless: there is no panel
+        foreach (var (pick, index) in new[] { (_materialPick, _materialIndex), (_impactorPick, _impactorMaterialIndex) })
+        {
+            pick.Clear();
+            foreach (var m in Materials) pick.AddItem(m.Name);
+            pick.Selected = index;
+        }
+        ShowValue(_strainSlider, _tune.StrainScale);
+        ShowValue(_toughSlider, _tune.ToughnessScale);
+        ShowValue(_substepSlider, _tune.Substeps);
+        ShowValue(_biasSlider, _tune.ContactBias);
+        ShowValue(_maxBiasSlider, _tune.ContactMaxBias);
+        ShowValue(_weibullSlider, _tune.WeibullM);
+        ShowValue(_anisoSlider, _tune.Aniso);
+        ShowValue(_grainSlider2, _tune.GrainAngle * 180f / MathF.PI);
+        ShowValue(_flawSlider, _tune.SurfFlaw);
+        ShowValue(_crackCapSlider, _tune.CrackPushCap);
+        ShowValue(_confineSlider, _tune.CrushConfine);
+        ShowValue(_ceilingSlider, _tune.OverlapBackstop);
+        _grainLockBox.SetPressedNoSignal(_tune.GrainLock);
+        _crackPushBox.SetPressedNoSignal(_tune.CrackPush);
+        _splitBox.SetPressedNoSignal(_tune.SplitOnOpen);
+        RefreshMatSliders();
     }
 
     /// <summary>Saves the frame that has just been drawn, then exits.</summary>
@@ -670,8 +770,7 @@ public partial class Viewer : Node2D
                m.Rho * _matMul[role, (int)MatField.Rho],
                m.C * _matMul[role, (int)MatField.C],
                m.Strain * _matMul[role, (int)MatField.Strain],
-               SimMath.Max(1.001f, 1f + (m.Chi - 1f) * _matMul[role, (int)MatField.Chi]),
-               m.Yield, m.Duct,
+               SimMath.Max(_tune.Constants.MinChi, 1f + (m.Chi - 1f) * _matMul[role, (int)MatField.Chi]),
                m.Crush * _matMul[role, (int)MatField.Crush],
                m.CrushRate * _matMul[role, (int)MatField.Rate],
                SimMath.Min(0.95f, m.ShedLimit * _matMul[role, (int)MatField.Shed]),
@@ -682,7 +781,7 @@ public partial class Viewer : Node2D
     /// <summary>The material a role currently resolves to, with its multipliers applied.</summary>
     private SimMaterial RoleMaterial(int role)
         => role == 0 ? ActiveMaterial
-         : _round == Round.Pierce ? Tuned(SimMaterial.Penetrator, 1) : ImpactorMaterial;
+         : _round == Round.Pierce ? Tuned(_cfg.Material("penetrator"), 1) : ImpactorMaterial;
 
     /// <summary>Caption for one material slider: the multiplier, and the absolute it produces.</summary>
     private void MatCaption(int f)
@@ -721,35 +820,59 @@ public partial class Viewer : Node2D
 
     private SimMaterial ActiveMaterial => _scenario switch
     {
-        3 => Crushed(SimMaterial.Glass),
-        4 => Crushed(SimMaterial.Steel),
-        6 => Crushed(SimMaterial.Rock),                 // the core; the shell is steel
+        3 => Crushed(_cfg.Material("glass")),
+        4 => Crushed(_cfg.Material("steel")),
+        6 => Crushed(_cfg.Material("rock")),            // the core; the shell is steel
         _ => Crushed(Materials[_materialIndex]),
     };
+
+    /// <summary>The shell scenario's shell: steel, with the body role's multipliers.</summary>
+    private SimMaterial ShellMaterial => Tuned(_cfg.Material("steel"), 0);
+
+    /// <summary>Every material the current scenario builds a body from.</summary>
+    private SimMaterial[] SceneMaterials() => _scenario switch
+    {
+        0 or 2 or 5 or 7 => new[] { ActiveMaterial },                           // no impactor body
+        6 => new[] { ShellMaterial, ActiveMaterial, ImpactorMaterial },
+        _ => new[] { ActiveMaterial, ImpactorMaterial },
+    };
+
+    /// <summary>The finest grain every material in the scene may be built at — what the tests use.</summary>
+    private float SceneFloorGrain() => Scenarios.FloorGrain(_tune, SceneMaterials());
+
+    /// <summary>The grain the scene is built at: the slider's, never below the scene's floor.</summary>
+    private float SceneGrain() => MathF.Max(_grain, SceneFloorGrain());
+
+    private int MaterialIndex(string name)
+    {
+        for (int i = 0; i < Materials.Length; i++) if (Materials[i].Name == name) return i;
+        return 0;
+    }
 
     private void Reset()
     {
         var m = ActiveMaterial;
+        float grain = SceneGrain();
         _scene = _scenario switch
         {
-            0 => Scenarios.Collide(_tune, m, speed: 600f, grain: _grain),
-            1 => Scenarios.Projectile(_tune, m, _impactorSpeed, _impactorMass, _grain,
+            0 => Scenarios.Collide(_tune, m, speed: 600f, grain: grain),
+            1 => Scenarios.Projectile(_tune, m, _impactorSpeed, _impactorMass, grain,
                                       impactor: ImpactorMaterial),
-            2 => Scenarios.Spin(_tune, m, grain: _grain),
-            3 => Scenarios.Projectile(_tune, m, _impactorSpeed, _impactorMass, _grain,
+            2 => Scenarios.Spin(_tune, m, grain: grain),
+            3 => Scenarios.Projectile(_tune, m, _impactorSpeed, _impactorMass, grain,
                                       impactor: ImpactorMaterial),
-            4 => Scenarios.Projectile(_tune, m, _impactorSpeed, _impactorMass, _grain,
+            4 => Scenarios.Projectile(_tune, m, _impactorSpeed, _impactorMass, grain,
                                       impactor: ImpactorMaterial),
             // Shell and core are both parts of the BODY, so both take the body role's multipliers;
-            // the round that hits them takes the impactor role. Passing the raw table entries here
-            // made every material knob inert in this scenario.
-            6 => Scenarios.Shell(_tune, Tuned(SimMaterial.Steel, 0), m,
-                                 _impactorSpeed, _impactorMass, _grain, impactor: ImpactorMaterial),
-            7 => Scenarios.Blast(Scenarios.Collide(_tune, m, 0f, _grain), _tune,
+            // the round that hits them takes the impactor role.
+            6 => Scenarios.Shell(_tune, ShellMaterial, m,
+                                 _impactorSpeed, _impactorMass, grain, impactor: ImpactorMaterial),
+            7 => Scenarios.Blast(Scenarios.Collide(_tune, m, 0f, grain), _tune,
                                  370f, 350f, _blastPressure, _blastRadius),
-            _ => Scenarios.Field(_tune, m, _fieldCols, _fieldRows, 60f, _fieldSpacing, 60f, _grain),
+            _ => Scenarios.Field(_tune, m, _fieldCols, _fieldRows, 60f, _fieldSpacing, 60f, grain),
         };
         _needsReset = false;
+        ShowValue(_grainSlider, _grain);           // the floor moves with the scene and substeps
         _scene.Solver.PhaseMark = p =>
         {
             _phaseAcc[(int)p] += _phaseSw.Elapsed.TotalMilliseconds;
@@ -757,11 +880,7 @@ public partial class Viewer : Node2D
         };
         _ticks = 0;
         _shots = 0;
-        _poseComparable = false;
-        _prevCount = 0;
-
-        int maxLen = System.Math.Max(8, _scene.Solver.MaxPolyLen);
-        if (_polyX.Length < maxLen) { _polyX = new float[maxLen]; _polyY = new float[maxLen]; }
+        _prevCells = 0;
 
         if (!_headless) FitView();
     }
@@ -776,9 +895,6 @@ public partial class Viewer : Node2D
         _stepOnce = false;
 
         SimState s = _scene.State;
-        int bodiesBefore = s.BodyCount;
-        int brokenBefore = _scene.Solver.Broken;
-
         CapturePose(s);
 
         Array.Clear(_phaseAcc);
@@ -790,25 +906,77 @@ public partial class Viewer : Node2D
         _msTick = Smooth(_msTick, _sw.Elapsed.TotalMilliseconds);
         for (int i = 0; i < _phaseMs.Length; i++) _phaseMs[i] = Smooth(_phaseMs[i], _phaseAcc[i]);
         _ticks++;
-
-        // A split renumbers bodies, so index b before the tick and index b after it need not be the
-        // same body. Interpolating across that reads as a jump. Rather than track identity, notice
-        // the topology moved and draw the current pose for one frame.
-        _poseComparable = s.BodyCount == bodiesBefore && _scene.Solver.Broken == brokenBefore;
     }
 
+    /// <summary>Records every live cell's world centre and orientation before the tick is stepped.</summary>
     private void CapturePose(SimState s)
     {
-        if (_prevX.Length < s.BodyCount)
+        int n = s.CellCount;
+        if (_prevCx.Length < n)
         {
-            int cap = System.Math.Max(64, s.BodyCount * 2);
-            _prevX = new float[cap]; _prevY = new float[cap]; _prevRot = new float[cap];
+            int cap = System.Math.Max(256, n * 2);
+            _prevCx = new float[cap]; _prevCy = new float[cap]; _prevRot = new float[cap];
+            _prevLive = new bool[cap];
         }
+        Array.Clear(_prevLive, 0, n);
         for (int b = 0; b < s.BodyCount; b++)
         {
-            _prevX[b] = s.BodyX[b]; _prevY[b] = s.BodyY[b]; _prevRot[b] = s.BodyRot[b];
+            float rot = s.BodyRot[b], si = MathF.Sin(rot), co = MathF.Cos(rot);
+            int off = s.BodyCellOff[b], len = s.BodyCellLen[b];
+            for (int i = 0; i < len; i++)
+            {
+                int c = s.BodyCells[off + i];
+                if (s.Dead(c)) continue;
+                _prevCx[c] = s.BodyX[b] + s.CellRx[c] * co - s.CellRy[c] * si;
+                _prevCy[c] = s.BodyY[b] + s.CellRx[c] * si + s.CellRy[c] * co;
+                _prevRot[c] = rot;
+                _prevLive[c] = true;
+            }
         }
-        _prevCount = s.BodyCount;
+        _prevCells = n;
+    }
+
+    /// <summary>
+    /// The pose every live cell is drawn at this frame: its current world centre and orientation, or
+    /// the blend from where it was at the start of the tick when <paramref name="alpha"/> is below 1.
+    /// A cell that did not exist then (a round just fired) is drawn where it is.
+    /// </summary>
+    private void ComputeDrawPoses(SimState s, float alpha)
+    {
+        int n = s.CellCount;
+        if (_drawCx.Length < n)
+        {
+            int cap = System.Math.Max(256, n * 2);
+            _drawCx = new float[cap]; _drawCy = new float[cap]; _drawSi = new float[cap]; _drawCo = new float[cap];
+        }
+        float ia = 1f - alpha;
+        for (int b = 0; b < s.BodyCount; b++)
+        {
+            float rot = s.BodyRot[b], si = MathF.Sin(rot), co = MathF.Cos(rot);
+            int off = s.BodyCellOff[b], len = s.BodyCellLen[b];
+            for (int i = 0; i < len; i++)
+            {
+                int c = s.BodyCells[off + i];
+                if (s.Dead(c)) continue;
+                float cx = s.BodyX[b] + s.CellRx[c] * co - s.CellRy[c] * si;
+                float cy = s.BodyY[b] + s.CellRx[c] * si + s.CellRy[c] * co;
+                if (alpha < 1f && c < _prevCells && _prevLive[c])
+                {
+                    // Shortest-arc blend, so a cell crossing the +/-pi seam does not spin backwards.
+                    float d = rot - _prevRot[c];
+                    while (d > MathF.PI) d -= MathF.Tau;
+                    while (d < -MathF.PI) d += MathF.Tau;
+                    float r = _prevRot[c] + d * alpha;
+                    _drawCx[c] = _prevCx[c] * ia + cx * alpha;
+                    _drawCy[c] = _prevCy[c] * ia + cy * alpha;
+                    _drawSi[c] = MathF.Sin(r); _drawCo[c] = MathF.Cos(r);
+                }
+                else
+                {
+                    _drawCx[c] = cx; _drawCy[c] = cy; _drawSi[c] = si; _drawCo[c] = co;
+                }
+            }
+        }
     }
 
     // ── drawing ──────────────────────────────────────────────────────────────
@@ -823,8 +991,12 @@ public partial class Viewer : Node2D
         // but it made the pictures useless for checking anything.
         if (_shotPath != null) FitView();
 
-        float alpha = _running && _poseComparable
-            ? (float)Engine.GetPhysicsInterpolationFraction()
+        // Progress through the interval between two ticks. In slow motion a tick is stepped only every
+        // _slowMo physics frames, so the interval spans all of them: interpolating per physics frame
+        // instead replays the same prev->current blend _slowMo times, and the bodies snap back at
+        // the start of each one.
+        float alpha = _running
+            ? MathF.Min(1f, (_slowCounter + (float)Engine.GetPhysicsInterpolationFraction()) / _slowMo)
             : 1f;
 
         _sw.Restart();
@@ -834,7 +1006,7 @@ public partial class Viewer : Node2D
 
         _sw.Restart();
         Submit();
-        if (_showIds) QueueRedraw();
+        if (_showIds || _idsOnScreen) QueueRedraw();      // one more redraw clears ids switched off
         _sw.Stop();
         _msSubmit = Smooth(_msSubmit, _sw.Elapsed.TotalMilliseconds);
 
@@ -852,32 +1024,12 @@ public partial class Viewer : Node2D
         }
     }
 
-    /// <summary>Interpolated world pose of a body, as sin/cos plus origin.</summary>
-    private void Pose(SimState s, int b, float alpha,
-        out float ox, out float oy, out float si, out float co)
-    {
-        float x = s.BodyX[b], y = s.BodyY[b], rot = s.BodyRot[b];
-        if (alpha < 1f && b < _prevCount)
-        {
-            float ia = 1f - alpha;
-            x = _prevX[b] * ia + x * alpha;
-            y = _prevY[b] * ia + y * alpha;
-            // Shortest-arc blend, so a body crossing the +/-pi seam does not spin backwards.
-            float d = rot - _prevRot[b];
-            while (d > MathF.PI) d -= MathF.Tau;
-            while (d < -MathF.PI) d += MathF.Tau;
-            rot = _prevRot[b] + d * alpha;
-        }
-        ox = x; oy = y;
-        si = MathF.Sin(rot); co = MathF.Cos(rot);
-    }
-
     private void BuildGeometry(float alpha)
     {
         SimState s = _scene.State;
-        Solver solver = _scene.Solver;
+        ComputeDrawPoses(s, alpha);
 
-        int maxLen = _polyX.Length;
+        int maxLen = System.Math.Max(8, _scene.Solver.MaxPolyLen);
         EnsureFillCapacity(s.CellCount * maxLen, s.CellCount * (maxLen - 2) * 3);
         EnsureLineCapacity((s.BondCount + s.CellCount * maxLen) * 2);
 
@@ -887,7 +1039,6 @@ public partial class Viewer : Node2D
 
         for (int b = 0; b < s.BodyCount; b++)
         {
-            Pose(s, b, alpha, out float ox, out float oy, out float si, out float co);
             Color bodyFill = _fillView == FillView.Body ? BodyColor(b) : FlatFill;
 
             int off = s.BodyCellOff[b], len = s.BodyCellLen[b];
@@ -896,8 +1047,10 @@ public partial class Viewer : Node2D
                 int c = s.BodyCells[off + i];
                 if (s.Dead(c)) continue;
 
-                int n = solver.CellLocalPolygon(c, _polyX, _polyY);
+                int n = s.PolyLen[c];
                 if (n < 3) continue;
+                int poff = s.PolyOff[c];
+                float ox = _drawCx[c], oy = _drawCy[c], si = _drawSi[c], co = _drawCo[c];
 
                 Color fill = _fillView switch
                 {
@@ -909,7 +1062,8 @@ public partial class Viewer : Node2D
                 int baseVert = _ptCount;
                 for (int v = 0; v < n; v++)
                 {
-                    float lx = _polyX[v], ly = _polyY[v];
+                    // Cell-local, centroid-relative: the cell's own frame is its body's orientation.
+                    float lx = s.PolyX[poff + v], ly = s.PolyY[poff + v];
                     _pts[_ptCount] = new Vector2(ox + lx * co - ly * si, oy + lx * si + ly * co);
                     _cols[_ptCount] = fill;
                     _ptCount++;
@@ -930,7 +1084,6 @@ public partial class Viewer : Node2D
                     // space, or one shared with a live cell of the same body. That distinction is
                     // what decides where a crack may separate and how far carving may cut, so being
                     // able to see it directly is the point of the view.
-                    int poff = s.PolyOff[c];
                     for (int v = 0; v < n; v++)
                     {
                         int w = v + 1 == n ? 0 : v + 1;
@@ -970,7 +1123,7 @@ public partial class Viewer : Node2D
             }
         }
 
-        if (_bondView != BondView.Off) BuildBondLines(s, alpha);
+        if (_bondView != BondView.Off) BuildBondLines(s);
     }
 
     /// <summary>
@@ -978,7 +1131,7 @@ public partial class Viewer : Node2D
     /// where the bond has flowed plastically. This is the readout that says whether cracks are
     /// forming as connected fronts reaching a surface, or scattering through the interior.
     /// </summary>
-    private void BuildBondLines(SimState s, float alpha)
+    private void BuildBondLines(SimState s)
     {
         for (int k = 0; k < s.BondCount; k++)
         {
@@ -988,13 +1141,8 @@ public partial class Viewer : Node2D
             int body = s.CellBody[a];
             if (body != s.CellBody[b2] || body < 0 || body >= s.BodyCount) continue;
 
-            Pose(s, body, alpha, out float ox, out float oy, out float si, out float co);
-
-            float ax = s.CellRx[a], ay = s.CellRy[a];
-            float bx = s.CellRx[b2], by = s.CellRy[b2];
-
-            var pa = new Vector2(ox + ax * co - ay * si, oy + ax * si + ay * co);
-            var pb = new Vector2(ox + bx * co - by * si, oy + bx * si + by * co);
+            var pa = new Vector2(_drawCx[a], _drawCy[a]);
+            var pb = new Vector2(_drawCx[b2], _drawCy[b2]);
 
             Color col = _bondView == BondView.Damage
                 ? DamageColour(s.BondDmg[k])
@@ -1135,15 +1283,15 @@ public partial class Viewer : Node2D
         {
             if (s.Dead(c)) continue;
             int b = s.CellBody[c];
-            if (b < 0 || b >= s.BodyCount) continue;
-            float si = SimMath.Sin(s.BodyRot[b]), co = SimMath.Cos(s.BodyRot[b]);
+            if (b < 0 || b >= s.BodyCount || c >= _drawCx.Length) continue;
+            float cx = _drawCx[c], cy = _drawCy[c], si = _drawSi[c], co = _drawCo[c];
             int off = s.PolyOff[c], len = s.PolyLen[c];
             for (int v = 0; v < len; v++)
             {
                 var kind = _scene.Solver.ClassifyVertex(c, v);
                 if (kind == Solver.VertexKind.Interior) continue;
-                float lx = s.CellRx[c] + s.PolyX[off + v], ly = s.CellRy[c] + s.PolyY[off + v];
-                var p = new Vector2(s.BodyX[b] + lx * co - ly * si, s.BodyY[b] + lx * si + ly * co);
+                float lx = s.PolyX[off + v], ly = s.PolyY[off + v];
+                var p = new Vector2(cx + lx * co - ly * si, cy + lx * si + ly * co);
                 switch (kind)
                 {
                     case Solver.VertexKind.ExposedEnd:
@@ -1169,32 +1317,32 @@ public partial class Viewer : Node2D
     /// <summary>Cell indices, so a number in a diagnostic can be found on screen.</summary>
     public override void _Draw()
     {
+        // Returning without drawing is what clears the ids: _Process queues this one extra redraw
+        // after they are switched off, or the last frame's labels stay on screen.
+        _idsOnScreen = false;
+        if (!_showIds) return;
         SimState s = _scene.State;
         int w = GetViewportRect().Size.X > 0 ? (int)GetViewportRect().Size.X : 1920;
         int h = GetViewportRect().Size.Y > 0 ? (int)GetViewportRect().Size.Y : 1080;
-
-        if (!_showIds) return;
         var font = ThemeDB.FallbackFont;
         if (font == null) return;
 
         int drawn = 0;
         for (int c = 0; c < s.CellCount && drawn < 900; c++)
         {
-            if (s.Dead(c)) continue;
+            if (s.Dead(c) || c >= _drawCx.Length) continue;
             int b = s.CellBody[c];
             if (b < 0 || b >= s.BodyCount) continue;
 
-            float si = SimMath.Sin(s.BodyRot[b]), co = SimMath.Cos(s.BodyRot[b]);
-            float wx = s.BodyX[b] + s.CellRx[c] * co - s.CellRy[c] * si;
-            float wy = s.BodyY[b] + s.CellRx[c] * si + s.CellRy[c] * co;
-
-            var p = new Vector2(wx * _zoom + _pan.X, wy * _zoom + _pan.Y);
+            // At the drawn pose, so the label stays on its cell between ticks.
+            var p = new Vector2(_drawCx[c] * _zoom + _pan.X, _drawCy[c] * _zoom + _pan.Y);
             if (p.X < -40f || p.Y < -40f || p.X > w + 40f || p.Y > h + 40f) continue;
 
             DrawString(font, p, c.ToString(), HorizontalAlignment.Center,
                        -1f, 11, new Color(1f, 1f, 1f, 0.75f));
             drawn++;
         }
+        _idsOnScreen = drawn > 0;
     }
 
     private void EnsureFillCapacity(int verts, int indices)
@@ -1249,6 +1397,7 @@ public partial class Viewer : Node2D
                 case Key.Space: _running = !_running; break;
                 case Key.Period: _stepOnce = true; _running = false; break;
                 case Key.R: Reset(); break;
+                case Key.L: ReloadConfig(); break;
                 case Key.Z: FitView(); break;
                 case Key.Bracketleft: Nudge(_slowSlider, +1); break;
                 case Key.Bracketright: Nudge(_slowSlider, -1); break;
@@ -1341,17 +1490,25 @@ public partial class Viewer : Node2D
     /// </remarks>
     private void FitView()
     {
+        // Cell positions come from the body pose. The solver's CellPx/CellPy are scratch it fills
+        // during a step, so on a freshly built scene they are all zero and the fit framed the origin.
         SimState s = _scene.State;
         float minX = float.MaxValue, minY = float.MaxValue;
         float maxX = float.MinValue, maxY = float.MinValue;
-        for (int c = 0; c < s.CellCount; c++)
+        for (int b = 0; b < s.BodyCount; b++)
         {
-            if (s.Dead(c)) continue;
-            float r = s.CellRad[c];
-            if (s.CellPx[c] - r < minX) minX = s.CellPx[c] - r;
-            if (s.CellPy[c] - r < minY) minY = s.CellPy[c] - r;
-            if (s.CellPx[c] + r > maxX) maxX = s.CellPx[c] + r;
-            if (s.CellPy[c] + r > maxY) maxY = s.CellPy[c] + r;
+            float si = MathF.Sin(s.BodyRot[b]), co = MathF.Cos(s.BodyRot[b]);
+            int off = s.BodyCellOff[b], len = s.BodyCellLen[b];
+            for (int i = 0; i < len; i++)
+            {
+                int c = s.BodyCells[off + i];
+                if (s.Dead(c)) continue;
+                float x = s.BodyX[b] + s.CellRx[c] * co - s.CellRy[c] * si;
+                float y = s.BodyY[b] + s.CellRx[c] * si + s.CellRy[c] * co;
+                float r = s.CellRad[c];
+                minX = MathF.Min(minX, x - r); maxX = MathF.Max(maxX, x + r);
+                minY = MathF.Min(minY, y - r); maxY = MathF.Max(maxY, y + r);
+            }
         }
         if (minX > maxX) return;
 
@@ -1388,7 +1545,6 @@ public partial class Viewer : Node2D
     private void FireAt(Vector2 world)
     {
         _shots++;
-        _poseComparable = false;
 
         // A blast needs no round at all: the front arrives where you clicked.
         if (_round == Round.Blast)
@@ -1412,7 +1568,7 @@ public partial class Viewer : Node2D
 
         // The rod is the same mass redistributed: a small face, and a material that resists its own
         // comminution, so it stays a rod instead of mushrooming into a wide crater.
-        SimMaterial round = _round == Round.Pierce ? Tuned(SimMaterial.Penetrator, 1) : ImpactorMaterial;
+        SimMaterial round = _round == Round.Pierce ? Tuned(_cfg.Material("penetrator"), 1) : ImpactorMaterial;
         float rx = _round == Round.Pierce ? radius * 3.5f : radius;
         float ry = _round == Round.Pierce ? radius / 3.5f : radius;
         float mrx = _round == Round.Pierce ? massRadius * 3.5f : 0f;
@@ -1566,7 +1722,8 @@ public partial class Viewer : Node2D
         double frame = _msTick + _msBuild + _msSubmit;
 
         _hud.Text =
-            $"[{_scenario + 1}] {ScenarioNames[_scenario]}   body {ActiveMaterial.Name} · impactor {ImpactorMaterial.Name}"
+            (_configError != null ? $"sim.json NOT reloaded: {_configError}\n" : "")
+          + $"[{_scenario + 1}] {ScenarioNames[_scenario]}   body {ActiveMaterial.Name} · impactor {ImpactorMaterial.Name}"
           + $"   {(_running ? (_slowMo > 1 ? $"1/{_slowMo} speed" : "running") : "paused")}   tick {_ticks}\n"
           + $"cells {live}   bodies {s.BodyCount}   bonds {s.BondCount}   broken {solver.Broken}"
           + $"   dust {solver.Dust}   crushed {solver.Crushed}\n"
@@ -1578,7 +1735,7 @@ public partial class Viewer : Node2D
           + $"triangles {_idxCount / 3}   segments {_lineCount / 2}\n"
           + PhaseBreakdown()
           + CflLine()
-          + $"grain {_grain:F0} ({MathF.Sqrt(_grain):F0} px)  impactor {_impactorSpeed:F0} px/s x{_impactorMass:F1}"
+          + $"grain {SceneGrain():F0} ({MathF.Sqrt(SceneGrain()):F1} px{(_grain <= 0 ? ", floor" : "")})  impactor {_impactorSpeed:F0} px/s x{_impactorMass:F1}"
           + $"   strain x{_tune.StrainScale:F1}  toughness x{_tune.ToughnessScale:F1}"
           + $"  substeps {_tune.Substeps}   zoom {_zoom:F2}\n"
           + $"round {RoundNames[(int)_round]}"
@@ -1590,7 +1747,7 @@ public partial class Viewer : Node2D
           + $" · grain {(_tune.GrainLock ? $"{_tune.GrainAngle * 180f / MathF.PI:F0}° locked" : "random per body")}\n"
           + $"view: fills {(_drawFills ? "on" : "off")} · {_fillView.ToString().ToLowerInvariant()}"
           + $" · ids {(_showIds ? "on" : "off")} · outlines {(_drawOutlines ? "on" : "off")} · bonds {_bondView.ToString().ToLowerInvariant()}\n"
-          + "\n1-8 scenario · M/N body,impactor material · R reset · space pause · . step · [ ] slow-mo\n"
+          + "\n1-8 scenario · M/N body,impactor material · R reset · L reload sim.json · space pause · . step · [ ] slow-mo\n"
           + "F fills · C fill view · O outlines · I cell ids · B bond view · G/H grain\n"
           + "-/= strain · ,/ toughness · ;/' substeps\n"
           + "left-click fires · right-drag pans · wheel zooms · Z refits · esc quits";

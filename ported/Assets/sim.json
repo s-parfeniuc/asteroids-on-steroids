@@ -1,0 +1,118 @@
+// The fracture simulation's configuration: the single source of truth for every number the model is
+// built from. Read by the viewer (L reloads it), the bench and the tests. Comments and trailing
+// commas are allowed. Every key is required and unknown keys are rejected, so a typo fails loudly.
+{
+  // ── global tuning ─────────────────────────────────────────────────────────
+  "tuning": {
+    "pxPerMetre": 0.52,          // world scale: wave speeds in m/s become px/s through this
+    "strainScale": 1,            // trim on every material's failure strain (rigidity)
+    "toughnessScale": 1,         // trim on (chi - 1) for every material (fragmentation)
+    "shearMul": 0.6,             // shear strength as a fraction of tensile
+    "relax": 2,                  // Rayleigh damping of the deviation field, 1/s (wave attenuation)
+    "contactMu": 0.6,            // Coulomb friction coefficient
+    "contactCompliance": 1,      // multiplier on contact compliance; >1 softens contacts
+    "contactBias": 0.05,         // fraction of penetration removed per substep (Baumgarte)
+    "contactMaxBias": 2,         // penetration (px) beyond which the bias stops growing
+    "contactCMin": 5000,         // contact stiffness floor, as a wave speed in m/s
+    "crushConfine": 1,           // weight of penetration strain in crush pressure
+    "overlapBackstop": 0.3,      // penetration ceiling, fraction of the thinner cell's half-extent (0 = off)
+    "carveContinuity": 0.5,      // v1 clip: pull of a carve plane toward the neighbour's cut point
+    "carveMinArea": 0.005,       // v1 clip: smallest clip made, as a fraction of cell area
+    "crackPush": true,           // broken bonds keep their compressive normal force
+    "crackPushCap": 4,           // closing across a crack, as a multiple of the failure stretch
+    "splitOnOpen": false,        // split a body along a crack only once it has opened
+    "spallFraction": 1,          // share of a snapping bond's elastic energy thrown as fly-apart speed
+    "exportFreeDebris": false,   // remove lone rubble that has touched nothing for a while
+    "manifoldDrift": 0.02,       // body motion (fraction of the smallest cell) that forces a narrow phase
+    "substeps": 9,
+    "centrifugal": true,         // rotating-frame loads on the deviation field
+    "euler": true,
+    "coriolis": true,
+    "dust": true,                // comminution: cells carved past their shed limit are removed
+    // structure authoring: scales bond strength at build, never stiffness
+    "weibullM": 8,               // Weibull modulus of bond strength scatter (0 = uniform)
+    "aniso": 0,                  // bedding-plane anisotropy (0 = isotropic)
+    "grainAngle": 0,             // bedding direction, radians (used when grainLock is set)
+    "grainLock": false,          // fix the bedding direction instead of drawing it per body
+    "surfFlaw": 0,               // strength reduction of bonds at the boundary
+  },
+
+  // ── materials ─────────────────────────────────────────────────────────────
+  // rho: density kg/m3 · c: wave speed m/s · strain: failure strain · chi: softening ratio (a bond
+  // separates at chi x its peak stretch) · crush: contact pressure at which carving starts ·
+  // crushRate: multiplier on recession speed · shedLimit: share of original area a cell may lose
+  // before it comminutes · dent: dent width in mean polygon edges
+  "materials": [
+    { "name": "rock",       "rho": 3000,  "c": 5000, "strain": 0.010, "chi": 90, "crush": 2.5e5, "crushRate": 1.0, "shedLimit": 0.35, "dent": 0.75 },
+    { "name": "ice",        "rho": 917,   "c": 3200, "strain": 0.007, "chi": 70, "crush": 6.0e4, "crushRate": 1.0, "shedLimit": 0.25, "dent": 0.75 },
+    { "name": "glass",      "rho": 2500,  "c": 5500, "strain": 0.008, "chi": 30, "crush": 4.0e5, "crushRate": 2.0, "shedLimit": 0.15, "dent": 0.40 },
+    { "name": "sandstone",  "rho": 2200,  "c": 2500, "strain": 0.009, "chi": 50, "crush": 1.5e5, "crushRate": 1.0, "shedLimit": 0.25, "dent": 0.75 },
+    { "name": "steel",      "rho": 7850,  "c": 5900, "strain": 0.020, "chi": 50, "crush": 1.0e6, "crushRate": 0.3, "shedLimit": 0.50, "dent": 1.25 },
+    { "name": "penetrator", "rho": 17000, "c": 4000, "strain": 0.015, "chi": 40, "crush": 3.0e6, "crushRate": 0.1, "shedLimit": 0.60, "dent": 1.00 },
+  ],
+
+  // ── model constants ───────────────────────────────────────────────────────
+  // Not tuning knobs: the scales, thresholds and tolerances the rules are written in. Grouped for
+  // reading only; every name is unique across the groups.
+  "constants": {
+    "build": {
+      "minCellArea": 12,         // px2: smaller Voronoi cells are dropped
+      "minSharedEdge": 1.5,      // px: shorter shared sides get no bond (sealed)
+      "seedJitter": 0.34,        // Voronoi seed jitter, fraction of cell size
+      "stableCfl": 0.5,          // acoustic CFL the grain floor is set to
+      "bondStrengthMin": 0.05,   // clamp on the structure strength multiplier
+      "bondStrengthMax": 3,
+      "anisoFloor": 0.05,        // weakest across-grain bond, fraction of nominal
+      "surfFlawNeighbours": 4,   // a cell with fewer bonds counts as surface for flaws
+    },
+    "broadphase": {
+      "spinReach": 150,          // px: rim radius turning spin into broadphase reach
+      "bodyMarginBase": 2,       // px: per-body pair margin, base and cap
+      "bodyMarginMax": 50,
+      "gridMarginBase": 4,       // px: grid cell margin, base and cap
+      "gridMarginMax": 100,
+      "gridCellMin": 30,         // px: smallest grid cell
+      "gridCellFactor": 2,       // grid cell as a multiple of the largest cell size
+      "manifoldRimFactor": 2,    // manifold drift rim, multiple of the radius of gyration
+    },
+    "contact": {
+      "contactSlop": 0.05,       // px of penetration tolerated before bias, pressure, backstop and rubble push
+      "faceLength": 0.25,        // a cell's face length as a fraction of its perimeter
+      "deepOverlapNormal": 0.5,  // past this fraction of the smaller radius the normal is centre-to-centre
+      "rubblePushMax": 0.5,      // px of penetration corrected per tick between two lone cells
+      "rubblePushFraction": 0.5, // share of that correction applied
+    },
+    "damage": {
+      "interiorDamageCap": 0.97, // damage cap for a bond not touching any open side
+      "brittleChi": 1.02,        // at or below this chi a bond snaps at its peak
+      "minChi": 1.001,           // floor on chi
+      "minShearMul": 0.05,       // floor on shearMul
+    },
+    "carving": {
+      "dentAreaGuard": 0.5,      // largest share of a cell's area one contact removes per substep
+      "v1DepthCap": 0.25,        // v1 clip: largest recession per substep, fraction of circumradius
+      "bondedGuardKeep": 0.5,    // v1 clip: share of a bond's length a cut may not pass
+      "inertiaFloor": 0.05,      // floor on a carved cell's inertia, fraction of m r2
+      "clipBisections": 8,       // v1 clip: bisection steps placing the plane
+      "slideSolvePasses": 3,     // dent budget re-solve passes
+    },
+    "topology": {
+      "dustFreeTicks": 3,        // exportFreeDebris: untouched ticks before a lone cell is exported
+    },
+    "tolerances": {
+      "sliverSide": 0.05,        // build, px: consecutive Voronoi vertices closer than this are merged
+      "edgeOverlap": 0.7,        // build, px: collinearity tolerance for detecting shared sides
+      "labelMatchAbs": 1e-3,     // build: side-on-bisector tolerance for labels, max(abs, rel x radius)
+      "labelMatchRel": 2e-3,
+      "sideLineAbs": 1e-2,       // build: side-on-bisector tolerance for touch records, max(abs, rel x radius)
+      "sideLineRel": 5e-3,
+      "freeSideEnd": 1e-3,       // build: record end on a free vertex, x max(1, radius)
+      "buildSpanMin": 1e-4,      // build, px: shortest record span kept
+      "linkOverlapMin": 1e-3,    // build, px: least overlap for a side to link to a record
+      "geometryNoise": 0.05,     // px: runtime noise floor (zero-length sides, vertex splits, coverage snap)
+      "noiseRel": 5e-3,          // runtime relative tolerance, x circumradius
+      "relinkAbs": 1e-2,         // px: floor for re-linking a carve face to its record
+      "spanEpsilon": 1e-3,       // px: a record span at or below this is spent
+    },
+  },
+}

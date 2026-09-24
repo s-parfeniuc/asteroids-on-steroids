@@ -30,7 +30,7 @@ public class InvariantTests
     [MemberData(nameof(Scenes))]
     public void InvariantsHoldThroughTheScene(string scene)
     {
-        var r = Scenarios.Reference(scene, SimTuning.Default);
+        var r = Scenarios.Reference(scene, TestConfig.Value);
         float peakKe = 0f, worstVertex = 0f;
         for (int i = 0; i < 400; i++)
         {
@@ -42,7 +42,7 @@ public class InvariantTests
             // A bond coupling two bodies would let two parallel chunks write the same cell.
             Assert.True(r.Solver.CrossBodyBondCount() == 0, $"{scene}: a bond crosses bodies at tick {i + 1}");
             // A vertex off its own cell means geometry is being read from a stale pose or cache.
-            worstVertex = SimMath.Max(worstVertex, r.Solver.MaxSkinRadiusRatio());
+            worstVertex = SimMath.Max(worstVertex, r.Solver.MaxVertexRadiusRatio());
         }
 
         float drift = r.MomentumDrift();
@@ -66,8 +66,8 @@ public class InvariantTests
     {
         // A body spinning in vacuum below its breakup rate carries only its own centrifugal load:
         // it must not fracture, must not gain energy, and its deviation field must settle.
-        var t = SimTuning.Default;
-        var m = Material.ByName(material);
+        var t = TestConfig.Tuning;
+        var m = TestConfig.Material(material);
         float grain = Scenarios.FloorGrain(t, m);
         float omega = 0.4f * BreakupOmega(t, m, Scenarios.Spin(t, m, omega: 0f, grain: grain).State);
         var r = Scenarios.Spin(t, m, omega, grain);
@@ -115,9 +115,10 @@ public class InvariantTests
     {
         // Hundreds of fragments appearing in ONE tick is the stress case for the topology rebuild's
         // per-body scratch. Strength is scaled down so the spin load disintegrates the body at once.
-        var t = SimTuning.Default;
+        var t = TestConfig.Tuning;
         t.StrainScale = 0.01f;
-        var r = Scenarios.Spin(t, Material.Rock, omega: 3f, grain: Scenarios.FloorGrain(t, Material.Rock));
+        var rock = TestConfig.Material("rock");
+        var r = Scenarios.Spin(t, rock, omega: 3f, grain: Scenarios.FloorGrain(t, rock));
 
         int largestJump = 0, prev = r.State.BodyCount;
         for (int i = 0; i < 40; i++)
@@ -141,7 +142,7 @@ public class InvariantTests
     {
         // CellLocalPolygon is what the viewer draws from. Composed with its body's pose, every
         // vertex it returns must sit on the cell it belongs to.
-        var r = Scenarios.Reference(scene, SimTuning.Default);
+        var r = Scenarios.Reference(scene, TestConfig.Value);
         for (int i = 0; i < 150; i++) r.Solver.Step();
 
         SimState s = r.State;
@@ -182,7 +183,7 @@ public class InvariantTests
     [Fact]
     public void EveryCellHasPositiveMassAndFiniteInertia()
     {
-        SimState s = Scenarios.Reference("collide", SimTuning.Default).State;
+        SimState s = Scenarios.Reference("collide", TestConfig.Value).State;
         for (int c = 0; c < s.CellCount; c++)
         {
             Assert.True(s.CellM[c] > 0f, $"cell {c} mass");
@@ -194,7 +195,7 @@ public class InvariantTests
     [Fact]
     public void AdjacencyIsSymmetricAndComplete()
     {
-        SimState s = Scenarios.Reference("collide", SimTuning.Default).State;
+        SimState s = Scenarios.Reference("collide", TestConfig.Value).State;
         int total = 0;
         for (int c = 0; c < s.CellCount; c++) total += s.AdjLen[c];
         Assert.Equal(2 * s.BondCount, total);

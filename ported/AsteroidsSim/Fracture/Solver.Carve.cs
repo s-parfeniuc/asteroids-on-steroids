@@ -6,15 +6,16 @@ namespace AsteroidsSim.Fracture;
 public sealed partial class Solver
 {
     // ══════════════════════════════════════════════════════════════════════════
-    //  carving — the geometric half of comminution
+    //  carving v1 — the half-plane clip — and the side/record bookkeeping
     // ══════════════════════════════════════════════════════════════════════════
     //
-    // A cell under enough contact pressure is clipped back on the loaded side rather than being
-    // deleted whole. That is the entire mechanism, and it is the same operation the tessellator uses
-    // to build cells in the first place: intersect with a half-plane.
+    // Carving v2 (Solver.Dent.cs) recedes surface vertices along their records and is the normal
+    // path. The v1 clip below remains for the one case v2 cannot move: a record-less triangle. The
+    // rest of this file is shared by both and by the crack rule — side labels, the touch-record
+    // interval maintenance, record retirement and side classification.
     //
-    // Three properties come free from choosing clipping over vertex displacement, and all three had
-    // to be guarded explicitly in every alternative considered:
+    // The clip cuts the cell back on the loaded side with a half-plane, the same operation the
+    // tessellator builds cells with, and three properties come with it:
     //
     //   CONVEXITY   clipping a convex polygon by a half-plane is convex, unconditionally. The SAT
     //               narrow phase requires convex, CCW polygons and fails silently on either — a
@@ -35,28 +36,12 @@ public sealed partial class Solver
     /// <summary>Carves abandoned because the budget could not be met without losing a record.</summary>
     public long CarveRefused;
 
-    internal bool _diagNoGuard;
-    public long CcLen, CcReach, CcDegen, CcOk, CcZeroArea, CcNoSurface;
-    public float CcLastDepth, CcLastRemoved;
     private float[] _clipX = new float[32];
     private float[] _clipY = new float[32];
     private short[] _clipB = new short[32];
     private short[] _clipS = new short[32];
     private readonly short[] _carveRecs = new short[32];
 
-    /// <summary>
-    /// Clips cell <paramref name="c"/> by the half-plane keeping points with
-    /// <c>(v - p)·n &lt;= 0</c>, in body-local coordinates, and refreshes everything derived from
-    /// its shape. Returns the area removed, which is what the caller charges as shed mass.
-    /// </summary>
-    /// <remarks>
-    /// <para>The normal points OUT of the material being kept, so the caller passes the contact
-    /// normal as seen from this cell and an offset point at the carve depth.</para>
-    ///
-    /// <para>Returns 0 without touching anything when the plane does not reach the polygon. That
-    /// early-out is bit-exact rather than approximate — a clip whose half-plane misses every vertex
-    /// reproduces the input vertex for vertex — so skipping it cannot perturb the simulation.</para>
-    /// </remarks>
     /// <summary>
     /// Carves until <paramref name="targetArea"/> has been removed from the side facing
     /// <c>(nx, ny)</c>. Returns the area actually removed.
@@ -80,7 +65,7 @@ public sealed partial class Solver
     {
         if (targetArea <= 0f) return 0f;
         int off = _s.PolyOff[c], len = _s.PolyLen[c];
-        if (len < 3) { CcLen++; return 0f; }
+        if (len < 3) return 0f;
 
         // ── EROSION HAPPENS AT A SURFACE ─────────────────────────────────────
         // The clip removes the cap of the cell furthest along the load direction, so that direction
@@ -98,7 +83,7 @@ public sealed partial class Solver
         float inx = nx, iny = ny;
         if (!SteerToOpenSurface(c, ref nx, ref ny, out float turnCos))
         {
-            CcNoSurface++; if (Census != null) Census.NoSurface++;
+            if (Census != null) Census.NoSurface++;
             if (c == TraceCell) TraceSink?.Invoke($"     clip REFUSED: no bare surface faces n=({inx:F3},{iny:F3})");
             return 0f;
         }
@@ -121,11 +106,11 @@ public sealed partial class Solver
             if (pr > hi) hi = pr;
         }
 
-        if (lo >= hi) { CcReach++; return 0f; }
+        if (lo >= hi) return 0f;
         float peak = hi;                     // the bisection below consumes hi as its bracket
 
         // Bisect: area beyond the plane falls monotonically as the offset rises.
-        for (int it = 0; it < 8; it++)
+        for (int it = 0; it < K.ClipBisections; it++)
         {
             float mid = 0.5f * (lo + hi);
             if (AreaBeyond(off, len, nx, ny, mid) < targetArea) hi = mid; else lo = mid;
@@ -163,7 +148,7 @@ public sealed partial class Solver
             if (near > shield) shield = near;
         }
         float dBefore = d;
-        if (CarveShield && shield > d) d = shield;
+        if (shield > d) d = shield;
         bool clamped = d != dBefore;
         if (Census != null && clamped) { Census.ShieldClamped++; Census.ClampedWant += targetArea; }
         if (c == TraceCell)
@@ -186,7 +171,6 @@ public sealed partial class Solver
             TraceSink?.Invoke(sb.ToString());
         }
 
-        CcLastDepth = peak - d;
         float a0 = _s.CellArea[c];
         float got = CarveCell(c, nx * d, ny * d, nx, ny);
         if (Census != null)
@@ -199,32 +183,6 @@ public sealed partial class Solver
         return got;
     }
 
-    /// <summary>
-    /// Turns the load direction by the smallest angle that makes it erode open surface, and leaves
-    /// it alone when it already does. False when the cell has no open side at all.
-    /// </summary>
-    /// <remarks>
-    /// <para>A clip removes the cap of the cell furthest along the direction, so the question is what
-    /// that cap is made of. The furthest point is the support vertex, and it is open material exactly
-    /// when one of the two sides meeting there is open. Under deep overlap the contact normal stops
-    /// satisfying that — once the partner's centre passes this cell's midpoint, "toward the partner"
-    /// points into this cell's own body and the cap sits against a bonded neighbour.</para>
-    ///
-    /// <para>This used to be answered by replacing the direction with an open side's outward normal.
-    /// That was wrong twice over. It made every cut parallel to a side of the cell, so erosion could
-    /// only ever produce facets aligned with the existing Voronoi edges — the cuts looked machined.
-    /// And a cut parallel to a side cannot shorten that side, it deletes it and lays down a copy a
-    /// fraction of a pixel behind; when the side it happened to be parallel to was a bonded one, the
-    /// adjacency was destroyed outright. Measured over a 170-grain collide, that accounted for 82%
-    /// of every adjacency carving broke.</para>
-    ///
-    /// <para>So the direction is steered, not replaced. Which vertex is the support point changes
-    /// only at the side normals, so the directions supported by a given vertex form the cone between
-    /// the outward normals of its two sides. The valid set is the union of those cones over vertices
-    /// that touch open material; a direction already inside it is kept <b>exactly</b>, and one
-    /// outside is rotated to the nearest cone. Most cuts are already valid and keep their true
-    /// contact normal, which is what stops the surface from faceting.</para>
-    /// </remarks>
     /// <summary>
     /// Turns the load direction by the smallest angle that makes it erode exposed surface, and
     /// leaves it alone when it already does. False when nothing exposed faces the load.
@@ -380,7 +338,7 @@ public sealed partial class Solver
             float u1 = (_s.CellRx[c] + _s.PolyX[off + w] - mx) * ex
                      + (_s.CellRy[c] + _s.PolyY[off + w] - my) * ey;
             float lo = SimMath.Min(u0, u1), hi = SimMath.Max(u0, u1);
-            float eps = SimMath.Max(0.05f, _s.CellRad[c] * 5e-3f);
+            float eps = SimMath.Max(K.GeometryNoise, _s.CellRad[c] * K.NoiseRel);
 
             for (int e = 0; e < 2; e++)
             {
@@ -445,7 +403,7 @@ public sealed partial class Solver
         // a carve can no longer sever a bond by eating its edge, so bonds are severed only by the
         // damage model or by comminution.
         float d = px * nx + py * ny;                         // plane offset along n, cell-local
-        float guard = _diagNoGuard ? float.NegativeInfinity : BondedGuard(c, nx, ny);
+        float guard = BondedGuard(c, nx, ny);
         if (guard > d)
         {
             d = guard; px = nx * d; py = ny * d;
@@ -461,7 +419,7 @@ public sealed partial class Solver
             float dv = (_s.PolyX[off + v] - px) * nx + (_s.PolyY[off + v] - py) * ny;
             if (dv > worst) worst = dv;
         }
-        if (worst <= 0f) { CcReach++; return 0f; }
+        if (worst <= 0f) return 0f;
 
         // Records this cell links BEFORE the clip. A clip can remove a side outright rather than
         // shortening it, in which case the interval never collapses to nothing and the record would
@@ -518,7 +476,7 @@ public sealed partial class Solver
         // downstream ever sees a sub-triangle.
         // Clipped to nothing. Zero the area so the shed-limit test fires this tick rather than
         // leaving a cell with a stale area and a polygon nothing downstream can use.
-        if (n < 3) { CcDegen++; _s.CellArea[c] = 0f; return area0; }
+        if (n < 3) { _s.CellArea[c] = 0f; return area0; }
 
         // ── DROP SIDES THE CLIP LEFT WITH NO LENGTH ──────────────────────────
         // A crossing vertex landing within rounding of a kept one leaves a side of zero length. It
@@ -531,7 +489,7 @@ public sealed partial class Solver
         {
             int j = i + 1 == n ? 0 : i + 1;
             float ex = _clipX[j] - _clipX[i], ey = _clipY[j] - _clipY[i];
-            if (_clipS[i] >= 0 || SimMath.Hypot(ex, ey) > 0.05f) continue;
+            if (_clipS[i] >= 0 || SimMath.Hypot(ex, ey) > K.GeometryNoise) continue;
 
             _clipB[i] = _clipB[j]; _clipS[i] = _clipS[j];       // side i inherits what side j was
             for (int q = j; q + 1 < n; q++)
@@ -541,7 +499,6 @@ public sealed partial class Solver
             }
             n--;
             i--;                                                // the new side i may be degenerate too
-            CcCollapsed++;
             if (c == TraceCell) TraceSink?.Invoke("     clip: COLLAPSED a zero-length side");
         }
 
@@ -600,12 +557,10 @@ public sealed partial class Solver
                     Bin(Census.VanishCos, SimMath.Abs(nx * -bey + ny * bex));
                 Bin(Census.VanishSpan, (_s.TouchT1[rr] - _s.TouchT0[rr]) * 0.2f);
             }
-            RetireTouch(rr, $"side-vanished(c={c})");
+            RetireTouch(rr);
         }
 
         float rem = SimMath.Max(0f, area0 - _s.CellArea[c]);
-        CcLastRemoved = rem;
-        if (rem <= 0f) CcZeroArea++; else CcOk++;
         return rem;
     }
 
@@ -758,7 +713,7 @@ public sealed partial class Solver
         // (in ApplyPair), so any impulse spun it violently. A uniform disc is 0.5*m*r^2 and a Voronoi
         // cell around 0.3, so 0.05 is well clear of anything legitimate.
         float ipoly = PolyInertia(off, len);
-        float icFloor = 0.05f * _s.CellM[c] * _s.CellRad[c] * _s.CellRad[c];
+        float icFloor = K.InertiaFloor * _s.CellM[c] * _s.CellRad[c] * _s.CellRad[c];
         float ic = SimMath.Max(SimMath.Max(1e-6f, icFloor), _s.CellM[c] * ipoly / area);
         _s.CellIc[c] = ic;
         _s.CellIic[c] = 1f / ic;
@@ -940,7 +895,7 @@ public sealed partial class Solver
         // scattered through solid material. Real erosion moves a surface by a fifth of a pixel per
         // substep, two orders of magnitude above this, so nothing genuine is hidden.
         float sideLen = SimMath.Abs(u1 - u0);
-        float snap = sideLen > 1e-6f ? 0.05f / sideLen : 0f;
+        float snap = sideLen > 1e-6f ? K.GeometryNoise / sideLen : 0f;
         if (f0 < snap) f0 = 0f;
         if (f1 > 1f - snap) f1 = 1f;
 
@@ -1016,7 +971,7 @@ public sealed partial class Solver
             if (k < 0 || _s.BondBroken[k]) { if (hiP > guard) guard = hiP; continue; }
 
             float cur = SimMath.Hypot(x1 - x0, y1 - y0);
-            float keep = 0.5f * _s.BondLen[k];
+            float keep = K.BondedGuardKeep * _s.BondLen[k];
             float frac = cur > 1e-6f ? SimMath.Min(1f, keep / cur) : 1f;
             float proj = loP + frac * (hiP - loP);
             if (proj > guard) guard = proj;
@@ -1035,8 +990,7 @@ public sealed partial class Solver
     ///
     /// <para><b>The stretch has to rotate with the axis.</b> <c>BondSn</c>/<c>BondSt</c> are
     /// components in the bond frame; re-deriving the axis without rotating them leaves the stored
-    /// elastic force pointing somewhere it was never pointing, a kick proportional to the angle. The
-    /// old <c>Rebake</c> had exactly this bug and waved it through as "stretches are NOT touched".
+    /// elastic force pointing somewhere it was never pointing, a kick proportional to the angle.
     /// The rotation comes from the dot and cross of the old and new unit axes, so it costs no
     /// transcendental.</para>
     /// </remarks>
@@ -1057,19 +1011,6 @@ public sealed partial class Solver
         }
     }
 
-    /// <summary>
-    /// Narrows every touch record this cell links, to the extent its side still covers.
-    /// </summary>
-    /// <remarks>
-    /// <para>This is the whole point of the representation. Carving removed material from ONE cell,
-    /// and the shared segment shrank for BOTH — because there is one segment, not a copy per cell.
-    /// One write here and the neighbour sees it; nothing has to be pushed across, and the two cells
-    /// cannot end up disagreeing because there is nothing to disagree with.</para>
-    ///
-    /// <para>Run after the polygon has been re-centred: the shift moves CellR and the vertices by
-    /// equal and opposite amounts, so body-frame positions — and therefore the bisector and the
-    /// interval measured along it — are unchanged by it.</para>
-    /// </remarks>
     /// <summary>
     /// Re-attaches carve faces that are geometrically indistinguishable from an adjacency the cell
     /// still has.
@@ -1118,7 +1059,7 @@ public sealed partial class Solver
             int w = v + 1 == len ? 0 : v + 1;
             float x0 = _s.PolyX[off + v], y0 = _s.PolyY[off + v];
             float x1 = _s.PolyX[off + w], y1 = _s.PolyY[off + w];
-            float tol = SimMath.Max(SimMath.Max(1e-2f, _s.CellRad[c] * 5e-3f), cut);
+            float tol = SimMath.Max(SimMath.Max(K.RelinkAbs, _s.CellRad[c] * K.NoiseRel), cut);
 
             for (int q = 0; q < nBefore; q++)
             {
@@ -1137,7 +1078,7 @@ public sealed partial class Solver
 
                 float u0 = bx0 * ex + by0 * ey, u1 = bx1 * ex + by1 * ey;
                 float lo = SimMath.Min(u0, u1), hi = SimMath.Max(u0, u1);
-                if (SimMath.Min(hi, _s.TouchT1[rec]) - SimMath.Max(lo, _s.TouchT0[rec]) <= 1e-3f) continue;
+                if (SimMath.Min(hi, _s.TouchT1[rec]) - SimMath.Max(lo, _s.TouchT0[rec]) <= K.SpanEpsilon) continue;
 
                 // BOTH labels, or the side contradicts itself: SideTouch naming a live adjacency
                 // while PolyBond still says REAL is exactly the state the audit reports as
@@ -1152,6 +1093,19 @@ public sealed partial class Solver
         }
     }
 
+    /// <summary>
+    /// Narrows every touch record this cell links, to the extent its side still covers.
+    /// </summary>
+    /// <remarks>
+    /// <para>This is the whole point of the representation. Carving removed material from ONE cell,
+    /// and the shared segment shrank for BOTH — because there is one segment, not a copy per cell.
+    /// One write here and the neighbour sees it; nothing has to be pushed across, and the two cells
+    /// cannot end up disagreeing because there is nothing to disagree with.</para>
+    ///
+    /// <para>Run after the polygon has been re-centred: the shift moves CellR and the vertices by
+    /// equal and opposite amounts, so body-frame positions — and therefore the bisector and the
+    /// interval measured along it — are unchanged by it.</para>
+    /// </remarks>
     private void NarrowTouchRecords(int c)
     {
         int off = _s.PolyOff[c], len = _s.PolyLen[c];
@@ -1188,21 +1142,11 @@ public sealed partial class Solver
             if (lo > _s.TouchT0[rec]) _s.TouchT0[rec] = lo;
             if (hi < _s.TouchT1[rec]) _s.TouchT1[rec] = hi;
 
-            if (_s.TouchT1[rec] - _s.TouchT0[rec] <= 1e-3f) RetireTouch(rec, $"span-collapsed(c={c}, lo={lo:F3}, hi={hi:F3})");
+            if (_s.TouchT1[rec] - _s.TouchT0[rec] <= K.SpanEpsilon) RetireTouch(rec);
         }
     }
 
-    /// <summary>
-    /// The adjacency has ended — carving ate through the last of the shared side.
-    /// </summary>
-    /// <remarks>
-    /// The natural end of erosion, not an error: the material joining two cells has been removed, so
-    /// they stop touching and any bond along the adjacency stops existing. This is what replaces the
-    /// arbitrary "never cut a shared side past half its build length" guard — instead of forbidding
-    /// the cut, the model lets it happen and gives it its consequence.
-    /// </remarks>
-    internal int CcVanishTotal, CcSteered, CcShielded, CcCollapsed, CcRelinked;
-    internal System.Action<int, int, int, string>? RetireSink;
+    internal int CcVanishTotal, CcSteered, CcShielded, CcRelinked;
 
     /// <summary>Diagnostic tally of what carving actually does. Null (and free) unless a tool asks.</summary>
     internal sealed class CarveCensus
@@ -1224,15 +1168,22 @@ public sealed partial class Solver
     }
 
     internal CarveCensus? Census;
-    internal bool CarveShield = true;
 
     private static void Bin(int[] b, float v01) =>
         b[(int)SimMath.Max(0f, SimMath.Min(10f, v01 * 10f))]++;
 
-    private void RetireTouch(int rec, string why = "?")
+    /// <summary>
+    /// The adjacency has ended — carving ate through the last of the shared side.
+    /// </summary>
+    /// <remarks>
+    /// The natural end of erosion, not an error: the material joining two cells has been removed, so
+    /// they stop touching and any bond along the adjacency stops existing. This is what replaces the
+    /// arbitrary "never cut a shared side past half its build length" guard — instead of forbidding
+    /// the cut, the model lets it happen and gives it its consequence.
+    /// </remarks>
+    private void RetireTouch(int rec)
     {
         int a = _s.TouchA[rec], b = _s.TouchB[rec];
-        RetireSink?.Invoke(rec, a, b, why);
         ExposeRecordEnds(rec);                    // its endpoints are surface now
         short k = _s.TouchBond[rec];
         if (k >= 0 && k < _s.BondCount && !_s.BondBroken[k])
@@ -1253,7 +1204,7 @@ public sealed partial class Solver
         {
             int a = _s.TouchA[r], b = _s.TouchB[r];
             if (a < 0 || b < 0) continue;
-            if (_s.Dead(a) || _s.Dead(b) || _s.CellBody[a] != _s.CellBody[b]) RetireTouch(r, $"separated(dead {_s.Dead(a)}/{_s.Dead(b)}, bodies {_s.CellBody[a]}/{_s.CellBody[b]})");
+            if (_s.Dead(a) || _s.Dead(b) || _s.CellBody[a] != _s.CellBody[b]) RetireTouch(r);
         }
     }
 

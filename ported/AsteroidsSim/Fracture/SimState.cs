@@ -8,12 +8,8 @@ namespace AsteroidsSim.Fracture;
 /// Per-cell boolean state, packed into one byte.
 /// </summary>
 /// <remarks>
-/// <para>These were four separate <c>bool[]</c>, which is four cache lines to answer a question that
-/// usually needs two of them at once — <c>Surf || Cracked</c> is the surface predicate and is read
-/// together on every damage evaluation. One byte array answers it with a single load.</para>
-///
-/// <para>Room is deliberately left in the high bits: carve state and the runtime per-cell properties
-/// that follow it belong here rather than as yet more parallel arrays.</para>
+/// Room is deliberately left in the high bits: further per-cell boolean state belongs here rather
+/// than in yet more parallel arrays.
 /// </remarks>
 [Flags]
 public enum CellFlag : byte
@@ -23,10 +19,6 @@ public enum CellFlag : byte
     Dead = 1 << 0,
     /// <summary>Built as a single cell: a legitimate pebble, never dust.</summary>
     Solo = 1 << 1,
-    /// <summary>Free boundary at build — cracks may separate here.</summary>
-    Surf = 1 << 2,
-    /// <summary>A break has opened this cell to a surface.</summary>
-    Cracked = 1 << 3,
 }
 
 /// <summary>
@@ -107,12 +99,8 @@ public sealed class SimState
     public float[] CellRx = Array.Empty<float>();     // rest offset in the body frame
     public float[] CellRy = Array.Empty<float>();
     // NO realized displacement. Cells sit exactly at their rest offsets: deformation is bookkept on
-    // the bonds as stretch and never becomes visible or collidable geometry. That is what makes a
-    // cell's body-local polygon constant (CellR + q), and therefore the collider constant, which in
-    // turn removes shared-vertex skinning entirely — adjacent cells agree on a shared corner by
-    // construction rather than by averaging.
-    /// <summary>Accumulated comminution dose: stress-seconds of contact above the crush threshold.</summary>
-    public float[] CellCrush = Array.Empty<float>();
+    // the bonds as stretch and never becomes visible or collidable geometry, so a cell's body-local
+    // polygon is CellR + q and two cells sharing a corner agree on it by construction.
 
     public float[] CellDvx = Array.Empty<float>();    // deviation velocity field
     public float[] CellDvy = Array.Empty<float>();
@@ -120,7 +108,7 @@ public sealed class SimState
     public int[] CellBody = Array.Empty<int>();
     public CellFlag[] CellFlags = Array.Empty<CellFlag>();
     public int[] CellTouch = Array.Empty<int>();      // last tick this cell was in a contact
-    public int[] CellBorn = Array.Empty<int>();       // tick it became a lone single, or -1
+    public int[] CellBorn = Array.Empty<int>();       // tick it became a lone single, or int.MinValue
 
     // Flag accessors. Aggressively inlined because Dead is tested in the innermost loop of the
     // narrow phase, the bond passes and every topology walk — a call there would be a real cost.
@@ -129,13 +117,6 @@ public sealed class SimState
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Solo(int c) => (CellFlags[c] & CellFlag.Solo) != 0;
-
-    /// <summary>
-    /// Free boundary, whether baked at build or opened by a break. One load instead of two, and it
-    /// removes the standing risk of a caller testing <c>Surf</c> and forgetting <c>Cracked</c>.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool AtSurface(int c) => (CellFlags[c] & (CellFlag.Surf | CellFlag.Cracked)) != 0;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetFlag(int c, CellFlag f, bool on)
@@ -315,11 +296,6 @@ public sealed class SimState
         return (byte)MatCount++;
     }
 
-    // ── shared-vertex groups ─────────────────────────────────────────────────
-    // A Voronoi vertex is shared by ~3 cells. Every copy is drawn at the average of where its
-    // sharing cells put it, which is what makes a gap between two bonded cells unrepresentable.
-    public int GrpMemberCount;
-
     // ── bonds ────────────────────────────────────────────────────────────────
     // baked
     public int[] BondA = Array.Empty<int>();
@@ -339,10 +315,8 @@ public sealed class SimState
     /// </remarks>
     public float[] BondChi = Array.Empty<float>();
 
-    public float[] BondSy0 = Array.Empty<float>();    // yield stretch
-
     // live
-    public float[] BondNx = Array.Empty<float>();     // axis, re-derived on split and rebake
+    public float[] BondNx = Array.Empty<float>();     // axis, re-derived on split and on carve
     public float[] BondNy = Array.Empty<float>();
     public float[] BondRax = Array.Empty<float>();    // anchor levers, likewise
     public float[] BondRay = Array.Empty<float>();
@@ -380,15 +354,7 @@ public sealed class SimState
     // per-body material, baked at creation so materials with different wave speeds coexist
     public float[] BodyRho = Array.Empty<float>();
     public float[] BodyCpx = Array.Empty<float>();    // wave speed in px/s
-    public float[] BodyChi = Array.Empty<float>();    // cohesive softening ratio
-    public float[] BodyVCrit = Array.Empty<float>();
-    public float[] BodyDuct = Array.Empty<float>();   // plastic strain capacity, fraction of a cell
     public float[] BodyCellSize = Array.Empty<float>(); // sqrt(grain): per body, so scales can mix
-
-    // transfer accumulators for the deformation cap (zeroed and consumed within a substep)
-    public float[] BodyCpxAcc = Array.Empty<float>();
-    public float[] BodyCpyAcc = Array.Empty<float>();
-    public float[] BodyClAcc = Array.Empty<float>();
 
     public int BodyCount;
 
@@ -432,7 +398,7 @@ public sealed class SimState
         Grow(ref CellMat, n); Grow(ref CellArea0, n); Grow(ref CellCarvePend, n);
         Grow(ref CellSeedX, n); Grow(ref CellSeedY, n);
         Grow(ref CellRx, n); Grow(ref CellRy, n);
-        Grow(ref CellCrush, n); Grow(ref CellDvx, n); Grow(ref CellDvy, n); Grow(ref CellDw, n);
+        Grow(ref CellDvx, n); Grow(ref CellDvy, n); Grow(ref CellDw, n);
         Grow(ref CellBody, n); Grow(ref CellFlags, n);
         Grow(ref CellTouch, n); Grow(ref CellBorn, n);
         Grow(ref CellPx, n); Grow(ref CellPy, n);
@@ -449,7 +415,7 @@ public sealed class SimState
     public void EnsureBonds(int n)
     {
         Grow(ref BondA, n); Grow(ref BondB, n); Grow(ref BondLen, n); Grow(ref BondStr, n);
-        Grow(ref BondK0, n); Grow(ref BondKa0, n); Grow(ref BondS0, n); Grow(ref BondSy0, n);
+        Grow(ref BondK0, n); Grow(ref BondKa0, n); Grow(ref BondS0, n);
         Grow(ref BondChi, n);
         Grow(ref BondNx, n); Grow(ref BondNy, n);
         Grow(ref BondRax, n); Grow(ref BondRay, n); Grow(ref BondRbx, n); Grow(ref BondRby, n);
@@ -466,9 +432,7 @@ public sealed class SimState
         Grow(ref BodyWPrev, n); Grow(ref BodyAlpha, n);
         Grow(ref BodyM, n); Grow(ref BodyI, n); Grow(ref BodyEulL, n);
         Grow(ref BodyDirty, n);
-        Grow(ref BodyRho, n); Grow(ref BodyCpx, n); Grow(ref BodyChi, n);
-        Grow(ref BodyVCrit, n); Grow(ref BodyDuct, n); Grow(ref BodyCellSize, n);
-        Grow(ref BodyCpxAcc, n); Grow(ref BodyCpyAcc, n); Grow(ref BodyClAcc, n);
+        Grow(ref BodyRho, n); Grow(ref BodyCpx, n); Grow(ref BodyCellSize, n);
         Grow(ref BodyCellOff, n); Grow(ref BodyCellLen, n);
         Grow(ref BodyBondOff, n); Grow(ref BodyBondLen, n);
     }
@@ -490,7 +454,7 @@ public sealed class SimState
     /// <summary>
     /// Rebuilds per-body bond lists and per-cell adjacency from the surviving bonds, scanning bonds
     /// in index order. That scan order is what fixes the order of every later Gauss-Seidel sweep
-    /// (the rebake in particular), so it is part of the determinism contract.
+    /// so it is part of the determinism contract.
     /// </summary>
     public long ReindexCalls;
     public long ReindexBondScans;

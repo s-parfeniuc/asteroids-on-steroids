@@ -3,21 +3,16 @@ using System;
 namespace AsteroidsSim.Fracture;
 
 /// <summary>
-/// The JavaScript prototype's generator (mulberry32), reproduced bit-exactly.
+/// The body-construction generator (mulberry32).
 /// </summary>
 /// <remarks>
-/// <para><b>Why this exists alongside <see cref="Math.DetRng"/>.</b> Body construction consumes
-/// random numbers in a fixed order — two draws per tessellation grid point (including the points
-/// that are rejected), the outline ring, then one Weibull draw per bond. The shapes that come out
-/// are therefore a pure function of the generator. To compare the port's fragment counts and
-/// conservation metrics against <c>prototypes/test-v9.js</c>, both sides must build the <i>same
-/// bodies</i>, which means the port must consume the same stream. <c>DetRng</c> (PCG32) is the
-/// project's generator for everything the prototype does not define — waves, loot, AI.</para>
+/// <para>Body construction consumes random numbers in a fixed order — the outline ring, two draws
+/// per tessellation grid point (including the points that are rejected), then one Weibull draw per
+/// bond — so the shapes that come out are a pure function of this stream. <see cref="Math.DetRng"/>
+/// (PCG32) is the generator for everything else.</para>
 ///
 /// <para>The algorithm is integer-only — 32-bit wrapping add, xor, shift and multiply — so it is
-/// exactly reproducible in any language. JavaScript's <c>Math.imul</c> is a 32-bit wrapping
-/// multiply, which is what unchecked <see cref="uint"/> multiplication is here; JavaScript's
-/// <c>&gt;&gt;&gt;</c> is an unsigned shift, likewise. The final division by 2^32 is exact in
+/// exactly reproducible on every platform. The final division by 2^32 is exact in
 /// <see cref="double"/>, so the mantissa carries no rounding of its own.</para>
 ///
 /// <para>It is a plain mutable struct with a single field, so snapshotting it is a copy.</para>
@@ -26,7 +21,7 @@ public struct ProtoRng : IEquatable<ProtoRng>
 {
     private uint _state;
 
-    /// <summary>The prototype's default seed (<c>cfg.seed</c>).</summary>
+    /// <summary>The seed every scenario uses unless told otherwise.</summary>
     public const int DefaultSeed = 12345;
 
     public ProtoRng(int seed) => _state = unchecked((uint)seed);

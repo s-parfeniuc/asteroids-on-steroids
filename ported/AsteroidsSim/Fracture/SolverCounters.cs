@@ -35,10 +35,8 @@ public struct SolverCounters
     public long SatContact;
     public long SatAxesTested;       // edge normals actually evaluated
     public long SatProjections;      // vertex-onto-axis dot products
-    public long SkinComputed;        // cells actually skinned
+    public long SkinComputed;        // cells whose world polygon was computed
     public long SkinCacheHit;
-    public long LocalComputed;       // cells whose local vertices were transformed
-    public long LocalCacheHit;
 
     // ── bonds ────────────────────────────────────────────────────────────────
     public long BondForceVisits;
@@ -46,14 +44,12 @@ public struct SolverCounters
     public long BondIntegrateVisits;
     public long DamageVisits;
     public long DamageEarlyOut;      // the L1 bound said "cannot act"
-    public long DamageFlowed;        // plastic flow occurred
     public long DamageEvaluated;     // reached the cohesive law
     public long DamageBroke;
 
     // ── contacts ─────────────────────────────────────────────────────────────
     public long ContactSolves;
     public long ContactFriction;
-    public long ContactRepeatPair;   // same pair as the previous substep — caching potential
 
     // ── topology ─────────────────────────────────────────────────────────────
     public long SplitCalls;
@@ -61,11 +57,8 @@ public struct SolverCounters
     public long SplitPerformed;
     public long SplitCellsWalked;
     public long SplitBondsReanchored;
-    public long RebakeCalls;
-    public long RebakeBondSweeps;
     public long DustScans;
     public long DustSinglesSeen;
-    public long DustTransfers;
     public long DustConverted;
 
     // ── other per-cell / per-body passes ─────────────────────────────────────
@@ -75,12 +68,9 @@ public struct SolverCounters
     public long DecomposeBodies;
     public long DecomposeCells;
     public long DecomposeNoOp;       // field was already zero-mean
-    public long RealizeCells;
-    public long RealizeCapHit;
+    public long DampCells;
     public long UpdateCentersCalls;
     public long UpdateCentersCells;
-    public long ReindexCalls;
-    public long ReindexBonds;
 
     public void Reset() => this = default;
 
@@ -113,29 +103,22 @@ public struct SolverCounters
         SatProjections += o.SatProjections;
         SkinComputed += o.SkinComputed;
         SkinCacheHit += o.SkinCacheHit;
-        LocalComputed += o.LocalComputed;
-        LocalCacheHit += o.LocalCacheHit;
         BondForceVisits += o.BondForceVisits;
         BondForceSkipped += o.BondForceSkipped;
         BondIntegrateVisits += o.BondIntegrateVisits;
         DamageVisits += o.DamageVisits;
         DamageEarlyOut += o.DamageEarlyOut;
-        DamageFlowed += o.DamageFlowed;
         DamageEvaluated += o.DamageEvaluated;
         DamageBroke += o.DamageBroke;
         ContactSolves += o.ContactSolves;
         ContactFriction += o.ContactFriction;
-        ContactRepeatPair += o.ContactRepeatPair;
         SplitCalls += o.SplitCalls;
         SplitNoChange += o.SplitNoChange;
         SplitPerformed += o.SplitPerformed;
         SplitCellsWalked += o.SplitCellsWalked;
         SplitBondsReanchored += o.SplitBondsReanchored;
-        RebakeCalls += o.RebakeCalls;
-        RebakeBondSweeps += o.RebakeBondSweeps;
         DustScans += o.DustScans;
         DustSinglesSeen += o.DustSinglesSeen;
-        DustTransfers += o.DustTransfers;
         DustConverted += o.DustConverted;
         InertialBodies += o.InertialBodies;
         InertialSkipped += o.InertialSkipped;
@@ -143,11 +126,8 @@ public struct SolverCounters
         DecomposeBodies += o.DecomposeBodies;
         DecomposeCells += o.DecomposeCells;
         DecomposeNoOp += o.DecomposeNoOp;
-        RealizeCells += o.RealizeCells;
-        RealizeCapHit += o.RealizeCapHit;
+        DampCells += o.DampCells;
         UpdateCentersCalls += o.UpdateCentersCalls;
         UpdateCentersCells += o.UpdateCentersCells;
-        ReindexCalls += o.ReindexCalls;
-        ReindexBonds += o.ReindexBonds;
     }
 }

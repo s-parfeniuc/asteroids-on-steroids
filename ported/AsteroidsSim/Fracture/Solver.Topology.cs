@@ -11,8 +11,7 @@ public sealed partial class Solver
     private float[] _oldRot = Array.Empty<float>(), _oldVx = Array.Empty<float>();
     private float[] _oldVy = Array.Empty<float>(), _oldW = Array.Empty<float>();
     private float[] _oldRho = Array.Empty<float>(), _oldCpx = Array.Empty<float>();
-    private float[] _oldChi = Array.Empty<float>(), _oldVCrit = Array.Empty<float>();
-    private float[] _oldDuct = Array.Empty<float>(), _oldCell = Array.Empty<float>();
+    private float[] _oldCell = Array.Empty<float>();
     private int[] _srcBody = Array.Empty<int>();
 
     private void EnsureSplitScratch(int oldCount, int comps)
@@ -22,8 +21,7 @@ public sealed partial class Solver
             int n = oldCount < 16 ? 16 : oldCount * 2;
             _oldX = new float[n]; _oldY = new float[n]; _oldRot = new float[n];
             _oldVx = new float[n]; _oldVy = new float[n]; _oldW = new float[n];
-            _oldRho = new float[n]; _oldCpx = new float[n]; _oldChi = new float[n];
-            _oldVCrit = new float[n]; _oldDuct = new float[n]; _oldCell = new float[n];
+            _oldRho = new float[n]; _oldCpx = new float[n]; _oldCell = new float[n];
         }
         if (_srcBody.Length < comps) _srcBody = new int[comps < 16 ? 16 : comps * 2];
     }
@@ -85,8 +83,7 @@ public sealed partial class Solver
             EnsureSplitScratch(bodiesAtEntry, bodiesAtEntry);
             _oldX[b] = _s.BodyX[b]; _oldY[b] = _s.BodyY[b]; _oldRot[b] = _s.BodyRot[b];
             _oldVx[b] = _s.BodyVx[b]; _oldVy[b] = _s.BodyVy[b]; _oldW[b] = _s.BodyW[b];
-            _oldRho[b] = _s.BodyRho[b]; _oldCpx[b] = _s.BodyCpx[b]; _oldChi[b] = _s.BodyChi[b];
-            _oldVCrit[b] = _s.BodyVCrit[b]; _oldDuct[b] = _s.BodyDuct[b];
+            _oldRho[b] = _s.BodyRho[b]; _oldCpx[b] = _s.BodyCpx[b];
             _oldCell[b] = _s.BodyCellSize[b];
         }
         if (dirtyProcessed == 0) { C.SplitNoChange++; return; }
@@ -217,8 +214,7 @@ public sealed partial class Solver
                 _s.BodyM[w] = _s.BodyM[r]; _s.BodyI[w] = _s.BodyI[r];
                 _s.BodyEulL[w] = _s.BodyEulL[r];
                 _s.BodyRho[w] = _s.BodyRho[r]; _s.BodyCpx[w] = _s.BodyCpx[r];
-                _s.BodyChi[w] = _s.BodyChi[r]; _s.BodyVCrit[w] = _s.BodyVCrit[r];
-                _s.BodyDuct[w] = _s.BodyDuct[r]; _s.BodyCellSize[w] = _s.BodyCellSize[r];
+                _s.BodyCellSize[w] = _s.BodyCellSize[r];
                 _s.BodyDirty[w] = _s.BodyDirty[r];
 
                 int off = _s.BodyCellOff[r], len = _s.BodyCellLen[r];
@@ -254,8 +250,7 @@ public sealed partial class Solver
         _s.BodyWPrev[dst] = _s.BodyW[parent];
         _s.BodyAlpha[dst] = 0f;
         _s.BodyRho[dst] = _oldRho[parent]; _s.BodyCpx[dst] = _oldCpx[parent];
-        _s.BodyChi[dst] = _oldChi[parent]; _s.BodyVCrit[dst] = _oldVCrit[parent];
-        _s.BodyDuct[dst] = _oldDuct[parent]; _s.BodyCellSize[dst] = _oldCell[parent];
+        _s.BodyCellSize[dst] = _oldCell[parent];
         _s.BodyEulL[dst] = 0f;
         _s.BodyDirty[dst] = false;
         _parentOf[dst] = parent;
@@ -356,45 +351,28 @@ public sealed partial class Solver
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    //  rebake — plastic deformation becomes structure
-    // ══════════════════════════════════════════════════════════════════════════
-
-    // ══════════════════════════════════════════════════════════════════════════
     //  comminution as a classifier
     // ══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Comminutes cells that have absorbed their material's crush capacity, handing their momentum
-    /// to whatever was pressing on them. Returns true if anything converted.
+    /// Comminutes cells that carving has run out, and the cells the overlap backstop could not carve
+    /// enough. Returns true if anything converted.
     /// </summary>
     /// <remarks>
-    /// <para><b>Comminution is a transfer, not a deletion.</b> This is the part that matters, and
-    /// getting it wrong is silent: an earlier version booked a crushed cell's momentum straight to
-    /// the export ledger. That balanced the conservation guardrail perfectly — <c>MomentumDrift</c>
-    /// adds the ledger back in — while the material physically vanished mid-collision. Measured on
-    /// the 900 px/s projectile, 88.8% of the scene's momentum ended up in the ledger from FOUR
-    /// crushed cells, because those four cells were the impactor: it was deleted in flight and the
-    /// target was never struck, breaking exactly zero bonds. A momentum-conservation test cannot see
-    /// that, because the ledger is what makes it balance.</para>
+    /// <para><b>Who is selected.</b> A cell comminutes once it has lost its material's
+    /// <see cref="Material.ShedLimit"/> of its original area, or when the backstop queued it this
+    /// tick. Solo cells — built as one piece — never do.</para>
     ///
-    /// <para><b>Who receives it.</b> Every contact the cell had this tick, weighted by the pressure
-    /// that contact contributed — the same weights that decided the cell crushes decide where it
-    /// goes. Each share is handed over as a perfectly inelastic collision between that share of the
-    /// cell's mass and the partner body, which is what keeps the operation dissipative for any mass
-    /// ratio. The remainder that a share cannot deliver works out to <c>m*V_partner</c>: precisely
-    /// the momentum the partner would have gained by absorbing the cell's MASS, which it cannot,
-    /// since <c>BodyM</c> is rebuilt from live cells. So that part legitimately leaves, and for the
-    /// case that was broken it is zero — a stationary target means <c>V = 0</c> and the impactor's
-    /// momentum transfers in full.</para>
+    /// <para><b>Comminution is a transfer, not a deletion.</b> The cell's momentum splits in two.
+    /// Its rigid share — what it carried as part of its body — leaves with its mass, because
+    /// <c>BodyM</c> is rebuilt from live cells. Its deviation share, what the impact put into it, is
+    /// pressed into the material around it: its live same-body neighbours, mass-weighted; or, if it
+    /// has none, the cells it is in contact with, as a perfectly inelastic merge to one common
+    /// velocity. With neither, it leaves through the ledger.</para>
     ///
-    /// <para><b>Torque-free</b>, applied at the partner's centroid. Applying it at the contact point
-    /// would let a crushed cell spin up whatever crushed it, which is a free-energy loop waiting to
-    /// happen. The cell's own spin goes to the ledger.</para>
-    ///
-    /// <para>Only cells the narrow phase actually paired can reach this at all: pressure is written
-    /// exclusively by <c>SolveContact</c>, so a cell with no contact has no dose. Comminution is
-    /// therefore a surface phenomenon by construction, not by a rule — interior cells become
-    /// eligible only once penetration is deep enough to pair them, which is the crushed zone.</para>
+    /// <para>Booking the whole momentum to the ledger instead balances the conservation check while
+    /// the material physically vanishes mid-collision — an impactor deleted in flight never strikes
+    /// its target. The ledger makes momentum balance either way, so only the routing prevents it.</para>
     /// </remarks>
     private bool ConvertDust()
     {
@@ -404,7 +382,7 @@ public sealed partial class Solver
         EnsureCrushScratch();
 
         // ── COMMINUTION IS THE LIMIT OF CARVING ───────────────────────────────
-        // Nothing is selected here on a dose or a timer any more. A cell is carved back continuously
+        // Selection is by carved area alone, not by a dose or a timer. A cell is carved back continuously
         // by the contacts pressing on it, shedding mass to whatever is doing the pressing, and it
         // comminutes when it has lost its material's share of its original area. So the graceful low
         // end and the terminal case are one mechanism rather than two: a shallow contact shaves a
@@ -461,8 +439,6 @@ public sealed partial class Solver
                 // The cell is about to vanish, so the neighbour is left facing empty space.
                 OpenBondSides(k);
                 ExposeSide(_s.BondA[k] == c ? _s.BondB[k] : _s.BondA[k], k);
-                int other = _s.BondA[k] == c ? _s.BondB[k] : _s.BondA[k];
-                if (other >= 0 && other < _s.CellCount) _s.SetFlag(other, CellFlag.Cracked, true);
             }
 
 
@@ -589,8 +565,8 @@ public sealed partial class Solver
             float vx = _s.BodyVx[bi] + _s.CellDvx[c] * co - _s.CellDvy[c] * si;
             float vy = _s.BodyVy[bi] + _s.CellDvx[c] * si + _s.CellDvy[c] * co;
 
-            if (_s.CellTouch[c] != int.MinValue && _s.Tick - _s.CellTouch[c] < DustFreeTicks) continue;
-            if (_s.CellBorn[c] == int.MinValue || _s.Tick - _s.CellBorn[c] < DustFreeTicks) continue;
+            if (_s.CellTouch[c] != int.MinValue && _s.Tick - _s.CellTouch[c] < K.DustFreeTicks) continue;
+            if (_s.CellBorn[c] == int.MinValue || _s.Tick - _s.CellBorn[c] < K.DustFreeTicks) continue;
 
             ExportedPx += _s.CellM[c] * vx;
             ExportedPy += _s.CellM[c] * vy;
@@ -604,18 +580,10 @@ public sealed partial class Solver
         return did;
     }
 
-    // Comminution transfer scratch, indexed by cell and valid only within one ConvertDust call.
+    // Comminution scratch, indexed by cell and valid only within one ConvertDust call.
     private bool[] _crushMark = Array.Empty<bool>();
-    private bool[] _crushNew = Array.Empty<bool>();
     private int _crushCount;
     private int[] _crushList = Array.Empty<int>();
-    private float[] _crushVx = Array.Empty<float>();
-    private float[] _crushVy = Array.Empty<float>();
-    private float[] _crushW = Array.Empty<float>();
-    private float[] _crushTot = Array.Empty<float>();
-    private float[] _crushJx = Array.Empty<float>();
-    private float[] _crushJy = Array.Empty<float>();
-    private float[] _crushGain = Array.Empty<float>();
 
     private void ClearDoomed()
     {
@@ -633,79 +601,6 @@ public sealed partial class Solver
         if (_crushMark.Length >= _s.CellCount) return;
         int n = System.Math.Max(1, _s.CellCount);
         _crushMark = new bool[n];
-        _crushNew = new bool[n];
         _crushList = new int[n];
-        _crushVx = new float[n]; _crushVy = new float[n]; _crushW = new float[n];
-        _crushTot = new float[n];
-        _crushJx = new float[n]; _crushJy = new float[n]; _crushGain = new float[n];
     }
-
-    /// <summary>
-    /// Hands one share of a comminuting cell's momentum to one partner, as a perfectly inelastic
-    /// collision at the partner body's centroid.
-    /// </summary>
-    /// <remarks>
-    /// <para>The share is <c>weight / total</c> of the cell's mass, where the weights are the
-    /// pressures the contacts contributed. Treating each share as its own inelastic collision — and
-    /// so using the reduced mass of the SHARE against the partner, not of the whole cell — is what
-    /// keeps every individual transfer dissipative, which makes the sum dissipative too.</para>
-    ///
-    /// <para>The accounting is exact rather than approximate. The partner gains <c>j</c> and the
-    /// energy that goes with it; the cell's books record <c>j</c> as delivered and its own kinetic
-    /// energy less that gain as exported. Summing the two gives back precisely what the cell had, so
-    /// neither momentum nor energy is created or lost by the transfer itself — only by the material
-    /// leaving, which is what the ledger is for.</para>
-    /// </remarks>
-    private void TransferShare(int cell, int partner, float weight)
-    {
-        float total = _crushTot[cell];
-        if (total <= 0f || weight <= 0f) return;
-        int pb = _s.CellBody[partner];
-        if (pb < 0 || pb >= _s.BodyCount) return;
-        float mp = _s.BodyM[pb], mc = _s.CellM[partner];
-        if (mp <= 0f || mc <= 0f) return;
-
-        float ms = _s.CellM[cell] * (weight / total);
-        if (ms <= 0f) return;
-
-        // ── LOCAL, LIKE EVERY OTHER IMPULSE IN THIS MODEL ─────────────────────
-        // The recipient is the partner CELL's deviation field, not its body's centroid, and the
-        // resisting mass is the partner CELL's. Handing it to the body was body-level response by
-        // another name: it de-localises the momentum with no physical basis, delivers it
-        // instantaneously to material arbitrarily far from the contact, and contradicts the premise
-        // the whole model is built on — that an impact travels through the material at wave speed
-        // and the participating mass GROWS as it does. Writing into dv lets exactly that happen:
-        // the bonds carry it outward and DecomposeMotion promotes the rigid part when there is one.
-        //
-        // So the reduced mass is cell-against-cell. That transfers less per share than a body-mass
-        // reduced mass would, and correctly so: the body behind the partner participates through
-        // the bond network over the following substeps, not in this one.
-        float mu = ms * mc / (ms + mc);
-        BodyTrig(pb, out float sp, out float cp);
-        float rx = _s.CellRx[partner] * cp - _s.CellRy[partner] * sp;
-        float ry = _s.CellRx[partner] * sp + _s.CellRy[partner] * cp;
-        float pw = _s.BodyW[pb];
-        float pvx = _s.BodyVx[pb] - pw * ry + _s.CellDvx[partner] * cp - _s.CellDvy[partner] * sp;
-        float pvy = _s.BodyVy[pb] + pw * rx + _s.CellDvx[partner] * sp + _s.CellDvy[partner] * cp;
-
-        float jx = mu * (_crushVx[cell] - pvx);
-        float jy = mu * (_crushVy[cell] - pvy);
-
-        // Energy is booked against the BODY mass even though the momentum enters one cell, because
-        // that is where it ends up: DecomposeMotion promotes the field's mean, so the eventual
-        // counted gain is j.V + j^2/(2M) for the body. BodyKineticEnergy does not count the
-        // deviation field, so crediting the cell here would credit energy the ledger cannot see.
-        float gain = jx * _s.BodyVx[pb] + jy * _s.BodyVy[pb] + (jx * jx + jy * jy) / (2f * mp);
-
-        // World -> body-local at the boundary, exactly as ApplyPair does.
-        float ax = jx / mc, ay = jy / mc;
-        _s.CellDvx[partner] += ax * cp + ay * sp;
-        _s.CellDvy[partner] += -ax * sp + ay * cp;
-
-        _crushJx[cell] += jx;
-        _crushJy[cell] += jy;
-        _crushGain[cell] += gain;
-        C.DustTransfers++;
-    }
-
 }

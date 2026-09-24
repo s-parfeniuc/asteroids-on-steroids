@@ -228,6 +228,6 @@ Treat the following as rules, not preferences:
   needs: what was measured, on which scene, and why the number matters. Never summarise around a
   question or answer a neighbouring one. If a proposal of the user's is being adopted, changed, or
   declined, say which, and exactly why.
-- **Tools:** `tools/FractureBench` holds the diagnostic modes (`--audit`, `--census`, `--steel`, `--cell`,
+- **Tools:** `tools/FractureBench` holds the diagnostic modes (`--report`, `--audit`, `--census`, `--cell`,
   `--pair`, …); `AsteroidsSim/Fracture/SideAudit.cs` is the specification of the side/touch-record
   invariants. Add a bench mode for a repro rather than reasoning from memory.

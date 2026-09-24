@@ -8,28 +8,19 @@ namespace AsteroidsSim.Fracture;
 /// </summary>
 /// <remarks>
 /// <para><b>Why strain and not stress.</b> Stretchiness is strength divided by stiffness, so
-/// inflating strength to make bodies survive game-speed impacts — the prototype's earlier
-/// <c>sigma_real x 300</c> — inflates stretchiness by the same factor. That produced rock at 4%
-/// failure strain and steel at 44%: a 30 px steel cell stretched 13 px before it even yielded and
-/// needed a 158 px gap to separate. A single multiplier provably cannot put rock and steel in one
-/// strain band because their real strains differ by 11x. Authoring strain directly fixes the
-/// rigidity, and strength follows as <c>sigma = rho c^2 eps</c>.</para>
+/// inflating strength to make bodies survive game-speed impacts inflates stretchiness by the same
+/// factor, and a single multiplier cannot put rock and steel in one strain band because their real
+/// strains differ by 11x. Authoring strain directly fixes the rigidity, and strength follows as
+/// <c>sigma = rho c^2 eps</c>.</para>
 ///
-/// <para><b>The three knobs are separable, and that is the whole calibration story.</b> Fragment
-/// count goes as <c>M^2 / (eps^2 chi)</c> while the rigid look depends on <c>eps</c> alone, so a
-/// fast impact is stopped from vaporising a body by raising <see cref="Chi"/>, not by slowing the
-/// game down. Measured on the two-asteroid collision at 900 px/s, sweeping chi moved mass in
-/// &gt;4-cell pieces across 75/46/0/83% while peak neck stayed at 11.1% of a cell throughout.</para>
+/// <para><b>Bonds</b> are set by <see cref="Strain"/> (peak elastic stretch, as a fraction of the
+/// cell size) and <see cref="Chi"/> (the cohesive softening ratio: a bond separates at chi times its
+/// peak stretch, so <c>chi * Strain</c> is the separation stretch as a fraction of a cell).</para>
 ///
-/// <list type="bullet">
-/// <item><see cref="Strain"/> — rigidity of the bulk (peak elastic stretch under load).</item>
-/// <item><see cref="Duct"/> — how far material necks before it tears. This bounds visible stretch,
-/// and it is why raising <see cref="Chi"/> does not make anything stretchier.</item>
-/// <item><see cref="Chi"/> — energy per unit of new surface, i.e. how much a given impact
-/// fragments. A bond separates at <c>chi * eps * cellSize</c>, so <c>chi * eps</c> is the
-/// crack-opening gap as a fraction of a cell; keeping it under ~0.4 keeps every gap inside half a
-/// cell.</item>
-/// </list>
+/// <para><b>Carving and comminution</b> are set by <see cref="Crush"/> (where it starts),
+/// <see cref="CrushRate"/> (how fast the surface recedes past it), <see cref="ShedLimit"/> (how much
+/// a cell may lose before it comminutes) and <see cref="Dent"/> (how wide one contact's recession
+/// spreads).</para>
 /// </remarks>
 public readonly struct Material
 {
@@ -42,25 +33,20 @@ public readonly struct Material
     public readonly float Strain;
     /// <summary>Cohesive softening ratio s_f / s_0.</summary>
     public readonly float Chi;
-    /// <summary>Fraction of the peak stretch at which plastic flow begins.</summary>
-    public readonly float Yield;
-    /// <summary>Plastic strain capacity before the bond tears, as a fraction of cell size.</summary>
-    public readonly float Duct;
 
     /// <summary>
-    /// Contact stress at which comminution begins, in the solver's 2D stress units (force per unit
-    /// contact length). Authored, not derived — see the comminution pair below.
+    /// Contact pressure at which carving begins, in the solver's 2D stress units (force per unit
+    /// contact length). Compared against the cell's pressure summed over all its contacts in a
+    /// substep.
     /// </summary>
     public readonly float Crush;
 
     /// <summary>
-    /// Energy needed to destroy one unit of area — the cost of carving.
+    /// Dimensionless multiplier on the recession speed. A cell over its threshold recedes at
+    /// <c>CrushRate * (pressure - Crush) / (rho * c)</c>, with c floored at the contact stiffness
+    /// floor; impedance already separates soft from stiff materials, so this carries only genuine
+    /// deviations from it.
     /// </summary>
-    /// <remarks>
-    /// Conceptually what <see cref="Chi"/> already is for bonds: energy per unit of new surface.
-    /// This is what couples destruction to momentum transfer, because the energy has to come from
-    /// the contact doing work, and the contact can only do work if the impactor decelerates.
-    /// </remarks>
     public readonly float CrushRate;
 
     /// <summary>
@@ -72,126 +58,31 @@ public readonly struct Material
     /// <summary>How wide a dent is, in MEAN POLYGON EDGES of the loaded cell: the kernel radius
     /// over which one contact's recession is spread across neighbouring surface vertices.</summary>
     /// <remarks>
-    /// <para>The one parameter carving v2 adds. Narrow gives pits (glass), wide gives dents (steel).
-    /// A multiple of a cell length rather than pixels, so it means the same thing at any grain.</para>
-    /// <para>The base is the cell's mean edge, not its radius — see <c>Solver.MeanEdge</c> for why,
-    /// and note that these values were re-derived when the base changed. On the old radius base the
-    /// kernel came out about twice the cell, so every corner of a loaded cell drew near-equal weight
-    /// and a pointy cell contracted toward its centroid instead of flattening where it was struck.
-    /// Values here are half the old ones, which puts the Penetrator at the measured optimum for a
-    /// rod tip while preserving every material's width relative to the others. A normal collide is
-    /// insensitive to this over 0.40-2.00 (bodies 3-8, area kept 75-79%, median cell aspect
-    /// 1.21-1.23): the parameter only bites where a sharp feature meets a surface.</para>
+    /// Narrow gives pits (glass), wide gives dents (steel). A multiple of the cell's own mean edge
+    /// rather than pixels, so it means the same thing at any grain; see <c>Solver.MeanEdge</c>.
     /// </remarks>
     public readonly float Dent;
 
-
-
-    public Material(string name, float rho, float c, float strain, float chi, float yield, float duct,
-        float crush, float crushEnergy, float shedLimit, float dent = 0.75f)
+    public Material(string name, float rho, float c, float strain, float chi,
+        float crush, float crushRate, float shedLimit, float dent = 0.75f)
     {
-        Name = name; Rho = rho; C = c; Strain = strain; Chi = chi; Yield = yield; Duct = duct;
-        Crush = crush; CrushRate = crushEnergy; ShedLimit = shedLimit; Dent = dent;
+        Name = name; Rho = rho; C = c; Strain = strain; Chi = chi;
+        Crush = crush; CrushRate = crushRate; ShedLimit = shedLimit; Dent = dent;
     }
-
-    // ── The comminution pair ─────────────────────────────────────────────────────
-    //
-    // Crushing has the same shape as bond damage — one number for where it STARTS, one for how much
-    // it takes to FINISH — and the two are independent axes, exactly as s0 and chi are:
-    //
-    // CrushRate is a DIMENSIONLESS multiplier on the impedance-derived yield speed, so it must not
-    // re-encode softness: rho*c already does that, and doing it twice is what vaporised every soft
-    // material in the collide scene. Only genuine deviations from the impedance expectation belong
-    // here — glass powders faster than its stiffness suggests, steel resists beyond its own.
-    //
-    //   Crush     the pressure a cell must feel before any comminution happens at all
-    //   CrushCap  how much it then absorbs before it is powder — the brittle/ductile axis
-    //
-    // CAPACITY IS A TIME CONSTANT, and that is the thing to understand before touching it. A stress
-    // wave needs a few ticks to cross a body — about four for a 190 px rock at 2600 px/s. If the
-    // cells at the contact powder faster than that, the impact is absorbed at the surface, the
-    // interior is never loaded, and the body does not fracture at all however violent the hit. It
-    // is not subtle: on the 900 px/s projectile, capacity 6e3 gave 0 broken bonds and 1 body, while
-    // 2e5 gave 17 broken and 8 bodies with the same threshold. Comminution and fracture compete for
-    // the same impact, and capacity is what arbitrates.
-    //
-    // The threshold then separates the regimes, and it works because dose rate is (press - Crush).
-    // Under an impact press is far above the threshold, so the rate hardly notices where the
-    // threshold sits; under a sustained squeeze press is only just above it, so the rate is almost
-    // entirely a function of the threshold. Lowering it therefore buys slow-crush behaviour at
-    // almost no cost to fracture — which is what lets ONE pair of numbers serve a slow press and a
-    // hypervelocity impact, the thing the previous design could never do.
-    //
-    // Both are authored per material rather than derived. The previous version computed the
-    // threshold as a fixed fraction of the tensile failure stress rho*c^2*eps, which cannot be
-    // right for more than one material at a time: the compressive-to-tensile ratio is about 15x for
-    // rock, 10x for glass and near 1x for steel, so no single fraction spans them. A global floor
-    // was then needed to rescue the soft end, which is the usual sign that a derivation is being
-    // patched rather than fixed.
-    //
-    // Glass is the shape the pair exists to express: a HIGH threshold — it is genuinely strong in
-    // compression, stronger than rock — with a NEARLY ZERO capacity, so once it does start it goes
-    // to powder almost as soon as it starts. Steel is the opposite corner, high in both. Their
-    // capacities differ by 100x, and the previous design could not express any of it: capacity was
-    // one global constant shared by every material in the scene.
-    //
-    // CALIBRATED AGAINST BEHAVIOUR in four regimes at once — `FractureBench --crush` and
-    // `--crushcap` print the sweeps these came from. Every pair must: lose NO cells in a field left
-    // in light contact and never driven (the erosion the deleted floor was patching); comminute
-    // under a sustained slow squeeze; and leave a projectile impact still fracturing its target.
-    // Steel is the deliberate exception to the middle one — it does not powder under a slow press,
-    // because bending and denting are what should answer that for steel once they exist.
-    //
-    // Read against tensile these run high and unevenly, and that is expected rather than a fault:
-    // the contact stiffness floor means a soft material's contacts are as stiff as a hard one's, so
-    // the pressure a weak material actually experiences does not scale down with its own strength.
-    // No derived fraction of tensile strength can absorb that, which is why these are authored.
-    //
-    // Ordering, hardest last:  threshold  ice < sandstone < rock < glass < steel
-    //                          capacity   glass < ice < sandstone < rock < steel  (brittle first)
-
-    /// <summary>The prototype's table (<c>MATERIALS</c>), plus the authored comminution pair.</summary>
-    //                                              rho     c    strain  chi   yield duct   crush  rate  shed  dent
-    public static readonly Material Rock = new("rock", 3000f, 5000f, 0.010f, 90f, 0.95f, 0.02f, 2.5e5f, 1.0f, 0.35f, 0.75f);
-    public static readonly Material Ice = new("ice", 917f, 3200f, 0.007f, 70f, 0.70f, 0.05f, 6.0e4f, 1.0f, 0.25f, 0.75f);
-    public static readonly Material Glass = new("glass", 2500f, 5500f, 0.008f, 30f, 9f, 0.00f, 4.0e5f, 2.0f, 0.15f, 0.40f);
-    public static readonly Material Sandstone = new("sandstone", 2200f, 2500f, 0.009f, 50f, 0.85f, 0.05f, 1.5e5f, 1.0f, 0.25f, 0.75f);
-    public static readonly Material Steel = new("steel", 7850f, 5900f, 0.020f, 50f, 0.35f, 0.50f, 1.0e6f, 0.3f, 0.50f, 1.25f);
-
-    /// <summary>A long-rod penetrator: dense, and authored to resist its OWN erosion.</summary>
-    /// <remarks>
-    /// The distinguishing property is not mass but that it does not mushroom. A bullet erodes as it
-    /// goes — its front cells reach ShedLimit and comminute, the rod shortens and spreads, and it
-    /// ends up delivering its momentum over a wide crater. This one is given a crush threshold three
-    /// times steel's and a third of its erosion rate, so it stays a rod and keeps driving into the
-    /// hole it has already made. Tungsten's density, and a high shed limit so that even when it does
-    /// start eroding it survives a long way.
-    /// </remarks>
-    public static readonly Material Penetrator = new("penetrator", 17000f, 4000f, 0.015f, 40f, 0.40f, 0.30f, 3.0e6f, 0.1f, 0.60f, 1.00f);
-
-    public static Material ByName(string name) => name switch
-    {
-        "ice" => Ice,
-        "glass" => Glass,
-        "sandstone" => Sandstone,
-        "steel" => Steel,
-        _ => Rock,
-    };
 
     /// <summary>Exact field equality — what material-table registration dedupes on.</summary>
     public bool SameAs(in Material o)
         => Name == o.Name && Rho == o.Rho && C == o.C && Strain == o.Strain && Chi == o.Chi
-           && Yield == o.Yield && Duct == o.Duct && Crush == o.Crush
-           && CrushRate == o.CrushRate && ShedLimit == o.ShedLimit && Dent == o.Dent;
+           && Crush == o.Crush && CrushRate == o.CrushRate && ShedLimit == o.ShedLimit && Dent == o.Dent;
 }
 
 /// <summary>
 /// A material resolved against the world scale and the two global trim knobs — what actually gets
-/// baked into a body. Mirrors the prototype's <c>matProps()</c>.
+/// baked into a body.
 /// </summary>
 public readonly struct MaterialProps
 {
-    /// <summary>Density in the simulation's own units (g/cm³), as the prototype carries it.</summary>
+    /// <summary>Density in the simulation's own units (g/cm³): mass per unit area in px.</summary>
     public readonly float Rho;
     /// <summary>Wave speed in px/s.</summary>
     public readonly float Cpx;
@@ -206,8 +97,6 @@ public readonly struct MaterialProps
     /// <summary>Critical particle velocity in px/s: strength follows strain.</summary>
     public readonly float VCrit;
     public readonly float Chi;
-    public readonly float Yield;
-    public readonly float Duct;
 
     public MaterialProps(in Material m, in SimTuning t)
     {
@@ -216,8 +105,6 @@ public readonly struct MaterialProps
         Eps = m.Strain * t.StrainScale;
         VCrit = Eps * Cpx;
         Chi = 1f + (m.Chi - 1f) * t.ToughnessScale;
-        Yield = m.Yield;
-        Duct = m.Duct;
 
         // Authored, and deliberately NOT scaled by the trim knobs. StrainScale and ToughnessScale
         // trim how a material stretches and how it fragments in TENSION; comminution is a
@@ -269,17 +156,16 @@ public readonly struct BodyStructure
 }
 
 /// <summary>
-/// Every global knob the solver reads. A value type carried inside the simulation rather than a
-/// static, because static mutable state inside the tick is a determinism hazard and cannot be
-/// snapshotted (PORT_PLAN §6 rule 5).
+/// Every global knob the solver reads, plus the model constants. Values come from
+/// <c>Assets/sim.json</c> (see <see cref="SimConfig"/>). A value type carried inside the simulation
+/// rather than a static, because static mutable state inside the tick is a determinism hazard and
+/// cannot be snapshotted.
 /// </summary>
 public struct SimTuning
 {
     public float PxPerMetre;
     public float StrainScale;      // trim on every material's failure strain — the rigidity knob
     public float ToughnessScale;   // trim on (chi - 1) — the fragmentation knob
-    public float YieldScale;
-    public float FlowRate;         // viscoplastic flow rate, 1/s
     public float ShearMul;         // shear strength as a fraction of tensile
     public float Relax;            // Rayleigh damping on the deviation field = wave attenuation
     public float ContactMu;
@@ -321,9 +207,9 @@ public struct SimTuning
     /// It runs through the ordinary carve path, so ShedMass still hands the lost mass and its
     /// momentum to the partner and the ledger stays exact; a cell driven deep enough is eroded to
     /// nothing through the same path, which is its comminution.</para>
-    /// <para>It is a BACKSTOP, not the mechanism. With <see cref="CrushConfine"/> at 1.0 the depth
-    /// term alone held the worst penetration to 0.16-0.27 cell radii across the reference scenes,
-    /// so at 0.3 this is there to guarantee the bound, not to produce it.</para>
+    /// <para>It is a BACKSTOP, not the mechanism: the pressure terms are meant to keep contacts under
+    /// the ceiling on their own. <c>FractureBench --report</c> tracks peak overlap and how often
+    /// this fires.</para>
     /// <para>The yardstick is the half-extent along the normal rather than <c>CellRad</c>, because
     /// the circumradius measures a cell's longest reach, not how much material lies in the
     /// direction it is being pushed: on the piercing round's tip cell it is 53.7 px against a
@@ -467,48 +353,6 @@ public struct SimTuning
     public bool GrainLock;
     public float SurfFlaw;
 
-    /// <summary>The prototype's defaults (<c>cfg</c>).</summary>
-    public static SimTuning Default => new()
-    {
-        PxPerMetre = 0.52f,
-        StrainScale = 1f,
-        ToughnessScale = 1f,
-        YieldScale = 1f,
-        FlowRate = 25f,
-        ShearMul = 0.6f,
-        Relax = 2f,
-        ContactMu = 0.6f,
-        ContactCompliance = 1f,
-        CrushConfine = 1.0f,
-        OverlapBackstop = 0.3f,
-        CarveContinuity = 0.5f,
-        CarveMinArea = 0.005f,
-        CrackPush = true,
-        CrackPushCap = 4f,
-        SplitOnOpen = false,
-        SpallFraction = 1f,
-        ExportFreeDebris = false,
-        ContactBias = 0.05f,
-        ContactMaxBias = 2f,
-        ContactCMin = 5000f,
-        ManifoldDrift = 0.02f,
-        Substeps = 9,
-        Centrifugal = true,
-        Euler = true,
-        Coriolis = true,
-        Dust = true,
-        WeibullM = 8f,
-        Aniso = 0f,
-        GrainAngle = 0f,
-        GrainLock = false,
-        SurfFlaw = 0f,
-    };
-
-    /// <summary>
-    /// Substeps the CFL condition demands for a given wave speed and cell size:
-    /// <c>sub &gt;= margin * c / (60 * cellSize)</c>. With mixed materials this must be taken over
-    /// the fastest material present, so it is a world-level figure even though cell size is not.
-    /// </summary>
-    public static int CflSubsteps(float cPx, float cellSize, float margin = 2f)
-        => (int)SimMath.Ceiling(margin * cPx / (60f * cellSize));
+    /// <summary>The model's constants: scales, thresholds and tolerances. See <see cref="ModelConstants"/>.</summary>
+    public ModelConstants Constants;
 }

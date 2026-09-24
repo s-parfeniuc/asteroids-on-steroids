@@ -34,20 +34,20 @@ public class RecordConsistencyTests
 
     private static Scenarios.Result Build(string name)
     {
-        var t = SimTuning.Default;
+        var t = TestConfig.Tuning;
         switch (name)
         {
             case "repro: collide/rock g170":
                 t.ToughnessScale = 1.1f; t.CarveContinuity = 0.75f; t.CrushConfine = 0.10f;
-                return Scenarios.Collide(t, Material.Rock, 600f, 170f);
+                return Scenarios.Collide(t, TestConfig.Material("rock"), 600f, 170f);
             case "repro: steel/steel g255 2250":
             {
                 t.ToughnessScale = 1.7f;
-                var hard = new Material("steel", 7850f, 5900f, 0.020f, 50f, 0.35f, 0.50f, 2.0e6f, 0.01875f, 0.50f, 2.5f);
+                var hard = new Material("steel", 7850f, 5900f, 0.020f, 50f, 2.0e6f, 0.01875f, 0.50f, 2.5f);
                 return Scenarios.Projectile(t, hard, 2250f, 5.5f, 255f, impactor: hard);
             }
-            case "repro: steel/rock g900 900": return Scenarios.Projectile(t, Material.Rock, 900f, 3f, 900f, impactor: Material.Steel);
-            default: return Scenarios.Reference(name, t);
+            case "repro: steel/rock g900 900": return Scenarios.Projectile(t, TestConfig.Material("rock"), 900f, 3f, 900f, impactor: TestConfig.Material("steel"));
+            default: return Scenarios.Reference(name, TestConfig.Value);
         }
     }
 

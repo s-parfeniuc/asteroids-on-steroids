@@ -21,9 +21,10 @@ namespace AsteroidsSim.Fracture;
 /// is the material's <see cref="Material.Dent"/>. That is what makes a dent rather than a per-cell
 /// notch: one contact moves several vertices, less the further they are.</para>
 ///
-/// <para>Cells with fewer than two live records — lone rubble, or a cell hanging from one
-/// neighbour — have no surface chord to move and keep the v1 direction clip, which is sound there
-/// because there is no interface for it to be inconsistent with.</para>
+/// <para>Surface vertices that are not record ends — corners between two surface sides — recede
+/// toward their cell's centroid in the same budget (see <see cref="GatherCornersOf"/>). Only a
+/// record-less triangle, which has no corner that can recede, falls back to the v1 direction clip.
+/// </para>
 /// </remarks>
 public partial class Solver
 {
@@ -35,69 +36,10 @@ public partial class Solver
     private int[] _dentWalkMark = Array.Empty<int>();
     private int[] _dentQueue = Array.Empty<int>();
 
-    internal System.Action<string>? DentTrace;
-    internal int DentCalls, DentVertices, DentReclips, DentSpent, DentFallback, DentSplits, DentBudgetRefused, DentExposed, DentCollapsed, DentCorners;
-    internal System.Action<string>? DentProbe; internal int DentProbeLeft = 12;
-    // DIAGNOSTIC: area removed by the v1 fallback clip, split by the clip direction in the cell's
-    // OWN body frame -- along the body's long axis vs across it. Not part of the model.
-    internal double CarveV1Along, CarveV1Across;
-    // DIAGNOSTIC: how far the carving normal sits from the actual approach direction, in 10 deg
-    // buckets (index 0 = 0-10 deg = aligned with the load, index 8 = 80-90 deg = across it).
-    internal readonly int[] CarveNormalAngle = new int[9];
-    /// DIAGNOSTIC: set to collect CarveNormalAngle and DentContactDepth; off in the hot path.
-    internal bool MeasureCarveAngles;
-    /// Contacts past the penetration ceiling, and carves the backstop drove (not diagnostic-gated:
-    /// two increments, and how often the guarantee is exercised is worth always knowing).
-    internal long BackstopContacts, BackstopRecessions, BackstopComminuted, BackstopSoloExempt;
-    /// DIAGNOSTIC: what a forced recession asked for against what it got, and why when nothing.
-    internal double BackstopAsked, BackstopGot;
-    internal long BackstopNothing, BackstopNoCand, BackstopOutOfReach, BackstopInsensitive, BackstopV1;
-    /// DIAGNOSTIC: depth / thinner half-extent right AFTER the backstop's carve (what it controls),
-    /// worst case, split by whether both sides could recede; plus how much the bodies closed in.
-    internal float BackstopWorstAfterBoth, BackstopWorstAfterStuck;
-    internal long BackstopStillOverBoth, BackstopStillOverStuck;
-    /// DIAGNOSTIC (overlap study): carve-gate outcomes binned by penetration / smaller cell radius,
-    /// bins [0,.1) [.1,.25) [.25,.5) [.5,1) [1,inf). Filled only while MeasureCarveAngles is on.
-    internal readonly long[] GateOpenByPen = new long[5], GateShutByPen = new long[5];
-    // DIAGNOSTIC: first-order area removed by a dent on TraceCell, bucketed by how far the moving
-    // point is from the contact, in units of the kernel radius. Answers "where does the area go".
-    internal readonly double[] DentAreaByU = new double[4];
-    internal readonly double[] DentSlideByU = new double[4];
-    internal int DentClamped, DentUnclamped;
-    /// DIAGNOSTIC: set to compare the iterated budget solve against a single pass plus clamping.
-    internal bool MeasureDentBudget, DentSinglePass;
-    /// <summary>
-    /// Carve cells with no touch record — lone rubble — through v2, using their corners, instead of
-    /// dropping them to the v1 half-plane clip. On by default; the flag exists so the bench can A/B it.
-    /// </summary>
-    /// <remarks>
-    /// The v1 fallback clips along the SAT axis, which is the axis of LEAST overlap, not the load
-    /// direction: once a cell is penetrated deeper than its own narrowest width the axis flips
-    /// sideways and stays there. That was a minority path for rock (2-3% of dents) but the dominant
-    /// one for brittle materials, because they shatter into single-cell rubble — measured at 55.6%
-    /// of all dents on a glass collide. A lone cell has no record to slide, but every vertex is a
-    /// corner between two surface sides, which is exactly what GatherCornersOf takes, so v2 needs
-    /// nothing new to handle it. Measured: the fallback share fell to 0.0-4.5% (the residue is
-    /// triangles, which have no corners to move and still take v1), the audit stayed clean on all
-    /// seven scenes, and the glass collide got 29% FASTER because a dent is cheaper than a clip plus
-    /// a polygon rebuild. Glass keeps slightly more of itself: 40 bodies against 31, 175 live cells
-    /// against 166.
-    /// </remarks>
-    internal bool DentLoneCells = true;
-    /// DIAGNOSTIC: corners the kernel reached but could not use because they already sit on (or
-    /// past) the chord joining their neighbours -- recession capacity a cell has permanently lost.
-    internal int DentCornerAtChord, DentCornerUsable;
-    /// DIAGNOSTIC: dents where every candidate hit its cap, i.e. the cell could not shed what the
-    /// crush law asked for without a vertex crossing its chord (leaving the cell non-convex).
-    internal int DentCapacityBound, DentTotalSolved;
-    /// DIAGNOSTIC: times the rebuild retired a surface vertex the outline had passed (B2).
-    internal int DentVertexConsumed;
-    internal double DentTargetSum, DentRealisedSum;
-    /// DIAGNOSTIC: the geometric penetration of the contact currently being carved.
-    internal float DentContactDepth;
-    /// DIAGNOSTIC: the three terms of contact pressure, accumulated for TraceCell only.
-    internal double PressDyn, PressConf, PressDrive;
-    internal int PressSamples, PressZeroPen;
+    // ── diagnostics: read by the bench census, never by the simulation ────────
+    internal int DentCalls, DentVertices, DentReclips, DentSpent, DentFallback, DentSplits, DentBudgetRefused, DentExposed, DentCorners;
+    /// <summary>Contacts past the penetration ceiling, and cells the backstop sent to comminution.</summary>
+    internal long BackstopContacts, BackstopComminuted;
     // Why a call slid nothing: no exposed end among the candidates at all, or none within reach.
     internal int DentNoOpenEnd, DentOutOfReach, DentGuarded, DentInsensitive;
     internal int DustToNeighbours, DustNoNeighbour, DustToContacts; internal double DustDevMom, DustRigidMom, DustLostMom, DustContactMom;
@@ -145,15 +87,6 @@ public partial class Solver
     private float[] _candSlide = Array.Empty<float>();   // solved slide; -1 while still free
     private int _candCount;
 
-    /// <summary>Largest share of a cell's area one contact may remove in one substep — a spike guard only.</summary>
-    /// <remarks>
-    /// Replaces the v1 <c>CellRad/4</c> depth cap, whose purpose was momentum accounting that the
-    /// compaction rule makes unnecessary. This one never binds in normal play (the depth cap bound
-    /// on 0.05–0.5% of calls); it turns a bad pressure sample into a bounded loss rather than a
-    /// deletion. If it ever binds, that is a signal about the rate law, not something to hide.
-    /// </remarks>
-    private const float DentAreaGuard = 0.5f;
-
     /// <summary>
     /// Recedes the surface around a contact on cell <paramref name="c"/>, removing the area the
     /// rate law asks for, spread over the exposed points the material's dent radius reaches.
@@ -174,9 +107,9 @@ public partial class Solver
     {
         // A lone cell has no record to slide, but every one of its vertices is a corner between two
         // surface sides, which is exactly what GatherCornersOf wants. A triangle still has none
-        // (GatherCornersOf needs four), so it keeps v1.
+        // (GatherCornersOf needs four), so it keeps the v1 clip.
         bool lone = LiveRecordCount(c) < 1;
-        if (lone && (!DentLoneCells || _s.PolyLen[c] < 4)) { DentFallback++; return -1f; }
+        if (lone && _s.PolyLen[c] < 4) { DentFallback++; return -1f; }
         EnsureDentScratch();
         int stamp = ++_dentStamp;
         DentCalls++;
@@ -226,8 +159,10 @@ public partial class Solver
         if (_dentOpenSeen > 0) DentNearest[(int)SimMath.Min(10f, _dentNearest * 5f)]++;
 
         // ── one budget, one scale ─────────────────────────────────────────────
-        float target = depth * SimMath.Max(1f, _s.CellPerim[c] * 0.25f);
-        float guard = DentAreaGuard * _s.CellArea[c];
+        float target = depth * SimMath.Max(1f, _s.CellPerim[c] * K.FaceLength);
+        // A spike guard (ModelConstants.DentAreaGuard): turns a bad pressure sample into a bounded
+        // loss rather than a deletion. If it binds, that is a signal about the rate law.
+        float guard = K.DentAreaGuard * _s.CellArea[c];
         if (target > guard) { DentGuarded++; target = guard; }
         float sens = 0f;
         for (int i = 0; i < _candCount; i++) sens += _candDa[i] * _candK[i];
@@ -249,80 +184,22 @@ public partial class Solver
         // dent rather than a contraction: the vertex under the contact runs to its chord, and the
         // budget it cannot spend flows to its neighbours, which then recede together — the face
         // flattens where it was struck instead of the whole polygon shrinking.
-        if (DentSinglePass)
-        {
-            for (int i = 0; i < _candCount; i++)
-                _candSlide[i] = SimMath.Min(lambda * _candK[i], CandCap(i, c));
-        }
-        else SolveSlides(c, target);
+        SolveSlides(c, target);
 
-        if (MeasureDentBudget)
+        if (c == TraceCell && TraceSink != null)
         {
-            float got = 0f;
-            for (int i = 0; i < _candCount; i++) got += _candDa[i] * _candSlide[i];
-            DentTargetSum += target; DentRealisedSum += got;
-            DentTotalSolved++;
-            if (got < 0.95f * target) DentCapacityBound++;
-        }
-
-        if (DentTrace != null && c == TraceCell)
-        {
-            float dent = _s.Mat(c).Dent, crad = _s.CellRad[c], pen = SimMath.Max(0f, DentContactDepth);
-            // Candidate scales that do NOT depend on the contact solver's residual overlap.
-            float rB = 0.5f * crad;                       // half the carved cell's radius
-            float rC = 0.25f * crad;                      // a quarter of it
-            float meanEdge = 0f;                          // the cell's own feature size
-            {
-                int eo = _s.PolyOff[c], el = _s.PolyLen[c];
-                for (int v = 0; v < el; v++)
-                {
-                    int nv2 = v + 1 == el ? 0 : v + 1;
-                    meanEdge += SimMath.Hypot(_s.PolyX[eo + nv2] - _s.PolyX[eo + v], _s.PolyY[eo + nv2] - _s.PolyY[eo + v]);
-                }
-                meanEdge = el > 0 ? meanEdge / el : crad;
-            }
-            float rD = SimMath.Max(1e-3f, meanEdge);
             float realised = 0f;
             for (int i = 0; i < _candCount; i++) realised += _candDa[i] * _candSlide[i];
-            DentTrace($"  dent on {c}: recession {depth:F3} target {target:F2} realised {realised:F2}"
+            TraceSink($"     dent on {c}: recession {depth:F3} target {target:F2} realised {realised:F2}"
                 + $" ({100f * realised / SimMath.Max(1e-6f, target):F1}%), {_candCount} candidates;"
-                + $" kernel radius {radius:F1} (Dent {_s.Mat(c).Dent:F2} x meanEdge {MeanEdge(c):F1}),"
-                + $" contact local ({lx:F1},{ly:F1}), cell centre ({_s.CellRx[c]:F1},{_s.CellRy[c]:F1})");
+                + $" kernel radius {radius:F1} (Dent {_s.Mat(c).Dent:F2} x meanEdge {MeanEdge(c):F1})");
             for (int i = 0; i < _candCount; i++)
             {
-                float vx2, vy2;
-                string what;
-                if (_candRec[i] >= 0)
-                {
-                    RecordBisector(_candRec[i], out float ex3, out float ey3, out float mx3, out float my3);
-                    float t3 = _candEnd[i] == 0 ? _s.TouchT0[_candRec[i]] : _s.TouchT1[_candRec[i]];
-                    vx2 = mx3 + t3 * ex3; vy2 = my3 + t3 * ey3;
-                    what = $"end{_candEnd[i]} of rec {_candRec[i]} (with {_s.TouchOther(_candRec[i], _s.TouchA[_candRec[i]])})";
-                }
-                else
-                {
-                    int o3 = _s.PolyOff[_candCell[i]];
-                    vx2 = _s.CellRx[_candCell[i]] + _s.PolyX[o3 + _candVert[i]];
-                    vy2 = _s.CellRy[_candCell[i]] + _s.PolyY[o3 + _candVert[i]];
-                    what = $"corner of cell {_candCell[i]} v{_candVert[i]}";
-                }
-                float dist = SimMath.Hypot(vx2 - lx, vy2 - ly);
-                
-                
-                DentTrace($"    dist {dist,6:F2} u {dist / radius,5:F3} -> k {_candK[i]:F3}"
-                    + $" | dA/ds {_candDa[i],7:F2} | cap {CandCap(i, c),7:F2}"
+                string what = _candRec[i] >= 0
+                    ? $"end{_candEnd[i]} of rec {_candRec[i]}"
+                    : $"corner of cell {_candCell[i]} v{_candVert[i]}";
+                TraceSink($"       k {_candK[i]:F3} | dA/ds {_candDa[i],7:F2} | cap {CandCap(i, c),7:F2}"
                     + $" | slide {_candSlide[i],6:F3} | {what}");
-            }
-        }
-        if (c == TraceCell)
-        {
-            for (int i = 0; i < _candCount; i++)
-            {
-                // Recover u from k: k = 0.5(1+cos(pi u)) is monotone, so compare against the same
-                // thresholds the kernel would give at u = 0.1, 0.3, 0.6.
-                int bu = _candK[i] >= 0.9755f ? 0 : _candK[i] >= 0.7939f ? 1 : _candK[i] >= 0.3455f ? 2 : 3;
-                DentAreaByU[bu] += (double)_candDa[i] * _candSlide[i];
-                DentSlideByU[bu] += _candSlide[i];
             }
         }
         for (int i = 0; i < _candCount; i++)
@@ -350,7 +227,7 @@ public partial class Solver
         if (nCells > 0 && depth > 0f)
         {
             DentSumRemoved += removedAll;
-            DentSumDepthLcw += depth * SimMath.Max(1f, _s.CellPerim[c] * 0.25f);
+            DentSumDepthLcw += depth * SimMath.Max(1f, _s.CellPerim[c] * K.FaceLength);
             DentWidth[(int)SimMath.Min(10f, removedAll / depth / _s.CellRad[c] * 5f)]++;
             DentHit[(int)SimMath.Min(10f, removedAll / target * 5f)]++;
         }
@@ -453,21 +330,6 @@ public partial class Solver
     /// <para>When two adjacent corners both move, the side between them translates inward: a face
     /// receding along its normal, which arrives here for free.</para>
     /// </remarks>
-    /// <summary>DIAGNOSTIC: body-local position of candidate <paramref name="j"/>.</summary>
-    private float CandX(int j)
-    {
-        if (_candRec[j] < 0) return _s.CellRx[_candCell[j]] + _s.PolyX[_s.PolyOff[_candCell[j]] + _candVert[j]];
-        RecordBisector(_candRec[j], out float ex, out float _, out float mx, out float _2);
-        return mx + (_candEnd[j] == 0 ? _s.TouchT0[_candRec[j]] : _s.TouchT1[_candRec[j]]) * ex;
-    }
-
-    private float CandY(int j)
-    {
-        if (_candRec[j] < 0) return _s.CellRy[_candCell[j]] + _s.PolyY[_s.PolyOff[_candCell[j]] + _candVert[j]];
-        RecordBisector(_candRec[j], out float _, out float ey, out float _2, out float my);
-        return my + (_candEnd[j] == 0 ? _s.TouchT0[_candRec[j]] : _s.TouchT1[_candRec[j]]) * ey;
-    }
-
     private void GatherCornersOf(int c, float lx, float ly, float radius)
     {
         int off = _s.PolyOff[c], len = _s.PolyLen[c];
@@ -495,8 +357,7 @@ public partial class Solver
             float da = 0.5f * SimMath.Abs(cross);
             if (da <= 1e-6f) continue;                                      // moving along the chord: no area
             float toChord = -((kx - p1x) * cy - (ky - p1y) * cx) / cross;   // motion at which K lands on the chord
-            if (toChord <= 0f) { DentCornerAtChord++; continue; }
-            DentCornerUsable++;
+            if (toChord <= 0f) continue;
 
             if (_candCount >= _candRec.Length) GrowCandidates();
             _candRec[_candCount] = -1; _candEnd[_candCount] = 0;
@@ -608,7 +469,7 @@ public partial class Solver
         float remaining = target;
         int settled = 0;
 
-        for (int pass = 0; pass < 3 && settled < _candCount; pass++)
+        for (int pass = 0; pass < K.SlideSolvePasses && settled < _candCount; pass++)
         {
             float sens = 0f;
             for (int i = 0; i < _candCount; i++)
@@ -626,12 +487,11 @@ public partial class Solver
                 remaining -= _candDa[i] * cap;
                 settled++;
                 clamped = true;
-                DentClamped++;
             }
             if (clamped) continue;
 
             for (int i = 0; i < _candCount; i++)                        // nobody saturates: done
-                if (_candSlide[i] < 0f) { _candSlide[i] = lam * _candK[i]; settled++; DentUnclamped++; }
+                if (_candSlide[i] < 0f) { _candSlide[i] = lam * _candK[i]; settled++; }
             break;
         }
 
@@ -704,7 +564,7 @@ public partial class Solver
         // spent point is written into both cells' copies of the side FIRST: once the record is
         // unlinked the rebuild has nothing to place the side by, and a stub left behind is a notch
         // waiting to open. At zero length the rebuild merges it and the point is one vertex for all.
-        if (_s.TouchT1[r] - _s.TouchT0[r] <= 1e-3f)
+        if (_s.TouchT1[r] - _s.TouchT0[r] <= K.SpanEpsilon)
         {
             float tsp = _s.TouchT0[r];
             float wx = mx + tsp * ex, wy = my + tsp * ey;
@@ -722,7 +582,7 @@ public partial class Solver
                 }
             }
             DentSpent++;
-            RetireTouch(r, "dent-spent");
+            RetireTouch(r);
         }
     }
 
@@ -776,7 +636,7 @@ public partial class Solver
             // Two open ends at one vertex have genuinely parted only past the noise floor: two records
             // describe the same vertex with parameters that agree to rounding, and at 1e-4 the split
             // fired on a 0.04 px disagreement, leaving a bare sliver of pure noise on an uncarved cell.
-            if (haveA && haveB && SimMath.Hypot(ax - bx, ay - by) > 0.05f)
+            if (haveA && haveB && SimMath.Hypot(ax - bx, ay - by) > K.GeometryNoise)
             {
                 // Two open ends that no longer coincide: the vertex has become two, with a bare side
                 // between them. For the cell behind a receding pair this is the chord across its
@@ -807,7 +667,7 @@ public partial class Solver
                     _clipX[q] = _clipX[q + 1]; _clipY[q] = _clipY[q + 1];
                     _clipB[q] = _clipB[q + 1]; _clipS[q] = _clipS[q + 1];
                 }
-                n--; dropped = true; v--; DentVertexConsumed++;
+                n--; dropped = true; v--;
             }
         }
 
@@ -862,7 +722,7 @@ public partial class Solver
             int j = i + 1 == len ? 0 : i + 1;
             if (_s.SideTouch[off + i] >= 0) continue;                        // a record side is geometry
             float ex = _s.PolyX[off + j] - _s.PolyX[off + i], ey = _s.PolyY[off + j] - _s.PolyY[off + i];
-            if (ex * ex + ey * ey > 0.05f * 0.05f) continue;
+            if (ex * ex + ey * ey > K.GeometryNoise * K.GeometryNoise) continue;
             _s.PolyBond[off + i] = _s.PolyBond[off + j]; _s.SideTouch[off + i] = _s.SideTouch[off + j];
             for (int q = j; q + 1 < len; q++)
             {
@@ -870,7 +730,6 @@ public partial class Solver
                 _s.PolyBond[off + q] = _s.PolyBond[off + q + 1]; _s.SideTouch[off + q] = _s.SideTouch[off + q + 1];
             }
             len--; i--;
-            DentCollapsed++;
         }
         _s.PolyLen[c] = len;
     }

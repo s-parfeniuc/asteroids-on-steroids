@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../AsteroidsSim/AsteroidsSim.csproj" />
+    <ProjectReference Include="../AsteroidsSim.Config/AsteroidsSim.Config.csproj" />
   </ItemGroup>
 
 </Project>

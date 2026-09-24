@@ -3,8 +3,7 @@ using AsteroidsSim.Math;
 namespace AsteroidsSim.Fracture;
 
 /// <summary>
-/// The measurable character of a fracture outcome — what the JavaScript reference's headless suite
-/// reports, in the same terms.
+/// The measurable character of a fracture outcome/// reports, in the same terms.
 /// </summary>
 /// <remarks>
 /// The conservation invariants catch bugs; these catch <i>feel changes</i>. An optimisation that
@@ -20,8 +19,6 @@ public readonly struct SceneMetrics
     public readonly int Broken;
     /// <summary>Cells converted to debris by the comminution classifier.</summary>
     public readonly int Dust;
-    /// <summary>Plastic rest rebakes performed.</summary>
-    public readonly int Rebakes;
 
     /// <summary>
     /// Percentage of separated bonds that share a cell with another separated bond — i.e. how much
@@ -48,30 +45,30 @@ public readonly struct SceneMetrics
     /// Worst collider vertex distance from its own cell centre, in cell radii. About 1 by
     /// construction now; anything larger means geometry is being read from the wrong place.
     /// </summary>
-    public readonly float MaxSharedVertexGap;
+    public readonly float MaxVertexRadius;
     /// <summary>Deepest overlap seen during the run.</summary>
     public readonly float PeakOverlap;
 
-    public SceneMetrics(int bodies, int broken, int dust, int rebakes, float crackConnectivity,
+    public SceneMetrics(int bodies, int broken, int dust, float crackConnectivity,
         float singlesMassPct, float bigMassPct, float peakStretchPct,
         float momentumDrift, float energyFraction, float peakEnergyFraction,
-        float maxSharedVertexGap, float peakOverlap)
+        float maxVertexRadius, float peakOverlap)
     {
-        Bodies = bodies; Broken = broken; Dust = dust; Rebakes = rebakes;
+        Bodies = bodies; Broken = broken; Dust = dust;
         CrackConnectivity = crackConnectivity;
         SinglesMassPct = singlesMassPct; BigMassPct = bigMassPct;
         PeakStretchPct = peakStretchPct;
         MomentumDrift = momentumDrift; EnergyFraction = energyFraction;
         PeakEnergyFraction = peakEnergyFraction;
-        MaxSharedVertexGap = maxSharedVertexGap; PeakOverlap = peakOverlap;
+        MaxVertexRadius = maxVertexRadius; PeakOverlap = peakOverlap;
     }
 
     public override string ToString()
-        => $"bodies={Bodies} broken={Broken} dust={Dust} rb={Rebakes} conn={CrackConnectivity:F0}% "
+        => $"bodies={Bodies} broken={Broken} dust={Dust} conn={CrackConnectivity:F0}% "
          + $"sing={SinglesMassPct:F0}% big={BigMassPct:F0}% str={PeakStretchPct:F1}% "
          + $"mom={100 * MomentumDrift:F3}% "
          + $"ke={100 * EnergyFraction:F0}/{100 * PeakEnergyFraction:F0}% "
-         + $"vtx={MaxSharedVertexGap:F2} ov={PeakOverlap:F1}";
+         + $"vtx={MaxVertexRadius:F2} ov={PeakOverlap:F1}";
 }
 
 /// <summary>Runs a scenario and collects <see cref="SceneMetrics"/>.</summary>
@@ -102,7 +99,7 @@ public static class SceneRunner
             {
                 // Collider vertices must sit on the cells they belong to. With deformation gone this
                 // is close to an identity, but it still catches a transform reading a stale pose.
-                float g = r.Solver.MaxSkinRadiusRatio();
+                float g = r.Solver.MaxVertexRadiusRatio();
                 if (g > worstGap) worstGap = g;
             }
         }
@@ -146,7 +143,6 @@ public static class SceneRunner
             bodies: st2.BodyCount,
             broken: r.Solver.Broken,
             dust: r.Solver.Dust,
-            rebakes: r.Solver.Rebakes,
             crackConnectivity: nb > 0 ? 100f * conn / nb : 0f,
             singlesMassPct: 100f * mSingles / mTot,
             bigMassPct: 100f * mBig / mTot,
@@ -154,7 +150,7 @@ public static class SceneRunner
             momentumDrift: r.MomentumDrift(),
             energyFraction: r.EnergyFraction(),
             peakEnergyFraction: peakKe,
-            maxSharedVertexGap: worstGap,
+            maxVertexRadius: worstGap,
             peakOverlap: peakOverlap);
     }
 }

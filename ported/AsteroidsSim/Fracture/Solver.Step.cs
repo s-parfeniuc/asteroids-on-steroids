@@ -22,15 +22,10 @@ public sealed partial class Solver
         _s.Tick++;
 
         // OPEN A FRESH CACHE EPOCH BEFORE ANYTHING READS GEOMETRY.
-        // The skinned polygons and the cell-local vertex transforms are cached per substep, and the
-        // trig cache per rotation epoch. Both were stamped during the previous tick's last substep —
-        // and AFTER that, the end-of-tick work ran: splits re-centre a body's cells, a plastic
-        // rebake moves rest offsets and rotations, and the pose integrates. The manifold build below
-        // then ran at the same substep number and read all of it back out of the cache, so the first
-        // contacts of every tick following a topology change were built from where the geometry used
-        // to be. It was found by a bound that could not be violated being violated: a cell whose
-        // rest offset was (0,0) and whose polygon spans 18 px produced a vertex 214 px away, still
-        // carrying the offset it had had inside the body it was cut out of.
+        // The world polygons are cached per substep and the trig cache per rotation epoch. Both were
+        // stamped during the previous tick's last substep, and the end-of-tick work that followed —
+        // splits re-centring a body's cells, dust removal, the final pose — moved geometry after
+        // that. Without a new epoch the manifold build below would read the stale shapes back.
         _s.Substep++;
         BumpRotEpoch();
 
@@ -80,22 +75,8 @@ public sealed partial class Solver
             Mark(SolverPhase.Decompose);
 
             float rf = SimMath.Max(0f, 1f - _tune.Relax * h);
-            for (int b = 0; b < _s.BodyCount; b++)
-            {
-                _s.BodyCpxAcc[b] = 0f; _s.BodyCpyAcc[b] = 0f; _s.BodyClAcc[b] = 0f;
-            }
-
-            if (!Par(16)) RealizeDeformation(h, rf, 0, _s.BodyCount, ref C);
-            else RunOverBodies((chunk, lo, hi) => RealizeDeformation(h, rf, lo, hi, ref _chunkC[chunk]));
-
-            for (int b = 0; b < _s.BodyCount; b++)
-            {
-                if (_s.BodyCpxAcc[b] == 0f && _s.BodyCpyAcc[b] == 0f && _s.BodyClAcc[b] == 0f) continue;
-                SimMath.SinCos(_s.BodyRot[b], out float si, out float co);
-                _s.BodyVx[b] += (_s.BodyCpxAcc[b] * co - _s.BodyCpyAcc[b] * si) / _s.BodyM[b];
-                _s.BodyVy[b] += (_s.BodyCpxAcc[b] * si + _s.BodyCpyAcc[b] * co) / _s.BodyM[b];
-                _s.BodyW[b] += _s.BodyClAcc[b] / _s.BodyI[b];
-            }
+            if (!Par(16)) DampDeviation(rf, 0, _s.BodyCount, ref C);
+            else RunOverBodies((chunk, lo, hi) => DampDeviation(rf, lo, hi, ref _chunkC[chunk]));
 
             for (int b = 0; b < _s.BodyCount; b++)
             {
@@ -107,7 +88,7 @@ public sealed partial class Solver
             }
             BumpRotEpoch();                        // bodies just rotated
 
-            Mark(SolverPhase.Realize);
+            Mark(SolverPhase.Damping);
 
             UpdateDamage(h);                       // marks affected bodies dirty
             Mark(SolverPhase.Damage);
@@ -124,18 +105,10 @@ public sealed partial class Solver
         DecomposeMotion();
         Mark(SolverPhase.Split);
 
-        // NO INERTIA RECOMPUTE. It existed because realized displacement changed a body's shape
-        // within a tick, so I drifted and angular momentum rather than omega had to be conserved —
-        // and that coupling was itself a free spin-up loop until it was paid for. With deformation
-        // gone the shape is fixed between topology events, so I is set once by RecomputeBody and
-        // nothing here needs to touch it.
-
-        // ── RUBBLE IS RIGID, SO ITS IMPENETRABILITY IS KINEMATIC ──────────────
-        // A bond-less single cell has no bond network and therefore no deformation outlet at all:
-        // u stays zero and overlap has nothing to convert into. Everything else resolves overlap by
-        // deforming, so this is the ONE case that still needs a positional nudge. Translation-only,
-        // and only when BOTH sides are rubble, so it can never touch a bonded body and the twitch it
-        // used to cause on large bodies cannot return.
+        // ── RUBBLE SEPARATION ─────────────────────────────────────────────────
+        // Two bond-less single cells in contact are nudged apart by position, translation only. This
+        // is the only positional correction in the model: it never touches a bonded body, whose
+        // overlap is left to the contact bias and to carving.
         for (int i = 0; i < _contactCount; i++)
         {
             ref Contact ct = ref _contacts[i];
@@ -148,9 +121,9 @@ public sealed partial class Solver
             // resolve through the material, and that defeats the interpenetrating contact,
             // emergent participating mass and wave-speed load transfer the model exists for.
             if (_s.BodyCellLen[ba] > 1 || _s.BodyCellLen[bb] > 1) continue;
-            float pen = ct.Depth - 0.05f;
+            float pen = ct.Depth - K.ContactSlop;
             if (pen <= 0f) continue;
-            float push = SimMath.Min(pen, 0.5f) * 0.5f;
+            float push = SimMath.Min(pen, K.RubblePushMax) * K.RubblePushFraction;
             float wA = 1f / _s.BodyM[ba], wB = 1f / _s.BodyM[bb];
             float tot = wA + wB;
             if (tot < 1e-12f) continue;
@@ -176,10 +149,8 @@ public sealed partial class Solver
         Mark(SolverPhase.Dust);
 
         // Close the cache epoch as well as opening one. Everything above this line — the split, the
-        // rebake, the dust conversion, the final pose — moved geometry after the last substep
-        // stamped the skin and trig caches, so a reader that asks for a collider polygon between
-        // now and the next tick would be handed the shape from before it all. That reader is not
-        // hypothetical: it is the renderer, and the interpolating draw call that follows Step.
+        // dust conversion, the final pose — moved geometry after the last substep stamped the
+        // polygon and trig caches, and the renderer reads collider polygons between ticks.
         _s.Substep++;
         BumpRotEpoch();
     }
@@ -245,21 +216,10 @@ public sealed partial class Solver
     }
 
     /// <summary>
-    /// Largest distance between two copies of the same shared vertex inside one body. A bond is a
-    /// shared side, so this must stay at zero: it is the direct assertion that skinning holds.
+    /// Rayleigh damping of the deviation field (<see cref="SimTuning.Relax"/>), for a contiguous
+    /// range of bodies. Each cell is scaled independently, so the pass is dispatchable per body.
     /// </summary>
-
-    /// <summary>
-    /// Realizes the deformation field into <c>u</c>, applies the cap and the damping, for a
-    /// contiguous range of bodies.
-    /// </summary>
-    /// <remarks>
-    /// Iterating per body rather than over the global cell array leaves every accumulation into a
-    /// cell, and into that cell's body reaction accumulators, in the same order: <c>BodyCells</c>
-    /// holds a body's cells in ascending global index, and a cell only ever contributes to its own
-    /// body. Same argument as <see cref="BondForces"/>, and the same reason it is dispatchable.
-    /// </remarks>
-    private void RealizeDeformation(float h, float rf, int bodyLo, int bodyHi, ref SolverCounters ctr)
+    private void DampDeviation(float rf, int bodyLo, int bodyHi, ref SolverCounters ctr)
     {
         for (int b = bodyLo; b < bodyHi; b++)
         {
@@ -269,7 +229,7 @@ public sealed partial class Solver
                 int c = _s.BodyCells[cellOff + ci];
                 if (_s.Dead(c)) continue;
 
-                ctr.RealizeCells++;
+                ctr.DampCells++;
                 _s.CellDvx[c] *= rf;
                 _s.CellDvy[c] *= rf;
                 _s.CellDw[c] *= rf;
@@ -281,18 +241,11 @@ public sealed partial class Solver
     /// circumscribed radius.
     /// </summary>
     /// <remarks>
-    /// With deformation removed this should be at most 1 by construction — the polygon is the rest
-    /// polygon and nothing displaces it. It is kept because it is cheap and because it is the check
-    /// that caught a stale per-substep cache feeding the first contacts of every tick geometry from
-    /// before the previous tick's splits: the polygons were internally consistent and every
-    /// conservation invariant stayed green, and only "this vertex is 200 px from the cell it belongs
-    /// to" gave it away. A transform reading the wrong body or a stale pose would show up the same
-    /// way.
-    ///
-    /// <para>Its companion, the shared-vertex gap, is gone: two cells sharing a Voronoi corner now
-    /// compute it from the same rest data, so agreement is an identity rather than a measurement.</para>
+    /// At most 1 by construction: the polygon is the rest polygon and nothing displaces it. A larger
+    /// value means geometry is being read from a stale cache or the wrong pose — a failure that
+    /// leaves every conservation invariant green, which is why this is checked separately.
     /// </remarks>
-    public float MaxSkinRadiusRatio()
+    public float MaxVertexRadiusRatio()
     {
         // Refresh the cached centres first. They are rebuilt inside the substep loop, and the body
         // pose integrates once more after the last substep, so reading CellPx straight after Step

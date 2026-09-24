@@ -4,13 +4,13 @@ using System.Collections.Generic;
 namespace AsteroidsSim.Fracture;
 
 /// <summary>
-/// The reference scenarios from the prototype, used for equivalence testing, the determinism
-/// fingerprint and calibration sweeps. Not gameplay content.
+/// Test and tool scenes: the correctness tests, the determinism fingerprint, the bench and the
+/// viewer build from these. Not gameplay content.
 /// </summary>
 /// <remarks>
 /// Body creation order is part of the determinism contract — all bodies in a scene draw from one
 /// generator stream, so the order in which they are built decides what every one of them looks
-/// like. These builders therefore construct in exactly the reference's order.
+/// like.
 /// </remarks>
 public static class Scenarios
 {
@@ -97,16 +97,6 @@ public static class Scenarios
     }
 
     /// <summary>
-    /// A field of asteroids on a grid, drifting so that a realistic fraction of them are in contact
-    /// at any moment. This is the scaling scenario: it is not a reference case for behaviour, it
-    /// exists to put a chosen number of live cells in front of the solver.
-    /// </summary>
-    /// <param name="cols">Bodies across.</param>
-    /// <param name="rows">Bodies down.</param>
-    /// <param name="radius">Body radius; with the grain this sets cells per body.</param>
-    /// <param name="spacing">Centre-to-centre spacing. Below ~2.2x the radius they start packed.</param>
-    /// <param name="speed">Drift speed scale.</param>
-    /// <summary>
     /// A projectile into a body built from two materials: a hard shell over a softer core.
     /// </summary>
     /// <remarks>
@@ -141,6 +131,16 @@ public static class Scenarios
         return Finish(s, tuning);
     }
 
+    /// <summary>
+    /// A field of asteroids on a grid, drifting so that a realistic fraction of them are in contact
+    /// at any moment. This is the scaling scenario: it is not a reference case for behaviour, it
+    /// exists to put a chosen number of live cells in front of the solver.
+    /// </summary>
+    /// <param name="cols">Bodies across.</param>
+    /// <param name="rows">Bodies down.</param>
+    /// <param name="radius">Body radius; with the grain this sets cells per body.</param>
+    /// <param name="spacing">Centre-to-centre spacing. Below ~2.2x the radius they start packed.</param>
+    /// <param name="speed">Drift speed scale.</param>
     public static Result Field(in SimTuning tuning, in Material material,
         int cols, int rows, float radius = 60f, float spacing = 150f, float speed = 60f,
         float grain = 900f, int seed = ProtoRng.DefaultSeed)
@@ -174,22 +174,6 @@ public static class Scenarios
     }
 
     /// <summary>
-    /// Injects a small fast body into a live scene, aimed from one world point at another.
-    /// </summary>
-    /// <remarks>
-    /// <para>For the viewer: it is the difference between watching the model and poking it. The body
-    /// is appended to the existing <see cref="SimState"/> and the index tables rebuilt; the solver
-    /// re-derives everything else from state each tick, so nothing further is needed.</para>
-    ///
-    /// <para>The conservation baselines are <b>adjusted, not reset</b>. Recomputing them would zero
-    /// the accumulated drift and hide exactly what the readout exists to show, so the momentum and
-    /// energy the new body brings are added to the originals and the running drift stays meaningful
-    /// across a whole session of firing.</para>
-    ///
-    /// <para>Not part of the reference scenario set and not on the fingerprint path: it draws from
-    /// its own generator stream, seeded by the caller so a session can still be replayed.</para>
-    /// </remarks>
-    /// <summary>
     /// What a round of this shape and material would weigh, for callers that want to keep a round's
     /// mass while changing its size. Builds the same blob <see cref="FireAt"/> would from the same
     /// seed, on its own rng, so it neither needs nor disturbs the caller's stream.
@@ -210,6 +194,22 @@ public static class Scenarios
         return (float)(System.Math.Abs(area) * 0.5 * (material.Rho / 1000.0));
     }
 
+    /// <summary>
+    /// Injects a small fast body into a live scene, aimed from one world point at another.
+    /// </summary>
+    /// <remarks>
+    /// <para>For the viewer: it is the difference between watching the model and poking it. The body
+    /// is appended to the existing <see cref="SimState"/> and the index tables rebuilt; the solver
+    /// re-derives everything else from state each tick, so nothing further is needed.</para>
+    ///
+    /// <para>The conservation baselines are <b>adjusted, not reset</b>. Recomputing them would zero
+    /// the accumulated drift and hide exactly what the readout exists to show, so the momentum and
+    /// energy the new body brings are added to the originals and the running drift stays meaningful
+    /// across a whole session of firing.</para>
+    ///
+    /// <para>Not part of the reference scenario set and not on the fingerprint path: it draws from
+    /// its own generator stream, seeded by the caller so a session can still be replayed.</para>
+    /// </remarks>
     public static Result FireAt(in Result r, in SimTuning tuning, in Material material,
         float fromX, float fromY, float toX, float toY, float speed = 900f,
         float radius = 16f, float grain = 900f, int seed = 1,
@@ -253,8 +253,7 @@ public static class Scenarios
             // (Materials.cs:214), so the density that produces a given mass carries that factor.
             if (area > 1e-6)
                 round = new Material(material.Name, (float)(1000.0 * roundMass / area), material.C, material.Strain,
-                    material.Chi, material.Yield, material.Duct, material.Crush, material.CrushRate,
-                    material.ShedLimit, material.Dent);
+                    material.Chi, material.Crush, material.CrushRate, material.ShedLimit, material.Dent);
         }
 
         float dx = toX - fromX, dy = toY - fromY;
@@ -288,12 +287,12 @@ public static class Scenarios
     /// <remarks>
     /// Same machinery as <see cref="Projectile"/>; what makes it pierce is the shape and the
     /// material. The rod is elongated along its flight (<c>MakeBlob</c> takes separate radii), so it
-    /// presents a small face and concentrates its pressure, and <see cref="Material.Penetrator"/>
-    /// resists its own comminution so it stays a rod instead of mushrooming into a wide crater.
+    /// presents a small face and concentrates its pressure, and a penetrator material resists its
+    /// own comminution so it stays a rod instead of mushrooming into a wide crater.
     /// </remarks>
-    public static Result Pierce(in SimTuning tuning, in Material material,
+    public static Result Pierce(in SimTuning tuning, in Material material, in Material rodMaterial,
         float speed = 1800f, float massMul = 3f, float grain = 900f, float aspect = 3.5f,
-        int seed = ProtoRng.DefaultSeed, Material? impactor = null)
+        int seed = ProtoRng.DefaultSeed)
     {
         var s = new SimState();
         var rng = new ProtoRng(seed);
@@ -304,7 +303,7 @@ public static class Scenarios
         // Same area as the equivalent round shot, redistributed into a rod: pi r^2 = pi (r a)(r / a).
         float r = 15f * Math.SimMath.Sqrt(massMul);
         var rod = BodyBuilder.MakeBlob(ref rng, 120, 350, r * aspect, r / aspect, 0.10, 12);
-        BodyBuilder.AddBody(s, ref rng, tuning, rod, speed, 0f, 0f, impactor ?? Material.Penetrator, grain);
+        BodyBuilder.AddBody(s, ref rng, tuning, rod, speed, 0f, 0f, rodMaterial, grain);
 
         return Finish(s, tuning);
     }
@@ -411,11 +410,12 @@ public static class Scenarios
 
     /// <summary>
     /// Builds reference scene <paramref name="name"/> with every body at the floor grain of its
-    /// materials — the densest mesh the builder will produce at <paramref name="t"/>'s substep count.
+    /// materials — the densest mesh the builder will produce at the configured substep count.
     /// </summary>
-    public static Result Reference(string name, in SimTuning t)
+    public static Result Reference(string name, SimConfig cfg)
     {
-        Material rock = Material.Rock, glass = Material.Glass, steel = Material.Steel;
+        SimTuning t = cfg.Tuning;
+        Material rock = cfg.Material("rock"), glass = cfg.Material("glass"), steel = cfg.Material("steel");
         return name switch
         {
             "collide" => Collide(t, rock, 600f, FloorGrain(t, rock)),

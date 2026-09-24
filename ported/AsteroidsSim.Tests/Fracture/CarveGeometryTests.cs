@@ -39,8 +39,8 @@ public class CarveGeometryTests
 
     /// <summary>The two collide bodies at the rock floor grain, not yet moving.</summary>
     private static Scenarios.Result AtRest()
-        => Scenarios.Collide(SimTuning.Default, Material.Rock, 0f,
-                             Scenarios.FloorGrain(SimTuning.Default, Material.Rock));
+        => Scenarios.Collide(TestConfig.Tuning, TestConfig.Material("rock"), 0f,
+                             Scenarios.FloorGrain(TestConfig.Tuning, TestConfig.Material("rock")));
 
     private static void AssertConvexCcw(SimState s, int c, string where)
     {
@@ -179,9 +179,9 @@ public class CarveGeometryTests
         // erosion is — but it must never disconnect one.
         foreach (var (name, r) in new[]
         {
-            ("collide", Scenarios.Reference("collide", SimTuning.Default)),
-            ("projectile", Scenarios.Reference("projectile", SimTuning.Default)),
-            ("glass", Scenarios.Reference("glass-projectile", SimTuning.Default)),
+            ("collide", Scenarios.Reference("collide", TestConfig.Value)),
+            ("projectile", Scenarios.Reference("projectile", TestConfig.Value)),
+            ("glass", Scenarios.Reference("glass-projectile", TestConfig.Value)),
         })
         {
             for (int i = 0; i < 200; i++) r.Solver.Step();

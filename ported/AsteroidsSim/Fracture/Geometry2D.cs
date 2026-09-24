@@ -22,16 +22,13 @@ public readonly struct Vec2d : IEquatable<Vec2d>
 }
 
 /// <summary>
-/// Polygon primitives for body construction and the contact narrow phase, transcribed from
-/// <c>prototypes/stress-fracture-v9.html</c>.
+/// Polygon primitives for body construction.
 /// </summary>
 /// <remarks>
-/// <para><b>Why these are double.</b> The prototype is JavaScript, so every number in it is a
-/// double, and body construction is where that matters most: seed placement, half-plane clipping
-/// and centroid/inertia integrals feed directly into the cell shapes and therefore into every
-/// downstream measurement. Construction happens once per body and is not on the tick, so matching
-/// the reference exactly costs nothing here, and the results narrow to float when they are baked
-/// into the simulation arrays.</para>
+/// <para><b>Why these are double.</b> Seed placement, half-plane clipping and the centroid and
+/// inertia integrals feed directly into the cell shapes and therefore into everything downstream.
+/// Construction happens once per body and is not on the tick, so the extra precision costs
+/// nothing, and the results narrow to float when they are baked into the simulation arrays.</para>
 ///
 /// <para>Determinism is unaffected: <c>+ - * /</c> and <c>Sqrt</c> are exactly specified by
 /// IEEE 754 in double just as they are in float. No transcendental is used in this file.</para>
@@ -52,8 +49,8 @@ public static class Geometry2D
 
     /// <summary>
     /// Area-weighted centroid, falling back to the vertex mean for a degenerate polygon — the
-    /// fallback is the prototype's and must be preserved, because it is what keeps a sliver cell
-    /// from producing a NaN centroid that would poison the whole body.
+    /// fallback is what keeps a sliver cell from producing a NaN centroid that would poison the
+    /// whole body.
     /// </summary>
     public static Vec2d Centroid(IReadOnlyList<Vec2d> p)
     {
@@ -117,7 +114,7 @@ public static class Geometry2D
         }
     }
 
-    /// <summary>Crossing-number point-in-polygon, matching the prototype's edge conventions.</summary>
+    /// <summary>Crossing-number point-in-polygon.</summary>
     public static bool PointInPoly(Vec2d p, IReadOnlyList<Vec2d> poly)
     {
         bool ins = false;
@@ -158,8 +155,8 @@ public static class Geometry2D
     }
 
     /// <summary>
-    /// Monotone-chain convex hull. The sort is by X then Y and must be stable in the same sense the
-    /// prototype's is — duplicate points are removed by the turn test, not by the ordering.
+    /// Monotone-chain convex hull. The sort is by X then Y; duplicate points are removed by the
+    /// turn test, not by the ordering.
     /// </summary>
     public static List<Vec2d> ConvexHull(List<Vec2d> pts)
     {
@@ -195,17 +192,17 @@ public static class Geometry2D
 
     /// <summary>
     /// Length of the collinear overlap between segment a→b and segment c→d, or 0 if they are not
-    /// collinear within the prototype's 0.7 px tolerance. This is what decides whether two Voronoi
+    /// collinear within <paramref name="tol"/> px. This is what decides whether two Voronoi
     /// cells share an edge, and therefore whether they get a bond.
     /// </summary>
-    public static double SegOverlap(Vec2d a, Vec2d b, Vec2d c, Vec2d d)
+    public static double SegOverlap(Vec2d a, Vec2d b, Vec2d c, Vec2d d, double tol)
     {
         double dx = b.X - a.X, dy = b.Y - a.Y;
         double L = System.Math.Sqrt(dx * dx + dy * dy);
         if (L < 1e-6) return 0;
         double ux = dx / L, uy = dy / L;
-        if (System.Math.Abs((c.X - a.X) * (-uy) + (c.Y - a.Y) * ux) > 0.7) return 0;
-        if (System.Math.Abs((d.X - a.X) * (-uy) + (d.Y - a.Y) * ux) > 0.7) return 0;
+        if (System.Math.Abs((c.X - a.X) * (-uy) + (c.Y - a.Y) * ux) > tol) return 0;
+        if (System.Math.Abs((d.X - a.X) * (-uy) + (d.Y - a.Y) * ux) > tol) return 0;
         double tc = (c.X - a.X) * ux + (c.Y - a.Y) * uy;
         double td = (d.X - a.X) * ux + (d.Y - a.Y) * uy;
         double hi = System.Math.Min(L, System.Math.Max(tc, td));

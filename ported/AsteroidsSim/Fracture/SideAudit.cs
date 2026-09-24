@@ -194,14 +194,6 @@ internal static class SideAudit
     }
 
     /// <summary>
-    /// The touch-record invariants — the contract the new representation must satisfy.
-    /// </summary>
-    /// <remarks>
-    /// Note what is NOT here: any check that the two cells agree about the shared length. Under this
-    /// representation there is one interval, so disagreement is unrepresentable rather than merely
-    /// absent. That is the point of the change, and the audit shrinking is the evidence for it.
-    /// </remarks>
-    /// <summary>
     /// The v2 invariants: the polygon is derived from the records, so every place the two could
     /// disagree is checked directly rather than inferred from geometry.
     /// </summary>
@@ -290,6 +282,13 @@ internal static class SideAudit
         }
     }
 
+    /// <summary>
+    /// The touch-record invariants — the contract the new representation must satisfy.
+    /// </summary>
+    /// <remarks>
+    /// Note what is NOT here: any check that the two cells agree about the shared length. There is
+    /// one interval per adjacency, so disagreement is unrepresentable rather than merely absent.
+    /// </remarks>
     private static void AuditTouch(SimState s, Report r, int tick)
     {
         AuditRecordsV2(s, r, tick);

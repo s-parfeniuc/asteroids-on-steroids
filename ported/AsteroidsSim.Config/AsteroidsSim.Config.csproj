@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Host-side loader for Assets/sim.json. Kept out of AsteroidsSim so the simulation never reads a
+       file: hosts (viewer, bench, tests) load the configuration here and hand it in. -->
+  <PropertyGroup>
+    <RootNamespace>AsteroidsSim.Config</RootNamespace>
+    <AssemblyName>AsteroidsSim.Config</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../AsteroidsSim/AsteroidsSim.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -14,7 +14,7 @@ namespace AsteroidsSim.Fracture;
 /// <para><b>Only live state is hashed.</b> Baked fields — masses, rest polygon geometry, bond
 /// stiffness, material constants — are a pure function of the build seed and the content tables, so
 /// they cannot diverge without the build itself having diverged, and including them would only slow
-/// the hash. Scratch fields (world positions, skinning caches, the trig caches) are excluded for the
+/// the hash. Scratch fields (world positions, the world-polygon and trig caches) are excluded for the
 /// same reason in reverse: they are recomputed from live state every substep, so hashing them would
 /// report a difference that does not exist.</para>
 ///
@@ -41,10 +41,9 @@ public static class SimFingerprint
         for (int c = 0; c < s.CellCount; c++)
         {
             h.AddFloat(s.CellRx[c]); h.AddFloat(s.CellRy[c]);
-            h.AddFloat(s.CellCrush[c]);
             h.AddFloat(s.CellDvx[c]); h.AddFloat(s.CellDvy[c]); h.AddFloat(s.CellDw[c]);
             h.Add(s.CellBody[c]);
-            // One value covers Dead/Solo/Surf/Cracked and any bit added later, and being a single
+            // One value covers Dead/Solo and any bit added later, and being a single
             // field it cannot carry struct padding into the hash.
             h.Add((int)s.CellFlags[c]); h.Add(s.CellMat[c]); h.AddFloat(s.CellArea0[c]);
             h.AddFloat(s.CellCarvePend[c]);
