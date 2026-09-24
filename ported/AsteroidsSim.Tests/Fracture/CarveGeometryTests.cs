@@ -37,6 +37,11 @@ public class CarveGeometryTests
         return a2;
     }
 
+    /// <summary>The two collide bodies at the rock floor grain, not yet moving.</summary>
+    private static Scenarios.Result AtRest()
+        => Scenarios.Collide(SimTuning.Default, Material.Rock, 0f,
+                             Scenarios.FloorGrain(SimTuning.Default, Material.Rock));
+
     private static void AssertConvexCcw(SimState s, int c, string where)
     {
         int off = s.PolyOff[c], len = s.PolyLen[c];
@@ -55,7 +60,7 @@ public class CarveGeometryTests
     [Fact]
     public void CarvingKeepsCellsConvexAndCounterClockwise()
     {
-        var r = Scenarios.Collide(SimTuning.Default, Material.Rock, speed: 0f);
+        var r = AtRest();
         SimState s = r.State;
 
         // Carve every cell from many directions, deeply enough to force the vertex budget to bind.
@@ -87,7 +92,7 @@ public class CarveGeometryTests
     {
         // The property the shed-mass accounting rests on. If a clip could ADD area, carving would be
         // inventing material and the mass it sheds would be fictional.
-        var r = Scenarios.Collide(SimTuning.Default, Material.Rock, speed: 0f);
+        var r = AtRest();
         SimState s = r.State;
         float worstGain = 0f;
 
@@ -118,7 +123,7 @@ public class CarveGeometryTests
         // CellR is the polygon centroid by contract — it is the lever-arm origin in SolveContact and
         // the mass point in RecomputeBody. CellRad must bound every vertex, or the broadphase and the
         // deep-overlap normal guard silently drop pairs.
-        var r = Scenarios.Collide(SimTuning.Default, Material.Rock, speed: 0f);
+        var r = AtRest();
         SimState s = r.State;
         float worstCentroid = 0f, worstRadius = 0f;
 
@@ -174,9 +179,9 @@ public class CarveGeometryTests
         // erosion is — but it must never disconnect one.
         foreach (var (name, r) in new[]
         {
-            ("collide", Scenarios.Collide(SimTuning.Default, Material.Rock, speed: 600f)),
-            ("projectile", Scenarios.Projectile(SimTuning.Default, Material.Rock)),
-            ("glass", Scenarios.Projectile(SimTuning.Default, Material.Glass)),
+            ("collide", Scenarios.Reference("collide", SimTuning.Default)),
+            ("projectile", Scenarios.Reference("projectile", SimTuning.Default)),
+            ("glass", Scenarios.Reference("glass-projectile", SimTuning.Default)),
         })
         {
             for (int i = 0; i < 200; i++) r.Solver.Step();
@@ -210,7 +215,7 @@ public class CarveGeometryTests
     {
         // The skip has to be bit-exact, not merely harmless: carving runs inside the substep loop, so
         // a clip that perturbed a cell it never touched would move the fingerprint on every tick.
-        var r = Scenarios.Collide(SimTuning.Default, Material.Rock, speed: 0f);
+        var r = AtRest();
         SimState s = r.State;
 
         for (int c = 0; c < s.CellCount; c++)

@@ -387,6 +387,48 @@ public static class Scenarios
             r.V0);
     }
 
+    // ── the reference scene set ──────────────────────────────────────────────
+
+    /// <summary>
+    /// The scenes the correctness tests and the bench report run, by name. One list, so the two can
+    /// never disagree about what "the collide scene" is.
+    /// </summary>
+    public static readonly string[] ReferenceNames =
+    {
+        "collide", "collide-glass", "projectile", "spin", "steel-projectile", "glass-projectile", "shell",
+    };
+
+    /// <summary>
+    /// The finest grain every listed material may be built at under <paramref name="t"/>: the
+    /// largest of their <see cref="BodyBuilder.MinGrain"/> floors.
+    /// </summary>
+    public static float FloorGrain(in SimTuning t, params Material[] materials)
+    {
+        float g = 0f;
+        foreach (var m in materials) g = Math.SimMath.Max(g, BodyBuilder.MinGrain(m, t));
+        return g;
+    }
+
+    /// <summary>
+    /// Builds reference scene <paramref name="name"/> with every body at the floor grain of its
+    /// materials — the densest mesh the builder will produce at <paramref name="t"/>'s substep count.
+    /// </summary>
+    public static Result Reference(string name, in SimTuning t)
+    {
+        Material rock = Material.Rock, glass = Material.Glass, steel = Material.Steel;
+        return name switch
+        {
+            "collide" => Collide(t, rock, 600f, FloorGrain(t, rock)),
+            "collide-glass" => Collide(t, glass, 600f, FloorGrain(t, glass)),
+            "projectile" => Projectile(t, rock, 900f, 3f, FloorGrain(t, rock)),
+            "spin" => Spin(t, rock, grain: FloorGrain(t, rock)),
+            "steel-projectile" => Projectile(t, steel, 1500f, 8f, FloorGrain(t, steel)),
+            "glass-projectile" => Projectile(t, glass, 1500f, 8f, FloorGrain(t, glass)),
+            "shell" => Shell(t, steel, rock, grain: FloorGrain(t, steel, rock)),
+            _ => throw new ArgumentOutOfRangeException(nameof(name), name, "not a reference scene"),
+        };
+    }
+
     private static Result Finish(SimState s, in SimTuning tuning)
     {
         var solver = new Solver(s, tuning);

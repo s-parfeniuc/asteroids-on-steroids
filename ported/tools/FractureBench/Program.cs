@@ -49,6 +49,7 @@ internal static class Program
         bool phases = Array.IndexOf(args, "--phases") >= 0;
         JobsWorkers = ArgInt(args, "--jobs", -1);
         JobsChunks = ArgInt(args, "--chunks", SimJobs.DefaultChunks);
+        if (Array.IndexOf(args, "--report") >= 0) { Report(); return; }
         if (Array.IndexOf(args, "--micro") >= 0) { Micro(); return; }
         if (Array.IndexOf(args, "--detail") >= 0) { Detail(args); return; }
         if (Array.IndexOf(args, "--manifold") >= 0) { ManifoldSweep(args); return; }
@@ -4641,5 +4642,33 @@ internal static class Program
         if (i < 0 || i + 1 >= args.Length) return fallback;
         return int.TryParse(args[i + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int v)
             ? v : fallback;
+    }
+
+    /// <summary>
+    /// Tracking metrics for the reference scenes, at the same floor grain the correctness tests use.
+    /// Nothing here is asserted: peak overlap is a promise the model aims to keep, and this is where
+    /// it is watched from one change to the next.
+    /// </summary>
+    private static void Report()
+    {
+        var t = SimTuning.Default;
+        Console.WriteLine("TUNING " + DumpTuning(t));
+        foreach (string name in Scenarios.ReferenceNames)
+        {
+            var r = Scenarios.Reference(name, t);
+            float cell = r.State.BodyCellSize[0];
+            var m = SceneRunner.Run(r, 400, cell);
+            Console.WriteLine($"{name,-17} grain {cell * cell,5:F0} ({cell:F1} px): {m}  "
+                + $"peak overlap {m.PeakOverlap / cell:P0} of a cell, backstop {r.Solver.BackstopContacts} contacts / "
+                + $"{r.Solver.BackstopComminuted} comminuted");
+        }
+    }
+
+    private static string DumpTuning(in SimTuning t)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var f in typeof(SimTuning).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+            sb.Append(f.Name).Append('=').Append(Convert.ToString(f.GetValue(t), CultureInfo.InvariantCulture)).Append(' ');
+        return sb.ToString();
     }
 }
