@@ -7,6 +7,7 @@
 3. need more velocity injection in slow impacts (e.g. collide scene), to achieve more fracturing. Is it realistic that more speed (keeping all other parameters the same) makes the impactor comminute more and consequently  dealing less damage? Crush calculation may need to be revised (carving system works fine, what feeds it seems to be the problem).
 The overlap depth factor (confinement) maybe should grow exponentially as it approaches the cap, so very light overlaps are resolved by pushing without carving anything.
 Need a hard guarantee that deep overlap is impossible.
+Need a hard guarantee that cells and fragments cannot detach inside the parent's body, must be somehow connected to the real surface.
 
 4. design and implement joint mechanism.
 
